@@ -21,10 +21,12 @@ namespace {
 class StubItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields)
+    StubItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
+                 std::vector<Field> fields)
         : m_id(id)
         , m_name(name)
         , m_shortName(shortName)
+        , m_description(description)
         , m_icon(QStringLiteral(":/modules/claude/icons/claude.svg"))
         , m_fields(std::move(fields))
     {
@@ -34,6 +36,7 @@ public:
     QString name() const override { return m_name; }
     QIcon icon() const override { return m_icon; }
     QString shortName() const override { return m_shortName; }
+    QString description() const override { return m_description; }
     std::vector<Field> fields() const override { return m_fields; }
     Rendering rendering() const override { return Rendering::Native; }
 
@@ -41,6 +44,7 @@ private:
     QString m_id;
     QString m_name;
     QString m_shortName;
+    QString m_description;
     QIcon m_icon;
     std::vector<Field> m_fields;
 };
@@ -106,12 +110,21 @@ std::vector<Field> localFields()
 
 void registerModule(ModuleRegistrar &registrar)
 {
+    registrar.setModuleName(QStringLiteral("Claude"));
+    registrar.setModuleDescription(
+        QCoreApplication::translate("claude", "Claude sessions, on claude.ai or on one of your devices."));
     registrar.addItemType(std::make_unique<WebSessionItemType>(
         QStringLiteral("claude.session.web"), QCoreApplication::translate("claude", "Claude session (web)"),
-        QCoreApplication::translate("claude", "Claude"), webFields()));
+        QCoreApplication::translate("claude", "Claude"),
+        QCoreApplication::translate("claude", "A Claude session on claude.ai, such as a Remote Control or cloud "
+                                              "session, in a web view."),
+        webFields()));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("claude.session.local"), QCoreApplication::translate("claude", "Claude session (local)"),
-        QCoreApplication::translate("claude", "Claude"), localFields()));
+        QCoreApplication::translate("claude", "Claude"),
+        QCoreApplication::translate("claude", "A Claude Code session on one device, with a button that resumes it "
+                                              "in a terminal in the project's folder."),
+        localFields()));
 }
 
 } // namespace mirante::modules::claude

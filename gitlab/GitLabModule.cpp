@@ -25,11 +25,12 @@ namespace {
 class StubItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields,
-                 const ModuleSettings &settings)
+    StubItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
+                 std::vector<Field> fields, const ModuleSettings &settings)
         : m_id(id)
         , m_name(name)
         , m_shortName(shortName)
+        , m_description(description)
         , m_icon(QStringLiteral(":/modules/gitlab/icons/gitlab.svg"))
         , m_fields(std::move(fields))
         , m_settings(settings)
@@ -40,6 +41,7 @@ public:
     QString name() const override { return m_name; }
     QIcon icon() const override { return m_icon; }
     QString shortName() const override { return m_shortName; }
+    QString description() const override { return m_description; }
     std::vector<Field> fields() const override { return m_fields; }
     std::vector<Field> fieldsForProfile(const QString &profileId) const override
     {
@@ -58,6 +60,7 @@ private:
     QString m_id;
     QString m_name;
     QString m_shortName;
+    QString m_description;
     QIcon m_icon;
     std::vector<Field> m_fields;
     const ModuleSettings &m_settings;
@@ -73,9 +76,9 @@ using PageUrl = QUrl (*)(const QUrl &baseUrl, const QJsonObject &config, const Q
 class PageItemType : public StubItemType
 {
 public:
-    PageItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields,
-                 const ModuleSettings &settings, PageUrl pageUrl)
-        : StubItemType(id, name, shortName, std::move(fields), settings)
+    PageItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
+                 std::vector<Field> fields, const ModuleSettings &settings, PageUrl pageUrl)
+        : StubItemType(id, name, shortName, description, std::move(fields), settings)
         , m_pageUrl(pageUrl)
     {
     }
@@ -184,17 +187,28 @@ void registerModule(ModuleRegistrar &registrar)
     const ModuleSettings &settings = registrar.settings();
 
     registrar.setModuleName(QStringLiteral("GitLab"));
+    registrar.setModuleDescription(QCoreApplication::translate(
+        "gitlab", "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and "
+                  "token in the module's General Configuration."));
     registrar.addSettingsScreen(makeGeneralScreen());
 
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.summary"), QCoreApplication::translate("gitlab", "GitLab MR (summary)"),
-        QCoreApplication::translate("gitlab", "MR"), mergeRequest, settings));
+        QCoreApplication::translate("gitlab", "MR"),
+        QCoreApplication::translate("gitlab", "A summary of one merge request: its state, branches, people, "
+                                              "pipeline and approvals."),
+        mergeRequest, settings));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("gitlab.mr.page"), QCoreApplication::translate("gitlab", "GitLab MR (page)"),
-        QCoreApplication::translate("gitlab", "MR"), mergeRequest, settings, &mergeRequestUrl));
+        QCoreApplication::translate("gitlab", "MR"),
+        QCoreApplication::translate("gitlab", "The web page of one merge request, on the GitLab server of the "
+                                              "item's profile."),
+        mergeRequest, settings, &mergeRequestUrl));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.list"), QCoreApplication::translate("gitlab", "GitLab MR List"),
         QCoreApplication::translate("gitlab", "MRs"),
+        QCoreApplication::translate("gitlab", "A table of merge requests in a project, a group or everywhere, such "
+                                              "as those that wait for your review."),
         listFields({QStringLiteral("createdByMe"), QStringLiteral("reviewRequested"),
                     QStringLiteral("assignedToMe"), QStringLiteral("allOpen")},
                    {QCoreApplication::translate("gitlab", "Created by me"),
@@ -204,16 +218,27 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.pipeline"), QCoreApplication::translate("gitlab", "GitLab CI Pipeline"),
         QCoreApplication::translate("gitlab", "CI"),
+        QCoreApplication::translate("gitlab", "The latest pipeline of a branch, with its stages and jobs. The branch "
+                                              "is a fixed one, the main folder's current branch or a merge "
+                                              "request's branch."),
         pipelineFields(), settings));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),
-        QCoreApplication::translate("gitlab", "Issue"), issue, settings));
+        QCoreApplication::translate("gitlab", "Issue"),
+        QCoreApplication::translate("gitlab", "A summary of one issue: its state, assignees, labels, milestone and "
+                                              "latest comments."),
+        issue, settings));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("gitlab.issue.page"), QCoreApplication::translate("gitlab", "GitLab Issue (page)"),
-        QCoreApplication::translate("gitlab", "Issue"), issue, settings, &issueUrl));
+        QCoreApplication::translate("gitlab", "Issue"),
+        QCoreApplication::translate("gitlab", "The web page of one issue, on the GitLab server of the item's "
+                                              "profile."),
+        issue, settings, &issueUrl));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.list"), QCoreApplication::translate("gitlab", "GitLab Issue List"),
         QCoreApplication::translate("gitlab", "Issues"),
+        QCoreApplication::translate("gitlab", "A table of issues in a project, a group or everywhere, such as those "
+                                              "assigned to you."),
         listFields({QStringLiteral("assignedToMe"), QStringLiteral("createdByMe"), QStringLiteral("allOpen")},
                    {QCoreApplication::translate("gitlab", "Assigned to me"),
                     QCoreApplication::translate("gitlab", "Created by me"),
