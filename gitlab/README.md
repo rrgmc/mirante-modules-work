@@ -36,7 +36,7 @@ The keys each type stores in the item's configuration. "Required" means the item
 
 | Key | Type | Used by | Description |
 |---|---|---|---|
-| `project` | text | all | Project path, such as `group/project`. Empty uses the project's `gitlab.project` setting. |
+| `project` | text | all | Project path, such as `group/project`. Empty uses the project's `gitlab.project` setting. The form offers the paths of [General Configuration](#settings-screens). |
 | `iid` | integer | MR and issue summary and page; pipeline | The merge request or issue number in the project. Required, except for the pipeline, where it names the linked merge request. |
 | `scope` | choice | lists | `project` (one project, the default), `group` (one group) or `all` (all projects visible to you). |
 | `group` | text | lists | Group path, used when `scope` is `group`. |
@@ -58,3 +58,15 @@ Every type uses a `gitlab` connection. In M4 only the page types read it, for it
 ## Settings
 
 The project setting `project`, read as `gitlab.project`: the default project path for items whose `project` is empty.
+
+## Settings screens
+
+The module calls itself "GitLab", so the Modules menu shows Modules > GitLab. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
+
+| Id | Name | Key | Type | Description |
+|---|---|---|---|---|
+| `general` | General Configuration | `projects` | text list | Project paths the user works on, such as `group/project`, one per line. |
+
+The values are stored in `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token.
+
+The `project` field of every type offers these paths in an editable drop-down list. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, so a change shows the next time the dialog opens.
