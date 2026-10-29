@@ -19,6 +19,16 @@ Since M3 the types declare their configuration fields, so items can be created a
 - without a `jira.cloud` or `jira.dc` connection: "No Jira connection in this profile.";
 - without an issue key: "Set the issue key in the item's settings."
 
+## Items from a link
+
+Every type implements `fromUrl()`, through `matchUrl()` in `JiraUrls.cpp`. See [decision 0049](../../../docs/decisions/0049-items-from-a-pasted-link.md).
+
+- **The server.** The longest base URL of the group's `jira.cloud` and `jira.dc` connections that the address is below, else an `atlassian.net` site. Any other server is read only from `/browse/<key>`, with Jira taken to be installed at the path before it.
+- **An issue** fills `jira.issue.summary` and `jira.issue.page` with `key`, and names the item after the key. The key comes from `/browse/<key>`, from `/issues/<key>` as in Jira Cloud's project pages, or from the `selectedIssue` query of a board. It is read in upper case, such as `PROJ-123`.
+- **A search**, an address with a `jql` query, fills `jira.list` with `preset` = `jql` and the query, named "Jira search".
+
+Other addresses, such as a key without a number, are refused. The tests are in `tests/tst_from_url.cpp`.
+
 ## Configuration
 
 The keys each type stores in the item's configuration. "Required" means the item dialog refuses an empty value.
