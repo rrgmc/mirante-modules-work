@@ -18,12 +18,25 @@ public:
 
     std::vector<Field> fields() const override
     {
+        Field baseUrl;
+        baseUrl.key = kBaseUrlKey;
+        baseUrl.label = QCoreApplication::translate("gitlab", "Base URL");
+        baseUrl.type = Field::Type::Url;
+        baseUrl.defaultValue = kDefaultBaseUrl;
+        baseUrl.placeholder = kDefaultBaseUrl;
+
+        Field token;
+        token.key = kTokenKey;
+        token.label = QCoreApplication::translate("gitlab", "Token");
+        token.type = Field::Type::Secret;
+        token.placeholder = QCoreApplication::translate("gitlab", "Kept in this device's keychain");
+
         Field projects;
         projects.key = kProjectsKey;
         projects.label = QCoreApplication::translate("gitlab", "Project paths");
         projects.type = Field::Type::TextList;
         projects.placeholder = QStringLiteral("group/project\ngroup/other-project");
-        return {projects};
+        return {baseUrl, token, projects};
     }
 };
 
@@ -32,6 +45,19 @@ public:
 std::unique_ptr<SettingsScreen> makeGeneralScreen()
 {
     return std::make_unique<GeneralScreen>();
+}
+
+QUrl baseUrlOf(const QJsonObject &general)
+{
+    QString text = general.value(kBaseUrlKey).toString().trimmed();
+    if (text.isEmpty())
+        text = kDefaultBaseUrl;
+    const QUrl url(text, QUrl::StrictMode);
+    const QString scheme = url.scheme().toLower();
+    if (!url.isValid() || url.host().isEmpty()
+        || (scheme != QLatin1String("http") && scheme != QLatin1String("https")))
+        return {};
+    return url;
 }
 
 QStringList projectPaths(const QJsonObject &general)

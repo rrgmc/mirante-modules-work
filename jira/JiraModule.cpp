@@ -1,4 +1,5 @@
 // The jira module: Jira issues and issue lists as items. See README.md.
+#include "JiraSettings.h"
 #include "JiraUrls.h"
 
 #include <mirante/Fields.h>
@@ -18,17 +19,19 @@ namespace mirante::modules::jira {
 namespace {
 
 // A type with an id, a name, an icon and its configuration fields. All Jira
-// types use a Jira Cloud connection, or else a Jira Data Center one. Native
-// views arrive later.
+// types talk to the site in the General Configuration of the item's profile.
+// Native views arrive later.
 class StubItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields)
+    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields,
+                 const ModuleSettings &settings)
         : m_id(id)
         , m_name(name)
         , m_shortName(shortName)
         , m_icon(QStringLiteral(":/modules/jira/icons/jira.svg"))
         , m_fields(std::move(fields))
+        , m_settings(settings)
     {
     }
 
@@ -39,13 +42,14 @@ public:
     std::vector<Field> fields() const override { return m_fields; }
     Rendering rendering() const override { return Rendering::Native; }
 
-    QStringList connectionKinds() const override
+    // An address on the profile's site, or on any site whose addresses look
+    // like Jira's.
+    std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
-        return {QStringLiteral("jira.cloud"), QStringLiteral("jira.dc")};
-    }
-
-    std::optional<UrlMatch> fromUrl(const QUrl &url, const QList<QUrl> &baseUrls) const override
-    {
+        QList<QUrl> baseUrls;
+        const QUrl site = baseUrlOf(m_settings.values(profileId, kGeneralScreen));
+        if (!site.isEmpty())
+            baseUrls << site;
         return matchUrl(m_id, url, baseUrls);
     }
 
@@ -55,10 +59,11 @@ private:
     QString m_shortName;
     QIcon m_icon;
     std::vector<Field> m_fields;
+    const ModuleSettings &m_settings;
 };
 
-// The issue page: a web view of the issue on the item's Jira connection, or a
-// message when the connection or the key is missing.
+// The issue page: a web view of the issue on the Jira site of the item's
+// profile, or a message when the site or the key is missing.
 class PageItemType : public StubItemType
 {
 public:
@@ -68,12 +73,14 @@ public:
 
     QWidget *createView(ItemContext &context, QWidget *parent) const override
     {
-        const std::optional<ConnectionDetails> connection = context.connection(connectionKinds());
-        if (!connection || !connection->baseUrl.isValid() || connection->baseUrl.host().isEmpty()) {
+        const QUrl site = baseUrlOf(context.moduleSettings(kGeneralScreen));
+        if (site.isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("jira", "No Jira connection in this profile."), parent);
+                QCoreApplication::translate("jira", "Set the Jira base URL in Modules > Jira > General "
+                                                    "Configuration for this profile."),
+                parent);
         }
-        const QUrl url = issueUrl(connection->baseUrl, context.config());
+        const QUrl url = issueUrl(site, context.config());
         if (url.isEmpty()) {
             return context.createMessageView(
                 QCoreApplication::translate("jira", "Set the issue key in the item's settings."), parent);
@@ -119,15 +126,19 @@ std::vector<Field> listFields()
 
 void registerModule(ModuleRegistrar &registrar)
 {
+    const ModuleSettings &settings = registrar.settings();
+    registrar.setModuleName(QStringLiteral("Jira"));
+    registrar.addSettingsScreen(makeGeneralScreen());
+
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.issue.summary"), QCoreApplication::translate("jira", "Jira Issue (summary)"),
-        QCoreApplication::translate("jira", "Jira"), issueFields()));
+        QCoreApplication::translate("jira", "Jira"), issueFields(), settings));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("jira.issue.page"), QCoreApplication::translate("jira", "Jira Issue (page)"),
-        QCoreApplication::translate("jira", "Jira"), issueFields()));
+        QCoreApplication::translate("jira", "Jira"), issueFields(), settings));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.list"), QCoreApplication::translate("jira", "Jira List"),
-        QCoreApplication::translate("jira", "Jira"), listFields()));
+        QCoreApplication::translate("jira", "Jira"), listFields(), settings));
 }
 
 } // namespace mirante::modules::jira

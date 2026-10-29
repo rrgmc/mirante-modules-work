@@ -1,5 +1,5 @@
 // Reading pasted GitLab addresses: the page address, what each type makes of
-// it, servers with and without a connection, and addresses that are refused.
+// it, servers of the profile and others, and addresses that are refused.
 #include "../GitLabUrls.h"
 
 #include "items/ItemTypeRegistry.h"
@@ -125,7 +125,7 @@ private slots:
         QVERIFY(!matchUrl(QStringLiteral("gitlab.pipeline"), url("https://gitlab.com/acme/backend/-/issues/1"), {}));
     }
 
-    // A self-hosted server at a path is read with its connection's base URL,
+    // A self-hosted server at a path is read with the profile's base URL,
     // so the path is not taken for a group.
     void selfHostedAtPath()
     {
@@ -137,7 +137,7 @@ private slots:
         QCOMPARE(match->baseUrl, url("https://example.org/gitlab/"));
     }
 
-    // A server without a connection is still recognised by GitLab's "/-/".
+    // A server that is not the profile's is still recognised by GitLab's "/-/".
     void serverWithoutConnection()
     {
         const auto match = matchUrl(QStringLiteral("gitlab.issue.page"),

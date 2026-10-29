@@ -21,24 +21,23 @@ using mirante::modules::jira::issueUrl;
 
 namespace {
 
-// An item context with a configuration and an optional connection. Each view
-// it makes is a plain widget with the address or the message in a property.
+// An item context with a configuration and the values of the Jira General
+// Configuration of the item's profile. Each view it makes is a plain widget
+// with the address or the message in a property.
 class FakeContext : public mirante::ItemContext
 {
 public:
     QJsonObject itemConfig;
-    std::optional<mirante::ConnectionDetails> details;
-    mutable QStringList askedKinds;
+    QJsonObject general;
+    mutable QStringList askedScreens;
 
     QString itemName() const override { return QStringLiteral("Item"); }
     QJsonObject config() const override { return itemConfig; }
     QJsonValue projectSetting(const QString &) const override { return {}; }
-    QJsonObject moduleSettings(const QString &) const override { return {}; }
-
-    std::optional<mirante::ConnectionDetails> connection(const QStringList &kinds) const override
+    QJsonObject moduleSettings(const QString &screenId) const override
     {
-        askedKinds = kinds;
-        return details;
+        askedScreens << screenId;
+        return screenId == QLatin1String("general") ? general : QJsonObject();
     }
 
     QString folderPath(const QString &) const override { return {}; }
@@ -62,14 +61,9 @@ public:
     void updateConfig(const QJsonObject &config) override { itemConfig = config; }
 };
 
-mirante::ConnectionDetails jiraConnection(const QString &kind, const QString &baseUrl)
+QJsonObject site(const QString &baseUrl)
 {
-    mirante::ConnectionDetails details;
-    details.id = QStringLiteral("c1");
-    details.kind = kind;
-    details.name = QStringLiteral("Jira");
-    details.baseUrl = QUrl(baseUrl);
-    return details;
+    return QJsonObject{{QStringLiteral("baseUrl"), baseUrl}};
 }
 
 QJsonObject keyConfig(const QString &key)
@@ -108,40 +102,42 @@ private slots:
         QVERIFY(issueUrl(base, keyConfig("  ")).isEmpty());
     }
 
-    void typesDeclareRenderingAndConnection()
+    void typesDeclareRendering()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
 
-        const QStringList kinds{QStringLiteral("jira.cloud"), QStringLiteral("jira.dc")};
         for (const mirante::ItemType *type : registry.types()) {
             const bool isWeb = type->id() == QStringLiteral("jira.issue.page");
             QVERIFY2((type->rendering() == mirante::Rendering::Web) == isWeb, qPrintable(type->id()));
-            QCOMPARE(type->connectionKinds(), kinds);
+            QVERIFY2(registry.usesProfile(type->id()), qPrintable(type->id()));
         }
     }
 
     void viewShowsPageOrMessage_data()
     {
-        QTest::addColumn<QString>("connectionKind");
+        QTest::addColumn<QString>("baseUrl");
         QTest::addColumn<QJsonObject>("itemConfig");
         QTest::addColumn<QUrl>("url");
         QTest::addColumn<QString>("message");
 
-        const QString noConnection = QStringLiteral("No Jira connection in this profile.");
+        const QString noSite =
+            QStringLiteral("Set the Jira base URL in Modules > Jira > General Configuration for this profile.");
         const QString noKey = QStringLiteral("Set the issue key in the item's settings.");
-        QTest::newRow("cloud") << QStringLiteral("jira.cloud") << keyConfig("PROJ-1")
-                               << QUrl(QStringLiteral("https://jira.example.com/browse/PROJ-1")) << QString();
-        QTest::newRow("data center") << QStringLiteral("jira.dc") << keyConfig("PROJ-2")
+        const QString server = QStringLiteral("https://jira.example.com/");
+        QTest::newRow("cloud") << QStringLiteral("https://acme.atlassian.net") << keyConfig("PROJ-1")
+                               << QUrl(QStringLiteral("https://acme.atlassian.net/browse/PROJ-1")) << QString();
+        QTest::newRow("data center") << server << keyConfig("PROJ-2")
                                      << QUrl(QStringLiteral("https://jira.example.com/browse/PROJ-2")) << QString();
-        QTest::newRow("without connection") << QString() << keyConfig("PROJ-1") << QUrl() << noConnection;
-        QTest::newRow("without key") << QStringLiteral("jira.cloud") << QJsonObject() << QUrl() << noKey;
-        QTest::newRow("blank key") << QStringLiteral("jira.dc") << keyConfig(" ") << QUrl() << noKey;
+        QTest::newRow("without a site") << QString() << keyConfig("PROJ-1") << QUrl() << noSite;
+        QTest::newRow("with a bad site") << QStringLiteral("jira") << keyConfig("PROJ-1") << QUrl() << noSite;
+        QTest::newRow("without key") << server << QJsonObject() << QUrl() << noKey;
+        QTest::newRow("blank key") << server << keyConfig(" ") << QUrl() << noKey;
     }
 
     void viewShowsPageOrMessage()
     {
-        QFETCH(QString, connectionKind);
+        QFETCH(QString, baseUrl);
         QFETCH(QJsonObject, itemConfig);
         QFETCH(QUrl, url);
         QFETCH(QString, message);
@@ -151,14 +147,14 @@ private slots:
 
         FakeContext context;
         context.itemConfig = itemConfig;
-        if (!connectionKind.isEmpty())
-            context.details = jiraConnection(connectionKind, QStringLiteral("https://jira.example.com/"));
+        if (!baseUrl.isEmpty())
+            context.general = site(baseUrl);
 
         QWidget parent;
         std::unique_ptr<QWidget> view(registry.type(QStringLiteral("jira.issue.page")).createView(context, &parent));
         QVERIFY(view);
         QCOMPARE(view->parentWidget(), &parent);
-        QCOMPARE(context.askedKinds, (QStringList{QStringLiteral("jira.cloud"), QStringLiteral("jira.dc")}));
+        QVERIFY(context.askedScreens.contains(QStringLiteral("general")));
         QCOMPARE(view->property("url").toUrl(), url);
         QCOMPARE(view->property("message").toString(), message);
     }
@@ -169,7 +165,7 @@ private slots:
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
 
         FakeContext context;
-        context.details = jiraConnection(QStringLiteral("jira.cloud"), QStringLiteral("https://jira.example.com"));
+        context.general = site(QStringLiteral("https://jira.example.com"));
         context.itemConfig = keyConfig("PROJ-1");
         for (const mirante::ItemType *type : registry.types()) {
             if (type->rendering() == mirante::Rendering::Native)

@@ -16,8 +16,8 @@ namespace mirante::modules::claude {
 
 namespace {
 
-// A type with an id, a name, an icon and its configuration fields. No Claude
-// type uses a connection. Native views arrive later.
+// A type with an id, a name, an icon and its configuration fields. Native
+// views arrive later.
 class StubItemType : public ItemType
 {
 public:
@@ -36,7 +36,6 @@ public:
     QString shortName() const override { return m_shortName; }
     std::vector<Field> fields() const override { return m_fields; }
     Rendering rendering() const override { return Rendering::Native; }
-    QStringList connectionKinds() const override { return {}; }
 
 private:
     QString m_id;
@@ -55,9 +54,9 @@ public:
 
     Rendering rendering() const override { return Rendering::Web; }
 
-    std::optional<UrlMatch> fromUrl(const QUrl &url, const QList<QUrl> &baseUrls) const override
+    std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
-        Q_UNUSED(baseUrls)
+        Q_UNUSED(profileId)
         return matchUrl(url);
     }
 

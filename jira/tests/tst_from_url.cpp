@@ -1,5 +1,5 @@
 // Reading pasted Jira addresses: issue keys from browse, project and board
-// pages, searches, the server with and without a connection, and addresses
+// pages, searches, the server of the profile and others, and addresses
 // that are refused.
 #include "../JiraUrls.h"
 
@@ -64,7 +64,7 @@ private slots:
         QCOMPARE(address->key, QStringLiteral("PROJ-5"));
     }
 
-    // A Data Center server at a path is read with its connection's base URL.
+    // A Data Center server at a path is read with the profile's base URL.
     void dataCenterWithConnection()
     {
         const QList<QUrl> bases{url("https://jira.example.org/jira")};
@@ -75,7 +75,7 @@ private slots:
         QCOMPARE(match->config.value(QStringLiteral("key")).toString(), QStringLiteral("OPS-1"));
     }
 
-    // Without a connection, /browse/<key> is enough, and Jira is taken to be
+    // Without that base URL, /browse/<key> is enough, and Jira is taken to be
     // installed at the path before it.
     void serverWithoutConnection()
     {

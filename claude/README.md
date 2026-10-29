@@ -26,10 +26,6 @@ The keys each type stores in the item's configuration. "Required" means the item
 | `folder` | folder | `claude.session.local` | The id of one of the project's folders. Empty uses the main folder. |
 | `device` | text | `claude.session.local` | A note about which device the session lives on. |
 
-## Connection kinds
-
-None.
-
 ## Settings
 
 None in M2.

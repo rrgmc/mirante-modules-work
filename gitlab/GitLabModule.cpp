@@ -19,9 +19,9 @@ namespace mirante::modules::gitlab {
 namespace {
 
 // A type with an id, a name, an icon and its configuration fields. All GitLab
-// types use a gitlab connection. Native views arrive later. The "project"
-// field offers the paths of the General Configuration screen of the profile
-// the item uses.
+// types talk to the server in the General Configuration of the item's
+// profile. Native views arrive later. The "project" field offers the paths
+// of that screen.
 class StubItemType : public ItemType
 {
 public:
@@ -46,11 +46,12 @@ public:
         return withProjectPaths(m_fields, m_settings, profileId);
     }
     Rendering rendering() const override { return Rendering::Native; }
-    QStringList connectionKinds() const override { return {QStringLiteral("gitlab")}; }
 
-    std::optional<UrlMatch> fromUrl(const QUrl &url, const QList<QUrl> &baseUrls) const override
+    // An address on the profile's server, or on any server whose addresses
+    // look like GitLab's.
+    std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
-        return matchUrl(m_id, url, baseUrls);
+        return matchUrl(m_id, url, {baseUrlOf(m_settings.values(profileId, kGeneralScreen))});
     }
 
 private:
@@ -62,12 +63,13 @@ private:
     const ModuleSettings &m_settings;
 };
 
-// Builds a page address from a connection's base URL, the item's configuration
+// Builds a page address from the server's base URL, the item's configuration
 // and the project's "project" setting.
 using PageUrl = QUrl (*)(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject);
 
-// A merge request or issue page: a web view of the page on the item's GitLab
-// connection, or a message when the connection or the configuration is missing.
+// A merge request or issue page: a web view of the page on the GitLab server
+// of the item's profile, or a message when the server or the configuration is
+// missing.
 class PageItemType : public StubItemType
 {
 public:
@@ -82,13 +84,14 @@ public:
 
     QWidget *createView(ItemContext &context, QWidget *parent) const override
     {
-        const std::optional<ConnectionDetails> connection = context.connection(connectionKinds());
-        if (!connection || !connection->baseUrl.isValid() || connection->baseUrl.host().isEmpty()) {
+        const QUrl baseUrl = baseUrlOf(context.moduleSettings(kGeneralScreen));
+        if (!baseUrl.isValid() || baseUrl.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("gitlab", "No GitLab connection in this profile."), parent);
+                QCoreApplication::translate("gitlab", "Set the GitLab base URL in Modules > GitLab > General "
+                                                      "Configuration for this profile."),
+                parent);
         }
-        const QUrl url = m_pageUrl(connection->baseUrl, context.config(),
-                                   context.projectSetting(QStringLiteral("project")));
+        const QUrl url = m_pageUrl(baseUrl, context.config(), context.projectSetting(QStringLiteral("project")));
         if (url.isEmpty()) {
             return context.createMessageView(
                 QCoreApplication::translate("gitlab", "Set the project and number in the item's settings."), parent);

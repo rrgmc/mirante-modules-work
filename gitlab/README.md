@@ -18,7 +18,7 @@ Since M3 the types declare their configuration fields, so items can be created a
 
 ## Pages
 
-The page types ask the core for a web view with `ItemContext::createWebView`. `GitLabUrls.cpp` builds the address from the connection's base URL, without doubling a slash at its end:
+The page types ask the core for a web view with `ItemContext::createWebView`. `GitLabUrls.cpp` builds the address from the base URL of the [General Configuration](#settings-screens) of the item's profile, read with `ItemContext::moduleSettings()`, without doubling a slash at its end:
 
 | Type | Address |
 |---|---|
@@ -27,12 +27,12 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
 
-- without a `gitlab` connection: "No GitLab connection in this profile.";
+- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in Modules > GitLab > General Configuration for this profile.";
 - without a project or a number: "Set the project and number in the item's settings."
 
 ## Items from a link
 
-Every type implements `fromUrl()`, through `matchUrl()` in `GitLabUrls.cpp`. It reads `<base>/<project>/-/<kind>[/<number>]`, where `<base>` is the longest base URL of the group's `gitlab` connections that the address is below. Without one, the server is taken without a path, so `gitlab.com` and other servers are still read by GitLab's `/-/`. The project needs a group, such as `group/project`. A tab after the number, such as `/diffs`, a query and a fragment are ignored. See [decision 0049](../../../docs/decisions/0049-items-from-a-pasted-link.md).
+Every type implements `fromUrl()`, through `matchUrl()` in `GitLabUrls.cpp`. It reads `<base>/<project>/-/<kind>[/<number>]`, where `<base>` is the GitLab base URL of the profile the new item would use, if the address is below it. `fromUrl()` gets that profile's id and reads the screen there. Otherwise the server is taken without a path, so `gitlab.com` and other servers are still read by GitLab's `/-/`. The project needs a group, such as `group/project`. A tab after the number, such as `/diffs`, a query and a fragment are ignored. See [decision 0049](../../../docs/decisions/0049-items-from-a-pasted-link.md).
 
 | Page | Types | Configuration | Name |
 |---|---|---|---|
@@ -66,10 +66,6 @@ The keys of each type, in the order the form shows them:
 - `gitlab.mr.list`, `gitlab.issue.list`: `scope`, `project`, `group`, `preset`, `filter`.
 - `gitlab.pipeline`: `project`, `branchSource`, `branch`, `iid`.
 
-## Connection kinds
-
-Every type uses a `gitlab` connection of the item's [profile](../../../docs/data-model.md#profile). In M4 only the page types read it, for its base URL.
-
 ## Settings
 
 The project setting `project`, read as `gitlab.project`: the default project path for items whose `project` is empty.
@@ -80,8 +76,10 @@ The module calls itself "GitLab", so the Modules menu shows Modules > GitLab. It
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
-| `general` | General Configuration | `projects` | text list | Project paths the user works on, such as `group/project`, one per line. |
+| `general` | General Configuration | `baseUrl` | URL | The GitLab server, such as `https://gitlab.example.org/gitlab`. `https://gitlab.com` by default, and when empty. |
+| | | `token` | secret | The token for that server. Never stored with the values: the core keeps it in the keychain, under `<profile id>/gitlab/token`. |
+| | | `projects` | text list | Project paths the user works on, such as `group/project`, one per line. |
 
-Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The dialog of the screen chooses the profile at its top. See [decision 0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md).
+Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The dialog of the screen chooses the profile at its top. See decisions [0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md) and [0054](../../../docs/decisions/0054-module-settings-replace-connections.md), which replaced connections with the base URL.
 
 The `project` field of every type offers the paths of the profile the item uses, in an editable drop-down list. The types do this in `fieldsForProfile(profileId)`, which the item dialog calls with the profile the edited item would use; `fields()` offers none. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, and again when another profile is chosen in it, so a change shows the next time the dialog opens.
