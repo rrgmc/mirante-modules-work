@@ -27,7 +27,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in Modules > GitLab > General Configuration for this profile.";
+- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in this profile's Modules > GitLab > General Configuration, in the Profiles menu.";
 - without a project or a number: "Set the project and number in the item's settings."
 
 ## Items from a link
@@ -72,7 +72,7 @@ The project setting `project`, read as `gitlab.project`: the default project pat
 
 ## Settings screens
 
-The module calls itself "GitLab", so the Modules menu shows Modules > GitLab. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
+The module calls itself "GitLab", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitLab. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
@@ -80,6 +80,6 @@ The module calls itself "GitLab", so the Modules menu shows Modules > GitLab. It
 | | | `token` | secret | The token for that server. Never stored with the values: the core keeps it in the keychain, under `<profile id>/gitlab/token`. |
 | | | `projects` | text list | Project paths the user works on, such as `group/project`, one per line. |
 
-Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The dialog of the screen chooses the profile at its top. See decisions [0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md) and [0054](../../../docs/decisions/0054-module-settings-replace-connections.md), which replaced connections with the base URL.
+Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The screen is opened for one profile at a time. See decisions [0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md) and [0054](../../../docs/decisions/0054-module-settings-replace-connections.md), which replaced connections with the base URL.
 
 The `project` field of every type offers the paths of the profile the item uses, in an editable drop-down list. The types do this in `fieldsForProfile(profileId)`, which the item dialog calls with the profile the edited item would use; `fields()` offers none. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, and again when another profile is chosen in it, so a change shows the next time the dialog opens.

@@ -16,7 +16,7 @@ Since M3 the types declare their configuration fields, so items can be created a
 
 `jira.issue.page` asks the core for a web view with `ItemContext::createWebView`. `JiraUrls.cpp` builds the address `<baseUrl>/browse/<key>` from the base URL of the [General Configuration](#settings-screens) of the item's profile, read with `ItemContext::moduleSettings()`, without doubling a slash at its end. When something is missing, the cell shows a message instead:
 
-- without a base URL, or with one that is not an `http` or `https` address: "Set the Jira base URL in Modules > Jira > General Configuration for this profile.";
+- without a base URL, or with one that is not an `http` or `https` address: "Set the Jira base URL in this profile's Modules > Jira > General Configuration, in the Profiles menu.";
 - without an issue key: "Set the issue key in the item's settings."
 
 ## Items from a link
@@ -45,7 +45,7 @@ None in M2.
 
 ## Settings screens
 
-The module calls itself "Jira", so the Modules menu shows Modules > Jira. It has one [settings screen](../../../docs/modules.md#settings-screens), in `JiraSettings.cpp`:
+The module calls itself "Jira", so each profile's Modules submenu shows Profiles > <profile> > Modules > Jira. It has one [settings screen](../../../docs/modules.md#settings-screens), in `JiraSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
