@@ -23,26 +23,24 @@ using mirante::modules::gitlab::projectPath;
 
 namespace {
 
-// An item context with a configuration, a project setting and an optional
-// connection. Each view it makes is a plain widget with the address or the
+// An item context with a configuration, a project setting and the values of
+// the GitLab General Configuration of the item's profile. Each view it makes is a plain widget with the address or the
 // message in a property.
 class FakeContext : public mirante::ItemContext
 {
 public:
     QJsonObject itemConfig;
     QJsonObject projectSettings;
-    std::optional<mirante::ConnectionDetails> details;
-    mutable QStringList askedKinds;
+    QJsonObject general;
+    mutable QStringList askedScreens;
 
     QString itemName() const override { return QStringLiteral("Item"); }
     QJsonObject config() const override { return itemConfig; }
     QJsonValue projectSetting(const QString &key) const override { return projectSettings.value(key); }
-    QJsonObject moduleSettings(const QString &) const override { return {}; }
-
-    std::optional<mirante::ConnectionDetails> connection(const QStringList &kinds) const override
+    QJsonObject moduleSettings(const QString &screenId) const override
     {
-        askedKinds = kinds;
-        return details;
+        askedScreens << screenId;
+        return screenId == QLatin1String("general") ? general : QJsonObject();
     }
 
     QString folderPath(const QString &) const override { return {}; }
@@ -66,14 +64,9 @@ public:
     void updateConfig(const QJsonObject &config) override { itemConfig = config; }
 };
 
-mirante::ConnectionDetails gitlabConnection(const QString &baseUrl)
+QJsonObject server(const QString &baseUrl)
 {
-    mirante::ConnectionDetails details;
-    details.id = QStringLiteral("c1");
-    details.kind = QStringLiteral("gitlab");
-    details.name = QStringLiteral("GitLab");
-    details.baseUrl = QUrl(baseUrl);
-    return details;
+    return QJsonObject{{QStringLiteral("baseUrl"), baseUrl}};
 }
 
 QJsonObject config(const QString &project, const QJsonValue &iid)
@@ -81,7 +74,8 @@ QJsonObject config(const QString &project, const QJsonValue &iid)
     return QJsonObject{{QStringLiteral("project"), project}, {QStringLiteral("iid"), iid}};
 }
 
-const QString noConnection = QStringLiteral("No GitLab connection in this profile.");
+const QString noServer =
+    QStringLiteral("Set the GitLab base URL in this profile's Modules > GitLab > General Configuration, in the Profiles menu.");
 const QString noConfig = QStringLiteral("Set the project and number in the item's settings.");
 
 } // namespace
@@ -142,7 +136,7 @@ private slots:
         QVERIFY(issueUrl(base, QJsonObject(), {}).isEmpty());
     }
 
-    void typesDeclareRenderingAndConnection()
+    void typesDeclareRendering()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
@@ -151,14 +145,14 @@ private slots:
         for (const mirante::ItemType *type : registry.types()) {
             const bool isWeb = web.contains(type->id());
             QVERIFY2((type->rendering() == mirante::Rendering::Web) == isWeb, qPrintable(type->id()));
-            QCOMPARE(type->connectionKinds(), QStringList{QStringLiteral("gitlab")});
+            QVERIFY2(registry.usesProfile(type->id()), qPrintable(type->id()));
         }
     }
 
     void viewsShowPagesOrMessages_data()
     {
         QTest::addColumn<QString>("typeId");
-        QTest::addColumn<bool>("hasConnection");
+        QTest::addColumn<QString>("baseUrl");
         QTest::addColumn<QJsonObject>("itemConfig");
         QTest::addColumn<QString>("defaultProject");
         QTest::addColumn<QUrl>("url");
@@ -166,31 +160,36 @@ private slots:
 
         const QString mr = QStringLiteral("gitlab.mr.page");
         const QString issue = QStringLiteral("gitlab.issue.page");
-        QTest::newRow("mr") << mr << true << config("g/p", 4) << QString()
+        const QString server = QStringLiteral("https://gitlab.example.com/");
+        QTest::newRow("mr") << mr << server << config("g/p", 4) << QString()
                             << QUrl(QStringLiteral("https://gitlab.example.com/g/p/-/merge_requests/4")) << QString();
-        QTest::newRow("issue") << issue << true << config("g/p", 9) << QString()
+        QTest::newRow("issue") << issue << server << config("g/p", 9) << QString()
                                << QUrl(QStringLiteral("https://gitlab.example.com/g/p/-/issues/9")) << QString();
-        QTest::newRow("mr from setting") << mr << true << config(QString(), 4) << QStringLiteral("s/p")
+        QTest::newRow("mr from setting") << mr << server << config(QString(), 4) << QStringLiteral("s/p")
                                          << QUrl(QStringLiteral("https://gitlab.example.com/s/p/-/merge_requests/4"))
                                          << QString();
-        QTest::newRow("mr without connection") << mr << false << config("g/p", 4) << QString() << QUrl()
-                                               << noConnection;
-        QTest::newRow("issue without connection") << issue << false << config("g/p", 9) << QString() << QUrl()
-                                                  << noConnection;
-        QTest::newRow("mr without project") << mr << true << config(QString(), 4) << QString() << QUrl()
+        // Without a base URL the profile uses gitlab.com.
+        QTest::newRow("mr on gitlab.com") << mr << QString() << config("g/p", 4) << QString()
+                                          << QUrl(QStringLiteral("https://gitlab.com/g/p/-/merge_requests/4"))
+                                          << QString();
+        QTest::newRow("mr with a bad base URL") << mr << QStringLiteral("not a server") << config("g/p", 4)
+                                                << QString() << QUrl() << noServer;
+        QTest::newRow("issue with a bad base URL") << issue << QStringLiteral("ftp://x.example") << config("g/p", 9)
+                                                   << QString() << QUrl() << noServer;
+        QTest::newRow("mr without project") << mr << server << config(QString(), 4) << QString() << QUrl()
                                             << noConfig;
-        QTest::newRow("mr without number") << mr << true << config("g/p", QJsonValue()) << QString() << QUrl()
+        QTest::newRow("mr without number") << mr << server << config("g/p", QJsonValue()) << QString() << QUrl()
                                            << noConfig;
-        QTest::newRow("issue without project") << issue << true << config(QString(), 9) << QString() << QUrl()
+        QTest::newRow("issue without project") << issue << server << config(QString(), 9) << QString() << QUrl()
                                                << noConfig;
-        QTest::newRow("issue without number") << issue << true << config("g/p", QJsonValue()) << QString()
+        QTest::newRow("issue without number") << issue << server << config("g/p", QJsonValue()) << QString()
                                               << QUrl() << noConfig;
     }
 
     void viewsShowPagesOrMessages()
     {
         QFETCH(QString, typeId);
-        QFETCH(bool, hasConnection);
+        QFETCH(QString, baseUrl);
         QFETCH(QJsonObject, itemConfig);
         QFETCH(QString, defaultProject);
         QFETCH(QUrl, url);
@@ -203,14 +202,14 @@ private slots:
         context.itemConfig = itemConfig;
         if (!defaultProject.isEmpty())
             context.projectSettings.insert(QStringLiteral("project"), defaultProject);
-        if (hasConnection)
-            context.details = gitlabConnection(QStringLiteral("https://gitlab.example.com/"));
+        if (!baseUrl.isEmpty())
+            context.general = server(baseUrl);
 
         QWidget parent;
         std::unique_ptr<QWidget> view(registry.type(typeId).createView(context, &parent));
         QVERIFY(view);
         QCOMPARE(view->parentWidget(), &parent);
-        QCOMPARE(context.askedKinds, QStringList{QStringLiteral("gitlab")});
+        QVERIFY(context.askedScreens.contains(QStringLiteral("general")));
         QCOMPARE(view->property("url").toUrl(), url);
         QCOMPARE(view->property("message").toString(), message);
     }
@@ -221,7 +220,7 @@ private slots:
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         FakeContext context;
-        context.details = gitlabConnection(QStringLiteral("https://gitlab.example.com"));
+        context.general = server(QStringLiteral("https://gitlab.example.com"));
         context.itemConfig = config("g/p", 1);
         for (const mirante::ItemType *type : registry.types()) {
             if (type->rendering() == mirante::Rendering::Native)

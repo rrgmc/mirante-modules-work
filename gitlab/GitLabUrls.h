@@ -39,8 +39,8 @@ struct PageAddress
 
 // Reads a GitLab page address: <base>/<project>/-/<kind>[/<number>]. The base
 // is the longest of baseUrls that url is below, or else url's server, so the
-// pages of gitlab.com and of a self-hosted server without a connection are
-// read too. Null for any other address, such as a project's home page.
+// pages of gitlab.com and of a self-hosted server that is not the profile's
+// are read too. Null for any other address, such as a project's home page.
 std::optional<PageAddress> readPageAddress(const QUrl &url, const QList<QUrl> &baseUrls);
 
 // What the type with typeId makes of url, for ItemType::fromUrl(). Merge

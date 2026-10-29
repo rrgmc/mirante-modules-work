@@ -13,6 +13,7 @@ namespace mirante::modules::gitlab {
 void registerModule(mirante::ModuleRegistrar &registrar);
 }
 
+using mirante::modules::gitlab::baseUrlOf;
 using mirante::modules::gitlab::projectPaths;
 
 class TestSettings : public QObject
@@ -34,12 +35,48 @@ private slots:
         QVERIFY(!screens.front()->createEditor(nullptr));
 
         const std::vector<mirante::Field> fields = screens.front()->fields();
-        QCOMPARE(fields.size(), std::size_t(1));
-        QCOMPARE(fields.front().key, QStringLiteral("projects"));
-        QCOMPARE(fields.front().type, mirante::Field::Type::TextList);
-        QVERIFY(!fields.front().label.isEmpty());
+        QCOMPARE(fields.size(), std::size_t(3));
+        QCOMPARE(fields[0].key, QStringLiteral("baseUrl"));
+        QCOMPARE(fields[0].type, mirante::Field::Type::Url);
+        QCOMPARE(fields[0].defaultValue.toString(), QStringLiteral("https://gitlab.com"));
+        QCOMPARE(fields[1].key, QStringLiteral("token"));
+        QCOMPARE(fields[1].type, mirante::Field::Type::Secret);
+        QCOMPARE(fields[2].key, QStringLiteral("projects"));
+        QCOMPARE(fields[2].type, mirante::Field::Type::TextList);
+        QVERIFY(!fields[2].label.isEmpty());
         // Nothing is required, so empty settings are valid.
         QVERIFY(mirante::validate(fields, {}).empty());
+    }
+
+    // The base URL defaults to gitlab.com; a bad one gives none.
+    void baseUrl()
+    {
+        QCOMPARE(baseUrlOf({}), QUrl(QStringLiteral("https://gitlab.com")));
+        QCOMPARE(baseUrlOf({{QStringLiteral("baseUrl"), QStringLiteral(" https://example.org/gitlab/ ")}}),
+                 QUrl(QStringLiteral("https://example.org/gitlab/")));
+        QVERIFY(baseUrlOf({{QStringLiteral("baseUrl"), QStringLiteral("gitlab")}}).isEmpty());
+    }
+
+    // A pasted link on a self-hosted server at a path is read with the base
+    // URL of the profile the new item would use.
+    void fromUrlReadsTheProfilesServer()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+        registry.setSettingsReader([](const QString &profileId, const QString &, const QString &) {
+            if (profileId == QLatin1String("work"))
+                return QJsonObject{{QStringLiteral("baseUrl"), QStringLiteral("https://example.org/gitlab/")}};
+            return QJsonObject();
+        });
+        const mirante::ItemType &summary = registry.type(QStringLiteral("gitlab.mr.summary"));
+        const QUrl link(QStringLiteral("https://example.org/gitlab/acme/app/-/merge_requests/3"));
+        const auto inWork = summary.fromUrl(link, QStringLiteral("work"));
+        QVERIFY(inWork);
+        QCOMPARE(inWork->config.value(QStringLiteral("project")).toString(), QStringLiteral("acme/app"));
+        // Without that server the path is read from the server root.
+        const auto elsewhere = summary.fromUrl(link, QStringLiteral("default"));
+        QVERIFY(elsewhere);
+        QCOMPARE(elsewhere->config.value(QStringLiteral("project")).toString(), QStringLiteral("gitlab/acme/app"));
     }
 
     void projectPathsAreCleaned()
