@@ -14,7 +14,21 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 | `gitlab.issue.page` | GitLab Issue (page) | web |
 | `gitlab.issue.list` | GitLab Issue List | native |
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Their views arrive in a later milestone.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. The other types still show a placeholder; their views arrive in a later milestone.
+
+## Pages
+
+The page types ask the core for a web view with `ItemContext::createWebView`. `GitLabUrls.cpp` builds the address from the connection's base URL, without doubling a slash at its end:
+
+| Type | Address |
+|---|---|
+| `gitlab.mr.page` | `<baseUrl>/<project>/-/merge_requests/<iid>` |
+| `gitlab.issue.page` | `<baseUrl>/<project>/-/issues/<iid>` |
+
+An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
+
+- without a `gitlab` connection: "No GitLab connection in this group.";
+- without a project or a number: "Set the project and number in the item's settings."
 
 ## Configuration
 
@@ -39,8 +53,8 @@ The keys of each type, in the order the form shows them:
 
 ## Connection kinds
 
-None in M2.
+Every type uses a `gitlab` connection. In M4 only the page types read it, for its base URL.
 
 ## Settings
 
-None in M2.
+The project setting `project`, read as `gitlab.project`: the default project path for items whose `project` is empty.

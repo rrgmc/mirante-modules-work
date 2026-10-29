@@ -1,11 +1,15 @@
 // The gitlab module: GitLab merge requests, pipelines and issues as items. See README.md.
+#include "GitLabUrls.h"
+
 #include <mirante/Fields.h>
+#include <mirante/ItemContext.h>
 #include <mirante/ItemType.h>
 #include <mirante/Module.h>
 
 #include <QCoreApplication>
 
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -13,7 +17,8 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
-// A type with an id, a name, an icon and its configuration fields. Views arrive later.
+// A type with an id, a name, an icon and its configuration fields. All GitLab
+// types use a gitlab connection. Native views arrive later.
 class StubItemType : public ItemType
 {
 public:
@@ -31,6 +36,8 @@ public:
     QIcon icon() const override { return m_icon; }
     QString shortName() const override { return m_shortName; }
     std::vector<Field> fields() const override { return m_fields; }
+    Rendering rendering() const override { return Rendering::Native; }
+    QStringList connectionKinds() const override { return {QStringLiteral("gitlab")}; }
 
 private:
     QString m_id;
@@ -38,6 +45,44 @@ private:
     QString m_shortName;
     QIcon m_icon;
     std::vector<Field> m_fields;
+};
+
+// Builds a page address from a connection's base URL, the item's configuration
+// and the project's "project" setting.
+using PageUrl = QUrl (*)(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject);
+
+// A merge request or issue page: a web view of the page on the item's GitLab
+// connection, or a message when the connection or the configuration is missing.
+class PageItemType : public StubItemType
+{
+public:
+    PageItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields,
+                 PageUrl pageUrl)
+        : StubItemType(id, name, shortName, std::move(fields))
+        , m_pageUrl(pageUrl)
+    {
+    }
+
+    Rendering rendering() const override { return Rendering::Web; }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        const std::optional<ConnectionDetails> connection = context.connection(connectionKinds());
+        if (!connection || !connection->baseUrl.isValid() || connection->baseUrl.host().isEmpty()) {
+            return context.createMessageView(
+                QCoreApplication::translate("gitlab", "No GitLab connection in this group."), parent);
+        }
+        const QUrl url = m_pageUrl(connection->baseUrl, context.config(),
+                                   context.projectSetting(QStringLiteral("project")));
+        if (url.isEmpty()) {
+            return context.createMessageView(
+                QCoreApplication::translate("gitlab", "Set the project and number in the item's settings."), parent);
+        }
+        return context.createWebView(url, parent);
+    }
+
+private:
+    PageUrl m_pageUrl;
 };
 
 Field makeField(const QString &key, const QString &label, Field::Type type, bool required = false,
@@ -121,9 +166,9 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.summary"), QCoreApplication::translate("gitlab", "GitLab MR (summary)"),
         QCoreApplication::translate("gitlab", "MR"), mergeRequest));
-    registrar.addItemType(std::make_unique<StubItemType>(
+    registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("gitlab.mr.page"), QCoreApplication::translate("gitlab", "GitLab MR (page)"),
-        QCoreApplication::translate("gitlab", "MR"), mergeRequest));
+        QCoreApplication::translate("gitlab", "MR"), mergeRequest, &mergeRequestUrl));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.list"), QCoreApplication::translate("gitlab", "GitLab MR List"),
         QCoreApplication::translate("gitlab", "MRs"),
@@ -140,9 +185,9 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),
         QCoreApplication::translate("gitlab", "Issue"), issue));
-    registrar.addItemType(std::make_unique<StubItemType>(
+    registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("gitlab.issue.page"), QCoreApplication::translate("gitlab", "GitLab Issue (page)"),
-        QCoreApplication::translate("gitlab", "Issue"), issue));
+        QCoreApplication::translate("gitlab", "Issue"), issue, &issueUrl));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.list"), QCoreApplication::translate("gitlab", "GitLab Issue List"),
         QCoreApplication::translate("gitlab", "Issues"),
