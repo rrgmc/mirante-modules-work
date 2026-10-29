@@ -55,6 +55,12 @@ public:
 
     Rendering rendering() const override { return Rendering::Web; }
 
+    std::optional<UrlMatch> fromUrl(const QUrl &url, const QList<QUrl> &baseUrls) const override
+    {
+        Q_UNUSED(baseUrls)
+        return matchUrl(url);
+    }
+
     QWidget *createView(ItemContext &context, QWidget *parent) const override
     {
         const QUrl url = sessionUrl(context.config());

@@ -43,6 +43,11 @@ public:
     Rendering rendering() const override { return Rendering::Native; }
     QStringList connectionKinds() const override { return {QStringLiteral("gitlab")}; }
 
+    std::optional<UrlMatch> fromUrl(const QUrl &url, const QList<QUrl> &baseUrls) const override
+    {
+        return matchUrl(m_id, url, baseUrls);
+    }
+
 private:
     QString m_id;
     QString m_name;

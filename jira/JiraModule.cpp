@@ -44,6 +44,11 @@ public:
         return {QStringLiteral("jira.cloud"), QStringLiteral("jira.dc")};
     }
 
+    std::optional<UrlMatch> fromUrl(const QUrl &url, const QList<QUrl> &baseUrls) const override
+    {
+        return matchUrl(m_id, url, baseUrls);
+    }
+
 private:
     QString m_id;
     QString m_name;
