@@ -1,11 +1,15 @@
 // The jira module: Jira issues and issue lists as items. See README.md.
+#include "JiraUrls.h"
+
 #include <mirante/Fields.h>
+#include <mirante/ItemContext.h>
 #include <mirante/ItemType.h>
 #include <mirante/Module.h>
 
 #include <QCoreApplication>
 
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -13,7 +17,9 @@ namespace mirante::modules::jira {
 
 namespace {
 
-// A type with an id, a name, an icon and its configuration fields. Views arrive later.
+// A type with an id, a name, an icon and its configuration fields. All Jira
+// types use a Jira Cloud connection, or else a Jira Data Center one. Native
+// views arrive later.
 class StubItemType : public ItemType
 {
 public:
@@ -31,6 +37,12 @@ public:
     QIcon icon() const override { return m_icon; }
     QString shortName() const override { return m_shortName; }
     std::vector<Field> fields() const override { return m_fields; }
+    Rendering rendering() const override { return Rendering::Native; }
+
+    QStringList connectionKinds() const override
+    {
+        return {QStringLiteral("jira.cloud"), QStringLiteral("jira.dc")};
+    }
 
 private:
     QString m_id;
@@ -38,6 +50,31 @@ private:
     QString m_shortName;
     QIcon m_icon;
     std::vector<Field> m_fields;
+};
+
+// The issue page: a web view of the issue on the item's Jira connection, or a
+// message when the connection or the key is missing.
+class PageItemType : public StubItemType
+{
+public:
+    using StubItemType::StubItemType;
+
+    Rendering rendering() const override { return Rendering::Web; }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        const std::optional<ConnectionDetails> connection = context.connection(connectionKinds());
+        if (!connection || !connection->baseUrl.isValid() || connection->baseUrl.host().isEmpty()) {
+            return context.createMessageView(
+                QCoreApplication::translate("jira", "No Jira connection in this group."), parent);
+        }
+        const QUrl url = issueUrl(connection->baseUrl, context.config());
+        if (url.isEmpty()) {
+            return context.createMessageView(
+                QCoreApplication::translate("jira", "Set the issue key in the item's settings."), parent);
+        }
+        return context.createWebView(url, parent);
+    }
 };
 
 std::vector<Field> issueFields()
@@ -80,7 +117,7 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.issue.summary"), QCoreApplication::translate("jira", "Jira Issue (summary)"),
         QCoreApplication::translate("jira", "Jira"), issueFields()));
-    registrar.addItemType(std::make_unique<StubItemType>(
+    registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("jira.issue.page"), QCoreApplication::translate("jira", "Jira Issue (page)"),
         QCoreApplication::translate("jira", "Jira"), issueFields()));
     registrar.addItemType(std::make_unique<StubItemType>(

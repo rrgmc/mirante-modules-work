@@ -10,7 +10,14 @@ Jira issues and issue lists as items. See [item types](../../../docs/item-types.
 | `jira.issue.page` | Jira Issue (page) | web |
 | `jira.list` | Jira List | native |
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Their views arrive in a later milestone.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. The other types still show a placeholder; their views arrive in a later milestone.
+
+## Pages
+
+`jira.issue.page` asks the core for a web view with `ItemContext::createWebView`. `JiraUrls.cpp` builds the address `<baseUrl>/browse/<key>` from the connection's base URL, without doubling a slash at its end. When something is missing, the cell shows a message instead:
+
+- without a `jira.cloud` or `jira.dc` connection: "No Jira connection in this group.";
+- without an issue key: "Set the issue key in the item's settings."
 
 ## Configuration
 
@@ -24,7 +31,7 @@ The keys each type stores in the item's configuration. "Required" means the item
 
 ## Connection kinds
 
-None in M2.
+Every type uses a `jira.cloud` connection, or else a `jira.dc` one. In M4 only the page type reads it, for its base URL.
 
 ## Settings
 
