@@ -17,9 +17,10 @@ namespace {
 class StubItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, std::vector<Field> fields)
+    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields)
         : m_id(id)
         , m_name(name)
+        , m_shortName(shortName)
         , m_icon(QStringLiteral(":/modules/gitlab/icons/gitlab.svg"))
         , m_fields(std::move(fields))
     {
@@ -28,11 +29,13 @@ public:
     QString id() const override { return m_id; }
     QString name() const override { return m_name; }
     QIcon icon() const override { return m_icon; }
+    QString shortName() const override { return m_shortName; }
     std::vector<Field> fields() const override { return m_fields; }
 
 private:
     QString m_id;
     QString m_name;
+    QString m_shortName;
     QIcon m_icon;
     std::vector<Field> m_fields;
 };
@@ -117,11 +120,13 @@ void registerModule(ModuleRegistrar &registrar)
 
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.summary"), QCoreApplication::translate("gitlab", "GitLab MR (summary)"),
-        mergeRequest));
+        QCoreApplication::translate("gitlab", "MR"), mergeRequest));
     registrar.addItemType(std::make_unique<StubItemType>(
-        QStringLiteral("gitlab.mr.page"), QCoreApplication::translate("gitlab", "GitLab MR (page)"), mergeRequest));
+        QStringLiteral("gitlab.mr.page"), QCoreApplication::translate("gitlab", "GitLab MR (page)"),
+        QCoreApplication::translate("gitlab", "MR"), mergeRequest));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.list"), QCoreApplication::translate("gitlab", "GitLab MR List"),
+        QCoreApplication::translate("gitlab", "MRs"),
         listFields({QStringLiteral("createdByMe"), QStringLiteral("reviewRequested"),
                     QStringLiteral("assignedToMe"), QStringLiteral("allOpen")},
                    {QCoreApplication::translate("gitlab", "Created by me"),
@@ -130,14 +135,17 @@ void registerModule(ModuleRegistrar &registrar)
                     QCoreApplication::translate("gitlab", "All open")})));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.pipeline"), QCoreApplication::translate("gitlab", "GitLab CI Pipeline"),
+        QCoreApplication::translate("gitlab", "CI"),
         pipelineFields()));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),
-        issue));
+        QCoreApplication::translate("gitlab", "Issue"), issue));
     registrar.addItemType(std::make_unique<StubItemType>(
-        QStringLiteral("gitlab.issue.page"), QCoreApplication::translate("gitlab", "GitLab Issue (page)"), issue));
+        QStringLiteral("gitlab.issue.page"), QCoreApplication::translate("gitlab", "GitLab Issue (page)"),
+        QCoreApplication::translate("gitlab", "Issue"), issue));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.list"), QCoreApplication::translate("gitlab", "GitLab Issue List"),
+        QCoreApplication::translate("gitlab", "Issues"),
         listFields({QStringLiteral("assignedToMe"), QStringLiteral("createdByMe"), QStringLiteral("allOpen")},
                    {QCoreApplication::translate("gitlab", "Assigned to me"),
                     QCoreApplication::translate("gitlab", "Created by me"),
