@@ -27,7 +27,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
 
-- without a `gitlab` connection: "No GitLab connection in this group.";
+- without a `gitlab` connection: "No GitLab connection in this profile.";
 - without a project or a number: "Set the project and number in the item's settings."
 
 ## Items from a link
@@ -51,7 +51,7 @@ The keys each type stores in the item's configuration. "Required" means the item
 
 | Key | Type | Used by | Description |
 |---|---|---|---|
-| `project` | text | all | Project path, such as `group/project`. Empty uses the project's `gitlab.project` setting. The form offers the paths of [General Configuration](#settings-screens). |
+| `project` | text | all | Project path, such as `group/project`. Empty uses the project's `gitlab.project` setting. The form offers the paths of [General Configuration](#settings-screens) in the item's profile. |
 | `iid` | integer | MR and issue summary and page; pipeline | The merge request or issue number in the project. Required, except for the pipeline, where it names the linked merge request. |
 | `scope` | choice | lists | `project` (one project, the default), `group` (one group) or `all` (all projects visible to you). |
 | `group` | text | lists | Group path, used when `scope` is `group`. |
@@ -68,7 +68,7 @@ The keys of each type, in the order the form shows them:
 
 ## Connection kinds
 
-Every type uses a `gitlab` connection. In M4 only the page types read it, for its base URL.
+Every type uses a `gitlab` connection of the item's [profile](../../../docs/data-model.md#profile). In M4 only the page types read it, for its base URL.
 
 ## Settings
 
@@ -82,6 +82,6 @@ The module calls itself "GitLab", so the Modules menu shows Modules > GitLab. It
 |---|---|---|---|---|
 | `general` | General Configuration | `projects` | text list | Project paths the user works on, such as `group/project`, one per line. |
 
-The values are stored in `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token.
+Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The dialog of the screen chooses the profile at its top. See [decision 0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md).
 
-The `project` field of every type offers these paths in an editable drop-down list. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, so a change shows the next time the dialog opens.
+The `project` field of every type offers the paths of the profile the item uses, in an editable drop-down list. The types do this in `fieldsForProfile(profileId)`, which the item dialog calls with the profile the edited item would use; `fields()` offers none. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, and again when another profile is chosen in it, so a change shows the next time the dialog opens.

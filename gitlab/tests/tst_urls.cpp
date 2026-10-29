@@ -37,6 +37,7 @@ public:
     QString itemName() const override { return QStringLiteral("Item"); }
     QJsonObject config() const override { return itemConfig; }
     QJsonValue projectSetting(const QString &key) const override { return projectSettings.value(key); }
+    QJsonObject moduleSettings(const QString &) const override { return {}; }
 
     std::optional<mirante::ConnectionDetails> connection(const QStringList &kinds) const override
     {
@@ -80,7 +81,7 @@ QJsonObject config(const QString &project, const QJsonValue &iid)
     return QJsonObject{{QStringLiteral("project"), project}, {QStringLiteral("iid"), iid}};
 }
 
-const QString noConnection = QStringLiteral("No GitLab connection in this group.");
+const QString noConnection = QStringLiteral("No GitLab connection in this profile.");
 const QString noConfig = QStringLiteral("Set the project and number in the item's settings.");
 
 } // namespace
