@@ -1,5 +1,8 @@
 // The claude module: Claude sessions as items. See README.md.
+#include "ClaudeUrls.h"
+
 #include <mirante/Fields.h>
+#include <mirante/ItemContext.h>
 #include <mirante/ItemType.h>
 #include <mirante/Module.h>
 
@@ -13,7 +16,8 @@ namespace mirante::modules::claude {
 
 namespace {
 
-// A type with an id, a name, an icon and its configuration fields. Views arrive later.
+// A type with an id, a name, an icon and its configuration fields. No Claude
+// type uses a connection. Native views arrive later.
 class StubItemType : public ItemType
 {
 public:
@@ -31,6 +35,8 @@ public:
     QIcon icon() const override { return m_icon; }
     QString shortName() const override { return m_shortName; }
     std::vector<Field> fields() const override { return m_fields; }
+    Rendering rendering() const override { return Rendering::Native; }
+    QStringList connectionKinds() const override { return {}; }
 
 private:
     QString m_id;
@@ -38,6 +44,26 @@ private:
     QString m_shortName;
     QIcon m_icon;
     std::vector<Field> m_fields;
+};
+
+// A session on claude.ai: a web view of its address, or a message when the
+// address is missing or is not an http or https address.
+class WebSessionItemType : public StubItemType
+{
+public:
+    using StubItemType::StubItemType;
+
+    Rendering rendering() const override { return Rendering::Web; }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        const QUrl url = sessionUrl(context.config());
+        if (url.isEmpty()) {
+            return context.createMessageView(
+                QCoreApplication::translate("claude", "Set the address in the item's settings."), parent);
+        }
+        return context.createWebView(url, parent);
+    }
 };
 
 std::vector<Field> webFields()
@@ -75,7 +101,7 @@ std::vector<Field> localFields()
 
 void registerModule(ModuleRegistrar &registrar)
 {
-    registrar.addItemType(std::make_unique<StubItemType>(
+    registrar.addItemType(std::make_unique<WebSessionItemType>(
         QStringLiteral("claude.session.web"), QCoreApplication::translate("claude", "Claude session (web)"),
         QCoreApplication::translate("claude", "Claude"), webFields()));
     registrar.addItemType(std::make_unique<StubItemType>(
