@@ -17,9 +17,10 @@ namespace {
 class StubItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, std::vector<Field> fields)
+    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields)
         : m_id(id)
         , m_name(name)
+        , m_shortName(shortName)
         , m_icon(QStringLiteral(":/modules/jira/icons/jira.svg"))
         , m_fields(std::move(fields))
     {
@@ -28,11 +29,13 @@ public:
     QString id() const override { return m_id; }
     QString name() const override { return m_name; }
     QIcon icon() const override { return m_icon; }
+    QString shortName() const override { return m_shortName; }
     std::vector<Field> fields() const override { return m_fields; }
 
 private:
     QString m_id;
     QString m_name;
+    QString m_shortName;
     QIcon m_icon;
     std::vector<Field> m_fields;
 };
@@ -76,11 +79,13 @@ void registerModule(ModuleRegistrar &registrar)
 {
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.issue.summary"), QCoreApplication::translate("jira", "Jira Issue (summary)"),
-        issueFields()));
+        QCoreApplication::translate("jira", "Jira"), issueFields()));
     registrar.addItemType(std::make_unique<StubItemType>(
-        QStringLiteral("jira.issue.page"), QCoreApplication::translate("jira", "Jira Issue (page)"), issueFields()));
+        QStringLiteral("jira.issue.page"), QCoreApplication::translate("jira", "Jira Issue (page)"),
+        QCoreApplication::translate("jira", "Jira"), issueFields()));
     registrar.addItemType(std::make_unique<StubItemType>(
-        QStringLiteral("jira.list"), QCoreApplication::translate("jira", "Jira List"), listFields()));
+        QStringLiteral("jira.list"), QCoreApplication::translate("jira", "Jira List"),
+        QCoreApplication::translate("jira", "Jira"), listFields()));
 }
 
 } // namespace mirante::modules::jira

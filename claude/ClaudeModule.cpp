@@ -17,9 +17,10 @@ namespace {
 class StubItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, std::vector<Field> fields)
+    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields)
         : m_id(id)
         , m_name(name)
+        , m_shortName(shortName)
         , m_icon(QStringLiteral(":/modules/claude/icons/claude.svg"))
         , m_fields(std::move(fields))
     {
@@ -28,11 +29,13 @@ public:
     QString id() const override { return m_id; }
     QString name() const override { return m_name; }
     QIcon icon() const override { return m_icon; }
+    QString shortName() const override { return m_shortName; }
     std::vector<Field> fields() const override { return m_fields; }
 
 private:
     QString m_id;
     QString m_name;
+    QString m_shortName;
     QIcon m_icon;
     std::vector<Field> m_fields;
 };
@@ -74,10 +77,10 @@ void registerModule(ModuleRegistrar &registrar)
 {
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("claude.session.web"), QCoreApplication::translate("claude", "Claude session (web)"),
-        webFields()));
+        QCoreApplication::translate("claude", "Claude"), webFields()));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("claude.session.local"), QCoreApplication::translate("claude", "Claude session (local)"),
-        localFields()));
+        QCoreApplication::translate("claude", "Claude"), localFields()));
 }
 
 } // namespace mirante::modules::claude
