@@ -66,7 +66,7 @@ public:
         const std::optional<ConnectionDetails> connection = context.connection(connectionKinds());
         if (!connection || !connection->baseUrl.isValid() || connection->baseUrl.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("jira", "No Jira connection in this group."), parent);
+                QCoreApplication::translate("jira", "No Jira connection in this profile."), parent);
         }
         const QUrl url = issueUrl(connection->baseUrl, context.config());
         if (url.isEmpty()) {

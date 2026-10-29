@@ -54,21 +54,26 @@ private slots:
         QVERIFY(projectPaths(QJsonObject{{QStringLiteral("projects"), QStringLiteral("acme/x")}}).isEmpty());
     }
 
-    // Every type's "project" field offers the configured paths, read when the
-    // fields are asked for, so a change shows in the next form.
+    // Every type's "project" field offers the paths configured in the
+    // profile the item uses, read when the fields are asked for, so a change
+    // shows in the next form. fields() alone, without a profile, offers none.
     void projectFieldsOfferTheConfiguredPaths()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
-        QJsonObject general;
-        registry.setSettingsReader([&general](const QString &moduleId, const QString &screenId) {
-            return moduleId == QLatin1String("gitlab") && screenId == QLatin1String("general") ? general
-                                                                                               : QJsonObject();
+        QJsonObject work;
+        QJsonObject standard;
+        registry.setSettingsReader([&](const QString &profileId, const QString &moduleId, const QString &screenId) {
+            if (moduleId != QLatin1String("gitlab") || screenId != QLatin1String("general"))
+                return QJsonObject();
+            if (profileId == QLatin1String("work"))
+                return work;
+            return profileId == QLatin1String("default") ? standard : QJsonObject();
         });
 
-        const auto suggestionsOf = [&registry](const QString &typeId) {
-            for (const mirante::Field &field : registry.type(typeId).fields()) {
+        const auto suggestionsOf = [&registry](const QString &typeId, const QString &profileId) {
+            for (const mirante::Field &field : registry.type(typeId).fieldsForProfile(profileId)) {
                 if (field.key == QLatin1String("project"))
                     return field.suggestions;
             }
@@ -76,16 +81,23 @@ private slots:
         };
 
         for (const mirante::ItemType *type : registry.types())
-            QVERIFY2(suggestionsOf(type->id()).isEmpty(), qPrintable(type->id()));
+            QVERIFY2(suggestionsOf(type->id(), QStringLiteral("work")).isEmpty(), qPrintable(type->id()));
 
-        general.insert(QStringLiteral("projects"),
-                       QJsonArray{QStringLiteral("acme/backend"), QStringLiteral("acme/web")});
+        work.insert(QStringLiteral("projects"), QJsonArray{QStringLiteral("acme/backend"), QStringLiteral("acme/web")});
+        standard.insert(QStringLiteral("projects"), QJsonArray{QStringLiteral("me/dotfiles")});
         const QStringList expected{QStringLiteral("acme/backend"), QStringLiteral("acme/web")};
-        for (const mirante::ItemType *type : registry.types())
-            QCOMPARE(suggestionsOf(type->id()), expected);
+        for (const mirante::ItemType *type : registry.types()) {
+            QCOMPARE(suggestionsOf(type->id(), QStringLiteral("work")), expected);
+            QCOMPARE(suggestionsOf(type->id(), QStringLiteral("default")), QStringList{QStringLiteral("me/dotfiles")});
+            QVERIFY(suggestionsOf(type->id(), QStringLiteral("other")).isEmpty());
+            // Without a profile there is nothing to offer.
+            for (const mirante::Field &field : type->fields())
+                QVERIFY2(field.suggestions.isEmpty(), qPrintable(type->id()));
+        }
 
         // Other fields offer nothing.
-        for (const mirante::Field &field : registry.type(QStringLiteral("gitlab.mr.list")).fields()) {
+        for (const mirante::Field &field :
+             registry.type(QStringLiteral("gitlab.mr.list")).fieldsForProfile(QStringLiteral("work"))) {
             if (field.key != QLatin1String("project"))
                 QVERIFY2(field.suggestions.isEmpty(), qPrintable(field.key));
         }

@@ -31,6 +31,7 @@ public:
     QString itemName() const override { return QStringLiteral("Item"); }
     QJsonObject config() const override { return itemConfig; }
     QJsonValue projectSetting(const QString &) const override { return {}; }
+    QJsonObject moduleSettings(const QString &) const override { return {}; }
     std::optional<mirante::ConnectionDetails> connection(const QStringList &) const override { return {}; }
     QString folderPath(const QString &) const override { return {}; }
 

@@ -20,7 +20,8 @@ namespace {
 
 // A type with an id, a name, an icon and its configuration fields. All GitLab
 // types use a gitlab connection. Native views arrive later. The "project"
-// field offers the paths of the General Configuration screen.
+// field offers the paths of the General Configuration screen of the profile
+// the item uses.
 class StubItemType : public ItemType
 {
 public:
@@ -39,7 +40,11 @@ public:
     QString name() const override { return m_name; }
     QIcon icon() const override { return m_icon; }
     QString shortName() const override { return m_shortName; }
-    std::vector<Field> fields() const override { return withProjectPaths(m_fields, m_settings); }
+    std::vector<Field> fields() const override { return m_fields; }
+    std::vector<Field> fieldsForProfile(const QString &profileId) const override
+    {
+        return withProjectPaths(m_fields, m_settings, profileId);
+    }
     Rendering rendering() const override { return Rendering::Native; }
     QStringList connectionKinds() const override { return {QStringLiteral("gitlab")}; }
 
@@ -75,7 +80,7 @@ public:
         const std::optional<ConnectionDetails> connection = context.connection(connectionKinds());
         if (!connection || !connection->baseUrl.isValid() || connection->baseUrl.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("gitlab", "No GitLab connection in this group."), parent);
+                QCoreApplication::translate("gitlab", "No GitLab connection in this profile."), parent);
         }
         const QUrl url = m_pageUrl(connection->baseUrl, context.config(),
                                    context.projectSetting(QStringLiteral("project")));

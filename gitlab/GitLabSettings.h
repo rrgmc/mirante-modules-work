@@ -26,7 +26,9 @@ std::unique_ptr<SettingsScreen> makeGeneralScreen();
 // without slashes at its start and end. Empty and repeated paths are left out.
 QStringList projectPaths(const QJsonObject &general);
 
-// The fields, with the configured project paths offered in each "project" field.
-std::vector<Field> withProjectPaths(std::vector<Field> fields, const ModuleSettings &settings);
+// The fields, with the project paths configured in the profile offered in
+// each "project" field.
+std::vector<Field> withProjectPaths(std::vector<Field> fields, const ModuleSettings &settings,
+                                    const QString &profileId);
 
 } // namespace mirante::modules::gitlab

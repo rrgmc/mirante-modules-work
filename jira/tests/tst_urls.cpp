@@ -33,6 +33,7 @@ public:
     QString itemName() const override { return QStringLiteral("Item"); }
     QJsonObject config() const override { return itemConfig; }
     QJsonValue projectSetting(const QString &) const override { return {}; }
+    QJsonObject moduleSettings(const QString &) const override { return {}; }
 
     std::optional<mirante::ConnectionDetails> connection(const QStringList &kinds) const override
     {
@@ -127,7 +128,7 @@ private slots:
         QTest::addColumn<QUrl>("url");
         QTest::addColumn<QString>("message");
 
-        const QString noConnection = QStringLiteral("No Jira connection in this group.");
+        const QString noConnection = QStringLiteral("No Jira connection in this profile.");
         const QString noKey = QStringLiteral("Set the issue key in the item's settings.");
         QTest::newRow("cloud") << QStringLiteral("jira.cloud") << keyConfig("PROJ-1")
                                << QUrl(QStringLiteral("https://jira.example.com/browse/PROJ-1")) << QString();

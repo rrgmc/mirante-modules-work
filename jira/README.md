@@ -16,7 +16,7 @@ Since M3 the types declare their configuration fields, so items can be created a
 
 `jira.issue.page` asks the core for a web view with `ItemContext::createWebView`. `JiraUrls.cpp` builds the address `<baseUrl>/browse/<key>` from the connection's base URL, without doubling a slash at its end. When something is missing, the cell shows a message instead:
 
-- without a `jira.cloud` or `jira.dc` connection: "No Jira connection in this group.";
+- without a `jira.cloud` or `jira.dc` connection: "No Jira connection in this profile.";
 - without an issue key: "Set the issue key in the item's settings."
 
 ## Configuration
@@ -31,7 +31,7 @@ The keys each type stores in the item's configuration. "Required" means the item
 
 ## Connection kinds
 
-Every type uses a `jira.cloud` connection, or else a `jira.dc` one. In M4 only the page type reads it, for its base URL.
+Every type uses a `jira.cloud` connection of the item's [profile](../../../docs/data-model.md#profile), or else a `jira.dc` one. In M4 only the page type reads it, for its base URL.
 
 ## Settings
 
