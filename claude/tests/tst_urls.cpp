@@ -41,7 +41,7 @@ public:
         return view;
     }
 
-    QWebEngineProfile *profile(const QUrl &) override { return nullptr; }
+    QWebEngineProfile *profile() override { return nullptr; }
 
     QWidget *createMessageView(const QString &text, QWidget *parent) override
     {
