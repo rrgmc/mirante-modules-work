@@ -115,6 +115,26 @@ private slots:
         QCOMPARE(f.answers, 5);
     }
 
+    // A project's pipelines take a filter, and a merge request's have their
+    // own endpoint. Both follow the Link header.
+    void pipelineLists()
+    {
+        Fixture f;
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("ref"), GitLabClient::encodePath(QStringLiteral("feature/a+b&c")));
+        f.client().pipelines(QStringLiteral("acme/backend"), query, 20, f.done());
+        QCOMPARE(f.fake.requestKeys().constLast(),
+                 QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines?ref=feature%2Fa%2Bb%26c&per_page=20"));
+        QVERIFY(f.last().options.followLinks);
+        QCOMPARE(f.last().options.maxRows, 20);
+
+        f.client().mergeRequestPipelines(QStringLiteral("acme/backend"), 42, 20, f.done());
+        QCOMPARE(f.fake.requestKeys().constLast(),
+                 QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests/42/pipelines?per_page=20"));
+        QVERIFY(f.last().options.followLinks);
+        QCOMPARE(f.answers, 2);
+    }
+
     void onePipeline()
     {
         Fixture f;
@@ -166,13 +186,17 @@ private slots:
         f.client().retryPipeline(project, 9001, f.done());
         f.client().cancelPipeline(project, 9001, f.done());
         f.client().retryJob(project, 70002, f.done());
+        f.client().playJob(project, 71003, f.done());
+        f.client().createPipeline(project, QStringLiteral("feature/a+b&c"), f.done());
         QCOMPARE(f.fake.requestKeys(),
                  (QStringList{QStringLiteral("POST api/v4/projects/acme%2Fbackend/pipelines/9001/retry"),
                               QStringLiteral("POST api/v4/projects/acme%2Fbackend/pipelines/9001/cancel"),
-                              QStringLiteral("POST api/v4/projects/acme%2Fbackend/jobs/70002/retry")}));
+                              QStringLiteral("POST api/v4/projects/acme%2Fbackend/jobs/70002/retry"),
+                              QStringLiteral("POST api/v4/projects/acme%2Fbackend/jobs/71003/play"),
+                              QStringLiteral("POST api/v4/projects/acme%2Fbackend/pipeline?ref=feature%2Fa%2Bb%26c")}));
         for (const FakeApiClient::Request &request : f.fake.requests())
             QCOMPARE(request.body, QJsonDocument(QJsonObject()));
-        QCOMPARE(f.answers, 3);
+        QCOMPARE(f.answers, 5);
     }
 
     // A reply reaches the callback unchanged, errors included.

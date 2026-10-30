@@ -7,9 +7,13 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QJsonValue>
+#include <QList>
 #include <QStringList>
+#include <QUrlQuery>
 
+#include <algorithm>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -19,6 +23,9 @@ namespace mirante::modules::gitlab {
 namespace {
 
 const QString kSeparator = QStringLiteral(" · ");
+
+// How long after each other the pipelines of a group start. See decision 0072.
+constexpr qint64 kGroupWindowMs = 10 * 60 * 1000;
 
 QString tr(const char *text)
 {
@@ -119,6 +126,22 @@ QString mergeRequestApprovals(const QJsonObject &approvals)
     return {};
 }
 
+AttentionReason failedPipeline(const QJsonObject &pipeline)
+{
+    const QString id = QString::number(pipeline.value(QStringLiteral("id")).toInteger());
+    return reason(QStringLiteral("pipeline-failed:") + id, tr("Pipeline failed"), true);
+}
+
+bool hasFailed(const QJsonObject &pipeline)
+{
+    return pipeline.value(QStringLiteral("status")).toString() == QLatin1String("failed");
+}
+
+QDateTime createdAt(const QJsonObject &pipeline)
+{
+    return QDateTime::fromString(pipeline.value(QStringLiteral("created_at")).toString(), Qt::ISODateWithMs);
+}
+
 int failedJobs(const QJsonArray &jobs)
 {
     int count = 0;
@@ -200,7 +223,8 @@ ItemStatus issueStatus(const QJsonObject &issue)
     return status;
 }
 
-ItemStatus pipelineStatus(const QString &branch, const QJsonObject &pipeline, const QJsonArray &jobs)
+ItemStatus pipelineStatus(const QString &branch, const QJsonObject &pipeline, const QJsonArray &jobs,
+                          const QJsonArray &siblings, const QJsonArray &older)
 {
     ItemStatus status = okStatus();
     status.closed = false;
@@ -219,16 +243,66 @@ ItemStatus pipelineStatus(const QString &branch, const QJsonObject &pipeline, co
         parts << tr("%1 failed jobs").arg(failed);
     status.summary = parts.join(kSeparator);
 
-    if (state == QLatin1String("failed")) {
-        const QString id = QString::number(pipeline.value(QStringLiteral("id")).toInteger());
-        status.attention << reason(QStringLiteral("pipeline-failed:") + id, tr("Pipeline failed"), true);
+    if (hasFailed(pipeline))
+        status.attention << failedPipeline(pipeline);
+    for (const QJsonValue &sibling : siblings) {
+        const QJsonObject other = sibling.toObject().value(QStringLiteral("pipeline")).toObject();
+        if (hasFailed(other))
+            status.attention << failedPipeline(other);
     }
     status.data = QJsonObject{
         {QStringLiteral("branch"), branch},
         {QStringLiteral("pipeline"), pipeline},
         {QStringLiteral("jobs"), jobs},
     };
+    if (!siblings.isEmpty())
+        status.data.insert(QStringLiteral("siblings"), siblings);
+    if (!older.isEmpty())
+        status.data.insert(QStringLiteral("older"), older);
     return status;
+}
+
+PipelineGroup pipelineGroup(const QJsonObject &latest, const QJsonArray &recent)
+{
+    const qint64 latestId = latest.value(QStringLiteral("id")).toInteger();
+    QList<QJsonObject> all;
+    bool listed = false;
+    for (const QJsonValue &value : recent) {
+        const QJsonObject pipeline = value.toObject();
+        const bool same = !latest.isEmpty() && pipeline.value(QStringLiteral("id")).toInteger() == latestId;
+        all << (same ? latest : pipeline);
+        listed = listed || same;
+    }
+    if (!latest.isEmpty() && !listed)
+        all << latest;
+    if (all.isEmpty())
+        return {};
+
+    // A date that cannot be read counts as the oldest.
+    const auto order = [](const QJsonObject &pipeline) {
+        const QDateTime date = createdAt(pipeline);
+        return date.isValid() ? date.toMSecsSinceEpoch() : std::numeric_limits<qint64>::min();
+    };
+    std::stable_sort(all.begin(), all.end(), [&order](const QJsonObject &a, const QJsonObject &b) {
+        const qint64 first = order(a);
+        const qint64 second = order(b);
+        if (first != second)
+            return first > second;
+        return a.value(QStringLiteral("id")).toInteger() > b.value(QStringLiteral("id")).toInteger();
+    });
+
+    PipelineGroup group;
+    group.latest = all.first();
+    const QDateTime newest = createdAt(group.latest);
+    for (qsizetype i = 1; i < all.size(); ++i) {
+        const QDateTime date = createdAt(all.at(i));
+        const bool together = newest.isValid() && date.isValid() && date.msecsTo(newest) <= kGroupWindowMs;
+        if (together)
+            group.siblings.append(all.at(i));
+        else
+            group.older.append(all.at(i));
+    }
+    return group;
 }
 
 namespace {
@@ -378,24 +452,126 @@ void fetchIssueSummaryStatus(StatusJob &job)
 
 namespace {
 
-// The latest pipeline of branch, then its jobs.
-void fetchLatestPipeline(StatusJob *job, const QString &project, const QString &branch)
+// The recent pipelines a status looks through for the group, and Previous and
+// Next step through.
+constexpr int kRecentPipelines = 20;
+
+// What a pipeline status knows before its requests.
+struct PipelineSource
 {
-    const GitLabClient client(job->server(), job->owner());
-    client.latestPipeline(project, branch, [job, client, project, branch](const ApiReply &reply) {
-        // GitLab answers 404 for a branch without pipelines.
-        if (reply.error == ApiReply::Error::NotFound) {
-            job->finish(pipelineStatus(branch, {}, {}));
+    QString project;
+    QString branch;
+    qint64 iid = 0;             // the merge request's number, or 0 for a branch
+    QJsonObject mergeRequest;   // that merge request, or the open one of the branch
+};
+
+ItemStatus withMergeRequest(ItemStatus status, const QJsonObject &mergeRequest)
+{
+    if (!mergeRequest.isEmpty())
+        status.data.insert(QStringLiteral("mergeRequest"), mergeRequest);
+    return status;
+}
+
+// The jobs of each pipeline in the group, at once. The latest's are needed, and
+// a sibling's only add detail, so without them the status still stands.
+void fetchGroupJobs(StatusJob *job, const PipelineSource &source, const PipelineGroup &group)
+{
+    if (group.latest.isEmpty()) {
+        job->finish(withMergeRequest(pipelineStatus(source.branch, {}, {}), source.mergeRequest));
+        return;
+    }
+
+    struct Answers
+    {
+        std::optional<ApiReply> latest;
+        QList<QJsonObject> siblings;
+        qsizetype waiting = 0;
+    };
+    auto answers = std::make_shared<Answers>();
+    for (const QJsonValue &sibling : group.siblings)
+        answers->siblings << QJsonObject{{QStringLiteral("pipeline"), sibling}};
+    answers->waiting = answers->siblings.size() + 1;
+
+    const auto finishWhenDone = [job, source, group, answers] {
+        if (--answers->waiting > 0)
+            return;
+        if (!answers->latest->ok()) {
+            job->finish(statusFromReply(*answers->latest));
             return;
         }
-        if (!reply.ok()) {
+        QJsonArray siblings;
+        for (const QJsonObject &sibling : std::as_const(answers->siblings))
+            siblings.append(sibling);
+        job->finish(withMergeRequest(pipelineStatus(source.branch, group.latest, answers->latest->json.array(),
+                                                    siblings, group.older),
+                                     source.mergeRequest));
+    };
+
+    const GitLabClient client(job->server(), job->owner());
+    client.pipelineJobs(source.project, group.latest.value(QStringLiteral("id")).toInteger(), GetOptions().maxRows,
+                        [answers, finishWhenDone](const ApiReply &reply) {
+                            answers->latest = reply;
+                            finishWhenDone();
+                        });
+    for (qsizetype i = 0; i < group.siblings.size(); ++i) {
+        const qint64 id = group.siblings.at(i).toObject().value(QStringLiteral("id")).toInteger();
+        client.pipelineJobs(source.project, id, GetOptions().maxRows, [answers, finishWhenDone, i](const ApiReply &reply) {
+            if (reply.ok())
+                answers->siblings[i].insert(QStringLiteral("jobs"), reply.json.array());
+            finishWhenDone();
+        });
+    }
+}
+
+// The latest pipeline of the branch. Then, at once, the recent pipelines and, for
+// a branch, its open merge request. These only add detail, so without them the
+// status of the latest still stands.
+void fetchPipelines(StatusJob *job, const PipelineSource &source)
+{
+    const GitLabClient client(job->server(), job->owner());
+    client.latestPipeline(source.project, source.branch, [job, client, source](const ApiReply &reply) {
+        // GitLab answers 404 for a branch without pipelines. A merge request
+        // can still have some, on a ref of its own.
+        if (!reply.ok() && reply.error != ApiReply::Error::NotFound) {
             job->finish(statusFromReply(reply));
             return;
         }
-        const QJsonObject pipeline = reply.json.object();
-        const qint64 id = pipeline.value(QStringLiteral("id")).toInteger();
-        client.pipelineJobs(project, id, GetOptions().maxRows, [job, branch, pipeline](const ApiReply &jobs) {
-            job->finish(jobs.ok() ? pipelineStatus(branch, pipeline, jobs.json.array()) : statusFromReply(jobs));
+        const QJsonObject latest = reply.ok() ? reply.json.object() : QJsonObject();
+
+        struct Answers
+        {
+            PipelineSource source;
+            QJsonArray recent;
+            int waiting = 0;
+        };
+        auto answers = std::make_shared<Answers>();
+        answers->source = source;
+        answers->waiting = source.iid != 0 ? 1 : 2;
+        const auto continueWhenDone = [job, answers, latest] {
+            if (--answers->waiting == 0)
+                fetchGroupJobs(job, answers->source, pipelineGroup(latest, answers->recent));
+        };
+        const auto recentDone = [answers, continueWhenDone](const ApiReply &recent) {
+            if (recent.ok())
+                answers->recent = recent.json.array();
+            continueWhenDone();
+        };
+
+        if (source.iid != 0) {
+            client.mergeRequestPipelines(source.project, source.iid, kRecentPipelines, recentDone);
+            return;
+        }
+        QUrlQuery ofBranch;
+        ofBranch.addQueryItem(QStringLiteral("ref"), GitLabClient::encodePath(source.branch));
+        client.pipelines(source.project, ofBranch, kRecentPipelines, recentDone);
+
+        QUrlQuery openOfBranch;
+        openOfBranch.addQueryItem(QStringLiteral("source_branch"), GitLabClient::encodePath(source.branch));
+        openOfBranch.addQueryItem(QStringLiteral("state"), QStringLiteral("opened"));
+        client.projectMergeRequests(source.project, openOfBranch, 1, [answers, continueWhenDone](const ApiReply &found) {
+            if (found.ok())
+                answers->source.mergeRequest = found.json.array().at(0).toObject();
+            continueWhenDone();
         });
     });
 }
@@ -424,13 +600,14 @@ void fetchPipelineStatus(StatusJob &job)
             job.finish(incomplete(tr("Set the merge request number in the item's settings.")));
             return;
         }
-        GitLabClient(job.server(), job.owner()).mergeRequest(project, iid, [target, project](const ApiReply &reply) {
+        GitLabClient(job.server(), job.owner()).mergeRequest(project, iid, [target, project, iid](const ApiReply &reply) {
             if (!reply.ok()) {
                 target->finish(statusFromReply(reply));
                 return;
             }
-            const QString branch = reply.json.object().value(QStringLiteral("source_branch")).toString();
-            fetchLatestPipeline(target, project, branch);
+            const QJsonObject mergeRequest = reply.json.object();
+            const QString branch = mergeRequest.value(QStringLiteral("source_branch")).toString();
+            fetchPipelines(target, {project, branch, iid, mergeRequest});
         });
         return;
     }
@@ -440,7 +617,7 @@ void fetchPipelineStatus(StatusJob &job)
         job.finish(incomplete(tr("Set the branch in the item's settings.")));
         return;
     }
-    fetchLatestPipeline(target, project, branch);
+    fetchPipelines(target, {project, branch, 0, {}});
 }
 
 } // namespace mirante::modules::gitlab

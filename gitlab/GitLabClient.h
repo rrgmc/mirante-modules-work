@@ -25,7 +25,8 @@ public:
     GitLabClient(ApiClient &server, QObject *receiver);
 
     // A project or group path as an :id of the API: "group/project" becomes
-    // "group%2Fproject".
+    // "group%2Fproject". A branch in a query is encoded the same way, so that
+    // "+" and "&" in its name reach GitLab whole.
     static QString encodePath(const QString &path);
 
     void currentUser(Done done) const;
@@ -40,6 +41,11 @@ public:
 
     // The latest pipeline of a branch. GitLab answers 404 when there is none.
     void latestPipeline(const QString &project, const QString &branch, Done done) const;
+    // The pipelines of a project, newest first. query holds the API's
+    // parameters, such as ref=<branch>.
+    void pipelines(const QString &project, const QUrlQuery &query, int maxRows, Done done) const;
+    // The pipelines of a merge request, newest first.
+    void mergeRequestPipelines(const QString &project, qint64 iid, int maxRows, Done done) const;
     void pipelineJobs(const QString &project, qint64 pipelineId, int maxRows, Done done) const;
 
     // One pipeline, for the preview of a run.
@@ -58,6 +64,10 @@ public:
     void retryPipeline(const QString &project, qint64 pipelineId, Done done) const;
     void cancelPipeline(const QString &project, qint64 pipelineId, Done done) const;
     void retryJob(const QString &project, qint64 jobId, Done done) const;
+    // Starts a manual job.
+    void playJob(const QString &project, qint64 jobId, Done done) const;
+    // Starts a new pipeline on the branch ref.
+    void createPipeline(const QString &project, const QString &ref, Done done) const;
 
 private:
     void get(const QString &path, const QUrlQuery &query, Done done) const;

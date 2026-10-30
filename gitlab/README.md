@@ -35,10 +35,10 @@ The module never reads the token itself. It makes every request through the `Api
 
 - Paths are relative to the base URL and start with `api/v4/`, so a server installed at a path works.
 - Project and group paths are percent-encoded into the path: `acme/backend` becomes `acme%2Fbackend`.
-- The branch of the latest pipeline is percent-encoded into the `ref` query, so a branch with `+` or `&` in its name reaches GitLab whole.
-- Lists (the three merge request lists, the three issue lists, a pipeline's jobs and an issue's notes) set `followLinks` with a row limit, and ask for `per_page` of at most 100 unless the filter names its own.
+- A branch is percent-encoded into its query, so a branch with `+` or `&` in its name reaches GitLab whole.
+- Lists (the three merge request lists, the three issue lists, the two pipeline lists, a pipeline's jobs and an issue's notes) set `followLinks` with a row limit, and ask for `per_page` of at most 100 unless the filter names its own.
 - An issue's notes are asked for with `sort=desc&order_by=created_at`, so the latest come first. System notes are included.
-- The CI actions send an empty JSON body, `{}`.
+- The CI actions send an empty JSON body, `{}`. `createPipeline` names its branch in the path's query, because `ApiClient::post()` takes no query of its own.
 
 | Method | Request |
 |---|---|
@@ -49,6 +49,8 @@ The module never reads the token itself. It makes every request through the `Api
 | `projectMergeRequests` | `GET api/v4/projects/<project>/merge_requests` |
 | `groupMergeRequests` | `GET api/v4/groups/<group>/merge_requests` |
 | `latestPipeline` | `GET api/v4/projects/<project>/pipelines/latest?ref=<branch>` |
+| `pipelines` | `GET api/v4/projects/<project>/pipelines`, with a query such as `ref=<branch>` |
+| `mergeRequestPipelines` | `GET api/v4/projects/<project>/merge_requests/<iid>/pipelines` |
 | `pipelineJobs` | `GET api/v4/projects/<project>/pipelines/<id>/jobs` |
 | `pipeline` | `GET api/v4/projects/<project>/pipelines/<id>` |
 | `issue` | `GET api/v4/projects/<project>/issues/<iid>` |
@@ -57,7 +59,8 @@ The module never reads the token itself. It makes every request through the `Api
 | `projectIssues` | `GET api/v4/projects/<project>/issues` |
 | `groupIssues` | `GET api/v4/groups/<group>/issues` |
 | `retryPipeline`, `cancelPipeline` | `POST api/v4/projects/<project>/pipelines/<id>/retry`, `.../cancel` |
-| `retryJob` | `POST api/v4/projects/<project>/jobs/<id>/retry` |
+| `retryJob`, `playJob` | `POST api/v4/projects/<project>/jobs/<id>/retry`, `.../play` |
+| `createPipeline` | `POST api/v4/projects/<project>/pipeline?ref=<branch>` |
 
 The list and action methods are tested in `tests/tst_client.cpp`.
 
@@ -69,17 +72,24 @@ Every type reports status: `hasStatus()` is true and `fetchStatus()` runs a func
 |---|---|---|---|
 | `gitlab.mr.summary`, `gitlab.mr.page` | the merge request, its approvals and the current user, at once; for the summary, when `head_pipeline.status` is `failed`, then that pipeline's jobs | "Pipeline failed" (`pipeline-failed`, notify) when `head_pipeline.status` is `failed`; "Review requested" (`review`) when I am a reviewer and have not approved; "Approved" (`approved`, clears on view) when I am the author and `approved` is true; "Has conflicts" (`conflicts`) when I am the author and `has_conflicts` is true | `state` is `merged` or `closed` |
 | `gitlab.issue.summary`, `gitlab.issue.page` | the issue; for the summary, then its latest 20 notes | none | `state` is `closed` |
-| `gitlab.pipeline` | for `mergeRequest`, the merge request and then its `source_branch`; for `fixed`, `branch`; then the latest pipeline of the branch and its jobs | "Pipeline failed" (`pipeline-failed:<pipeline id>`, notify) when its `status` is `failed` | never |
+| `gitlab.pipeline` | for `mergeRequest`, the merge request and then its `source_branch`; for `fixed`, `branch`; then the latest pipeline of the branch; then, at once, the latest 20 pipelines (`mergeRequestPipelines` or `pipelines?ref=<branch>`) and, for `fixed`, the open merge request of the branch (`projectMergeRequests`); then the jobs of each pipeline in the [group](#the-group), at once | "Pipeline failed" (`pipeline-failed:<pipeline id>`, notify) for each pipeline of the group whose `status` is `failed` | never |
 
 - **Only open merge requests need attention.** A merged or closed merge request reports no reasons, even with a failed pipeline.
 - **Summaries.** A merge request reads like "Open · 2 of 3 approvals · pipeline failed": the state, "draft" for an open draft, the approvals given of those required (or just the count when none are required), the head pipeline's status, and "has conflicts" while open. An issue reads like "Open · assigned to Ana". A pipeline reads like "Failed · main · 1 failed job"; failed jobs that are allowed to fail are not counted. `success` reads as "passed".
-- **A branch without pipelines.** GitLab answers `404` for the latest pipeline of such a branch. The status is then `Ok` with "No pipeline on <branch>".
+- **A branch without pipelines.** GitLab answers `404` for the latest pipeline of such a branch. The status is then `Ok` with "No pipeline on <branch>", unless the list has pipelines, as for a merge request whose pipelines run on a ref of its own.
 - **The main folder's branch.** A pipeline with `branchSource` `mainFolder` reports `State::None` with "Follows the main folder from M7", without a request.
 - **An incomplete configuration,** without a project, a number or a branch, reports `State::None` with a message, such as "Set the project and number in the item's settings.", without a request.
-- **Errors.** Any other failed reply becomes its state with `statusFromReply()`, such as `NoToken` or `NotFound`. A merge request's own reply wins over those of the user and the approvals. A failed request for a summary's jobs or notes is not an error: the status stands, and `data` leaves them out. An unknown issue asks for no notes.
-- **Data.** `data` holds what M6's summaries need: `mergeRequest`, `approvals` and `user` (`id` and `username`) for a merge request; `issue` for an issue; `branch`, `pipeline` and `jobs` for a pipeline. The objects are GitLab's answers, unchanged. A merge request summary adds `jobs` when its head pipeline failed. An issue summary adds `notes`, newest first, without the notes that have `system` set. The 20 are counted before system notes are left out, so `notes` can hold fewer. Page types add neither.
+- **Errors.** Any other failed reply becomes its state with `statusFromReply()`, such as `NoToken` or `NotFound`. A merge request's own reply wins over those of the user and the approvals. A failed request for a summary's jobs or notes is not an error: the status stands, and `data` leaves them out. The same holds for a pipeline's list, a sibling's jobs and the open merge request of a branch. A failed request for the latest pipeline's jobs is an error. An unknown issue asks for no notes.
+- **Data.** `data` holds what M6's summaries need: `mergeRequest`, `approvals` and `user` (`id` and `username`) for a merge request; `issue` for an issue; `branch`, `pipeline` and `jobs` for a pipeline, which also adds `siblings` and `older`, as [the group](#the-group) says, and `mergeRequest`, when it knows one. The objects are GitLab's answers, unchanged. A merge request summary adds `jobs` when its head pipeline failed. An issue summary adds `notes`, newest first, without the notes that have `system` set. The 20 are counted before system notes are left out, so `notes` can hold fewer. Page types add neither.
 
-The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded from a GitLab server, trimmed by hand, with names and emails replaced. `issue_notes.json` was written by hand in the shape of GitLab's API.
+### The group
+
+`pipelineGroup()` sorts the answers of decision [0072](../../../docs/decisions/0072-pipelines-started-together.md) by `created_at`, newest first. The newest leads, and it is the latest of the status: its summary, `pipeline` and `jobs`. An entry of a list lacks fields such as `duration`, so the answer to `pipelines/latest` takes the place of its own entry.
+
+- **`siblings`** are the others created at most 10 minutes before the newest, each as `{"pipeline": ..., "jobs": [...]}`, without `jobs` if that request failed.
+- **`older`** are the rest, as pipelines without jobs. A date that cannot be read counts as older. They need no attention.
+
+The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded from a GitLab server, trimmed by hand, with names and emails replaced. `issue_notes.json`, `pipelines.json`, `pipeline_jobs_sibling.json` and `pipeline_jobs_running.json` were written by hand in the shape of GitLab's API.
 
 ## Summary views
 
