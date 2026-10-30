@@ -12,7 +12,7 @@ Jira issues and issue lists as items. See [item types](../../../docs/item-types.
 
 The module calls itself "Jira" and describes itself as: "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. Since M5 the issue types report [status](#status). Since M6 the list reports status. The summary and the list still show a placeholder.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. Since M5 the issue types report [status](#status). Since M6 the summary and the list have native [views](#views), and the list reports status.
 
 ## Pages
 
@@ -38,6 +38,7 @@ The keys each type stores in the item's configuration. "Required" means the item
 | Key | Type | Used by | Description |
 |---|---|---|---|
 | `key` | text, required | `jira.issue.summary`, `jira.issue.page` | The issue key, such as `PROJ-123`. |
+| `showDetails`, `showDescription`, `showComments`, `showLinks` | boolean | `jira.issue.summary` | Each shows one section of the [view](#views). On by default, and when absent. |
 | `preset` | choice, required | `jira.list` | `myOpen` (my open issues, the default), `currentSprint` (current sprint of the project's `jira.projectKey`), `recentlyUpdated` (recently updated in that project) or `jql` (the query in `jql`). |
 | `jql` | text | `jira.list` | A JQL query, used when `preset` is `jql`. |
 
@@ -97,7 +98,7 @@ All three types report status, in `JiraStatus.cpp` and `JiraLists.cpp`. See deci
 
 - **Request.** `jira.issue.page` makes one `issue()` call with the fields `summary`, `status`, `assignee`, `priority`, `issuetype` and `updated`. `jira.issue.summary` makes one with all fields and `expand=renderedFields,names`.
 - **Summary.** The status and the assignee, such as "In Review · assigned to Ana", or "Done · unassigned".
-- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`. For `jira.issue.summary` also `issue`, the whole answer.
+- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`. For `jira.issue.summary` also `issue`, the whole answer, which the view draws from.
 - **Sprint.** `sprintOf()` reads the field whose entry in `names` is "Sprint", because its id differs per site. It takes the open sprint, else the last one. Jira Cloud gives objects, and older Data Center gives text such as `...Sprint@1f[id=4,state=ACTIVE,name=Week 44,...]`.
 - **Attention.** "Status changed to <name>", with the key `status:<status id>`, which clears when seen. It is reported on every fetch. The core records it as seen on the item's first status, so it counts only after the status changes.
 - **Closed.** When the status category is `done`.
@@ -122,3 +123,44 @@ All three types report status, in `JiraStatus.cpp` and `JiraLists.cpp`. See deci
 - **Missing values.** Without a project key, the two project presets finish with `State::None` and "Set the Jira project key in the project's settings." An empty `jql` finishes the same way with "Set the JQL query in the item's settings." Neither sends a request.
 
 The tests are in `tests/tst_status.cpp` and `tests/tst_list_jql.cpp`, on responses from both deployments in `tests/data/`, with made-up names.
+
+## Views
+
+`JiraIssueView.cpp` has `createIssueView()` and `createIssuePreview()`, and `JiraListView.cpp` has `createListView()`. See decisions [0066](../../../docs/decisions/0066-fixed-native-layouts-with-sections.md), [0068](../../../docs/decisions/0068-views-read-what-the-user-asked-for.md) and [0069](../../../docs/decisions/0069-open-page-in-the-placement.md).
+
+**The issue.** A `SummaryView` with the key and summary as its title, pills for the status and the type, and the actions. The sections, in order, are:
+
+| Section | Key | Field | Shows |
+|---|---|---|---|
+| Details | `details` | `showDetails` | Priority, assignee, reporter, sprint |
+| Description | `description` | `showDescription` | The HTML in `renderedFields`, else the raw text on Data Center |
+| Comments | `comments` | `showComments` | The latest five, newest first, each with its author and date |
+| Sub-tasks and links | `links` | `showLinks` | Each with its key, as a button to the external browser, then its relation, summary and status |
+
+Development information is left out in M6.
+
+| Action | Id | What it does |
+|---|---|---|
+| Change status | `changeStatus` | A menu. `transitions()` fills it each time it opens, and an entry calls `transition()`. |
+| Comment | `comment` | `askComment()`, then `comment()`. The dialog runs its own event loop, so the view may be gone when it returns. |
+| Open page | `openPage` | `ItemContext::showPage()`, or the external browser if `Shift` is held. |
+| Web | `web` | `<baseUrl>/browse/<key>` in the external browser. |
+
+A button is disabled while its request runs. After a success, the view calls `refresh()` on the status source. A failure shows its message in the action row, and a `403` also says that the token cannot do this.
+
+**Where the data comes from.** The view draws from `ItemStatus::data`, and redraws only when the answer changed, so a poll does not lose a text selection. With no data it shows "Loading…" or the status's message. With old data and an error it keeps the data, and the cell header shows the error. A preview has no status of its own: it reads the issue through `ItemContext::server()`, with the same drawing code. It reads again after an action, and when the list has a new status. With old data, a failed read shows its message in the action row.
+
+**Rendered HTML.** `RichText`, a `QTextBrowser`, holds the description and the comments.
+
+- `loadResource()` loads nothing, and answers with a blank image, or an empty style sheet. It must not answer with nothing, because the document would then read a `file:` or network path in the HTML itself.
+- `setOpenLinks(false)` and `setOpenExternalLinks(false)` are set. A click resolves the link against the base URL, and opens it in the external browser only for `http` and `https`.
+
+Other text from the server goes in labels with `Qt::PlainText`. A `&` in a transition's name is escaped, so it does not mark a shortcut.
+
+**The list.** An `ItemListView` with the columns Key, Summary, Status, Assignee and Updated, sorted on Updated. Assignee hides first in a narrow cell, then Updated, Status and Key. Summary stays. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`.
+
+- **Web link.** `listWebUrl()`, `<baseUrl>/issues/?jql=<query>`. It is hidden when the query cannot be built.
+- **Preview.** A click on a row shows `createIssuePreview()`. If the row goes from the list, the preview stays until the user chooses another row or closes it.
+- **Row menu.** "Add to task as item" calls `ItemContext::addItemToTask()` with the type `jira.issue.summary`, the key as its name and `{"key": <key>}`. "Open page" works as above. "Copy link" copies `<baseUrl>/browse/<key>`.
+
+The tests are in `tests/tst_views.cpp`, with a fake context and status source. A handler stands in for the external browser, so nothing opens.
