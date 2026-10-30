@@ -22,7 +22,7 @@ enum Column { IdColumn, StatusColumn, RefColumn, AuthorColumn, StartedColumn, Li
 // branch, or 0.
 qint64 mergeRequestOfRef(const QString &ref)
 {
-    static const QRegularExpression pattern(QStringLiteral("^refs/merge-requests/(\\d+)/head$"));
+    static const QRegularExpression pattern(QStringLiteral("^refs/merge-requests/(\\d+)/(head|merge|train)$"));
     return pattern.match(ref).captured(1).toLongLong();
 }
 
@@ -86,11 +86,13 @@ protected:
     {
         const QString status = row.value(QStringLiteral("status")).toString();
         const QString author = row.value(QStringLiteral("user")).toObject().value(QStringLiteral("name")).toString();
+        // GitLab's list answers usually have only the time it was created.
+        const QJsonValue started = row.value(QStringLiteral("started_at"));
         return {{row.value(QStringLiteral("id")).toVariant().toString(), target.sortKey, {}},
                 status.isEmpty() ? dashCell() : ListCell{statusText(status), {}, statusRole(status)},
                 {row.value(QStringLiteral("ref")).toString(), {}, {}},
                 author.isEmpty() ? dashCell() : ListCell{author, {}, {}},
-                dateCell(row.value(QStringLiteral("started_at"))),
+                dateCell(started.isString() ? started : row.value(QStringLiteral("created_at"))),
                 linksCell(target)};
     }
 

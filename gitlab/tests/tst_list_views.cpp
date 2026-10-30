@@ -1008,11 +1008,13 @@ private slots:
         const QDateTime started = QDateTime::fromString(QStringLiteral("2026-10-28T15:50:30.000Z"), Qt::ISODateWithMs);
         QCOMPARE(cellText(view, 0, PipelineStarted), mirante::widgets::compactDate(started));
 
-        // GitLab's list answers usually lack these two.
+        // GitLab's list answers usually lack the author and the start, so
+        // Started shows when the pipeline was created.
         QCOMPARE(cellText(view, 1, PipelineId), QStringLiteral("9104"));
         QCOMPARE(cellText(view, 1, PipelineStatus), QStringLiteral("Failed"));
         QCOMPARE(cellText(view, 1, PipelineAuthor), kDash);
-        QCOMPARE(cellText(view, 1, PipelineStarted), kDash);
+        const QDateTime created = QDateTime::fromString(QStringLiteral("2026-10-27T11:20:12.000Z"), Qt::ISODateWithMs);
+        QCOMPARE(cellText(view, 1, PipelineStarted), mirante::widgets::compactDate(created));
 
         // A pipeline list asks for nothing more.
         QVERIFY(context.client.requests().isEmpty());
@@ -1094,7 +1096,32 @@ private slots:
         QCOMPARE(context.added.last().config, config);
     }
 
-    // Only the head of a merge request names it, as the plan says.
+    // A merge request's merged result and train refs name it too.
+    void pipelineMergeRequestRefs_data()
+    {
+        QTest::addColumn<QString>("ref");
+        QTest::newRow("head") << QStringLiteral("refs/merge-requests/42/head");
+        QTest::newRow("merge") << QStringLiteral("refs/merge-requests/42/merge");
+        QTest::newRow("train") << QStringLiteral("refs/merge-requests/42/train");
+    }
+
+    void pipelineMergeRequestRefs()
+    {
+        QFETCH(QString, ref);
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status =
+            statusOfRows({QJsonObject{{QStringLiteral("id"), 1}, {QStringLiteral("ref"), ref}}});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        chooseFromMenu(view, QStringLiteral("1"), QStringLiteral("Add to task as item"));
+        QCOMPARE(context.added.first().config.value(QStringLiteral("branchSource")).toString(),
+                 QStringLiteral("mergeRequest"));
+        QCOMPARE(context.added.first().config.value(QStringLiteral("iid")).toInteger(), 42);
+    }
+
+    // A ref that names no merge request is taken as a branch.
     void pipelineOtherRefsAreBranches()
     {
         FakeContext context;

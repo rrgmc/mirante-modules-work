@@ -172,7 +172,7 @@ The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json`, `issu
 - **Receivers.** Each row's requests use a child `QObject` of the view as their receiver. A row leaving the first 25 deletes its own. A new status, or hiding the view, deletes them all. The answers on the way are dropped. `ServerClient` still sends requests that were already queued.
 - **Answers.** The latest answers are kept by row, and new rows draw with them, so the cells do not flicker at each poll. A failed request puts the dash back, and so does a row leaving the first 25.
 
-`GitLabPipelineListView.cpp` makes no further requests, so Author and Started show what the list's answer holds. GitLab leaves `user` and `started_at` out of its list answers, so these usually show a dash. "Add" reads `refs/merge-requests/<iid>/head` as that merge request, and any other ref as a branch.
+`GitLabPipelineListView.cpp` makes no further requests, so Author and Started show what the list's answer holds. GitLab leaves `user` and `started_at` out of its list answers, so Author usually shows a dash, and Started falls back to `created_at`. "Add" reads `refs/merge-requests/<iid>/head`, `/merge` and `/train` as that merge request, and any other ref as a branch.
 
 The table's cells draw text from a server as plain text. The tests are in `tests/tst_list_views.cpp`, with a fake context and a fake status source, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`.
 
