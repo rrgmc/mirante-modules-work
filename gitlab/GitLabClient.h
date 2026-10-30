@@ -42,22 +42,33 @@ public:
     void latestPipeline(const QString &project, const QString &branch, Done done) const;
     void pipelineJobs(const QString &project, qint64 pipelineId, int maxRows, Done done) const;
 
-    void issue(const QString &project, qint64 iid, Done done) const;
-    // The issues visible to the user. filter as for mergeRequests().
-    void issues(const QUrlQuery &filter, int maxRows, Done done) const;
+    // One pipeline, for the preview of a run.
+    void pipeline(const QString &project, qint64 pipelineId, Done done) const;
 
-    // Light actions. M6 calls them from the summaries.
+    void issue(const QString &project, qint64 iid, Done done) const;
+    // The latest notes of an issue, newest first, system notes included.
+    void issueNotes(const QString &project, qint64 iid, int maxRows, Done done) const;
+    // The issues visible to the user, of one project, or of one group. filter
+    // as for mergeRequests().
+    void issues(const QUrlQuery &filter, int maxRows, Done done) const;
+    void projectIssues(const QString &project, const QUrlQuery &filter, int maxRows, Done done) const;
+    void groupIssues(const QString &group, const QUrlQuery &filter, int maxRows, Done done) const;
+
+    // Light actions, which the summaries call.
     void retryPipeline(const QString &project, qint64 pipelineId, Done done) const;
     void cancelPipeline(const QString &project, qint64 pipelineId, Done done) const;
     void retryJob(const QString &project, qint64 jobId, Done done) const;
     void approve(const QString &project, qint64 iid, Done done) const;
     void commentOnMergeRequest(const QString &project, qint64 iid, const QString &text, Done done) const;
     void commentOnIssue(const QString &project, qint64 iid, const QString &text, Done done) const;
+    // Closes or reopens an issue. stateEvent is "close" or "reopen".
+    void setIssueState(const QString &project, qint64 iid, const QString &stateEvent, Done done) const;
 
 private:
     void get(const QString &path, const QUrlQuery &query, Done done) const;
     void list(const QString &path, QUrlQuery query, int maxRows, Done done) const;
     void post(const QString &path, const QJsonDocument &body, Done done) const;
+    void put(const QString &path, const QJsonDocument &body, Done done) const;
 
     ApiClient *m_server;
     QObject *m_receiver;

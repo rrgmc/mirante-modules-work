@@ -113,6 +113,45 @@ void GitLabClient::issues(const QUrlQuery &filter, int maxRows, Done done) const
     list(QStringLiteral("api/v4/issues"), filter, maxRows, std::move(done));
 }
 
+void GitLabClient::pipeline(const QString &project, qint64 pipelineId, Done done) const
+{
+    Q_UNUSED(project)
+    Q_UNUSED(pipelineId)
+    Q_UNUSED(done)
+}
+
+void GitLabClient::issueNotes(const QString &project, qint64 iid, int maxRows, Done done) const
+{
+    Q_UNUSED(project)
+    Q_UNUSED(iid)
+    Q_UNUSED(maxRows)
+    Q_UNUSED(done)
+}
+
+void GitLabClient::projectIssues(const QString &project, const QUrlQuery &filter, int maxRows, Done done) const
+{
+    Q_UNUSED(project)
+    Q_UNUSED(filter)
+    Q_UNUSED(maxRows)
+    Q_UNUSED(done)
+}
+
+void GitLabClient::groupIssues(const QString &group, const QUrlQuery &filter, int maxRows, Done done) const
+{
+    Q_UNUSED(group)
+    Q_UNUSED(filter)
+    Q_UNUSED(maxRows)
+    Q_UNUSED(done)
+}
+
+void GitLabClient::setIssueState(const QString &project, qint64 iid, const QString &stateEvent, Done done) const
+{
+    Q_UNUSED(project)
+    Q_UNUSED(iid)
+    Q_UNUSED(stateEvent)
+    Q_UNUSED(done)
+}
+
 void GitLabClient::retryPipeline(const QString &project, qint64 pipelineId, Done done) const
 {
     post(pipelinePath(project, pipelineId) + QStringLiteral("/retry"), emptyBody(), std::move(done));
@@ -162,6 +201,11 @@ void GitLabClient::list(const QString &path, QUrlQuery query, int maxRows, Done 
 void GitLabClient::post(const QString &path, const QJsonDocument &body, Done done) const
 {
     m_server->post(path, body, m_receiver, std::move(done));
+}
+
+void GitLabClient::put(const QString &path, const QJsonDocument &body, Done done) const
+{
+    m_server->put(path, body, m_receiver, std::move(done));
 }
 
 } // namespace mirante::modules::gitlab

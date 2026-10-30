@@ -56,7 +56,9 @@ private slots:
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
 
         QMap<QString, QStringList> expected;
-        expected.insert(QStringLiteral("jira.issue.summary"), {QStringLiteral("key")});
+        expected.insert(QStringLiteral("jira.issue.summary"),
+                        {QStringLiteral("key"), QStringLiteral("showDetails"), QStringLiteral("showDescription"),
+                         QStringLiteral("showComments"), QStringLiteral("showLinks")});
         expected.insert(QStringLiteral("jira.issue.page"), {QStringLiteral("key")});
         expected.insert(QStringLiteral("jira.list"), {QStringLiteral("preset"), QStringLiteral("jql")});
 

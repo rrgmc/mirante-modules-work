@@ -290,6 +290,16 @@ void fetchIssueStatus(StatusJob &job)
     });
 }
 
+void fetchMergeRequestSummaryStatus(StatusJob &job)
+{
+    fetchMergeRequestStatus(job);
+}
+
+void fetchIssueSummaryStatus(StatusJob &job)
+{
+    fetchIssueStatus(job);
+}
+
 namespace {
 
 // The latest pipeline of branch, then its jobs.
