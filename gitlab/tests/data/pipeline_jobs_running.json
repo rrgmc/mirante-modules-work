@@ -1,0 +1,24 @@
+[
+  {
+    "id": 72001,
+    "name": "compile",
+    "stage": "build",
+    "status": "running",
+    "allow_failure": false,
+    "duration": 30.5,
+    "started_at": "2026-10-28T15:50:05.000Z",
+    "ref": "feature/retry-button",
+    "web_url": "https://gitlab.example/acme/backend/-/jobs/72001"
+  },
+  {
+    "id": 72002,
+    "name": "check",
+    "stage": "test",
+    "status": "created",
+    "allow_failure": false,
+    "duration": null,
+    "started_at": null,
+    "ref": "feature/retry-button",
+    "web_url": "https://gitlab.example/acme/backend/-/jobs/72002"
+  }
+]

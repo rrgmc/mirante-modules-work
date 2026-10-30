@@ -30,6 +30,14 @@ const QString kIssue = QStringLiteral("GET api/v4/projects/acme%2Fbackend/issues
 const QString kLatest =
     QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/latest?ref=feature%2Fretry-button");
 const QString kJobs = QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/9001/jobs?per_page=100");
+const QString kRecent =
+    QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines?ref=feature%2Fretry-button&per_page=20");
+const QString kMergeRequestPipelines =
+    QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests/42/pipelines?per_page=20");
+const QString kOpenMergeRequest = QStringLiteral(
+    "GET api/v4/projects/acme%2Fbackend/merge_requests?source_branch=feature%2Fretry-button&state=opened&per_page=1");
+const QString kSiblingJobs = QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/9000/jobs?per_page=100");
+const QString kRunningJobs = QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/8999/jobs?per_page=100");
 const QString kNotes =
     QStringLiteral("GET api/v4/projects/acme%2Fbackend/issues/7/notes?sort=desc&order_by=created_at&per_page=20");
 
@@ -89,6 +97,33 @@ ApiReply forbiddenReply()
     reply.httpStatus = 403;
     reply.message = QStringLiteral("Forbidden (403)");
     return reply;
+}
+
+// A job for the fixed branch feature/retry-button, with the latest pipeline.
+void setUpBranch(FakeStatusJob &job)
+{
+    job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                   {QStringLiteral("branchSource"), QStringLiteral("fixed")},
+                                   {QStringLiteral("branch"), QStringLiteral("feature/retry-button")}};
+    QVERIFY(job.client.setJsonFile(kLatest, dataFile(QStringLiteral("pipeline_latest.json"))));
+    QVERIFY(job.client.setJsonFile(kJobs, dataFile(QStringLiteral("pipeline_jobs.json"))));
+}
+
+QList<qint64> idsOf(const QJsonArray &pipelines)
+{
+    QList<qint64> ids;
+    for (const QJsonValue &value : pipelines) {
+        const QJsonObject object = value.toObject();
+        const QJsonObject pipeline =
+            object.contains(QStringLiteral("pipeline")) ? object.value(QStringLiteral("pipeline")).toObject() : object;
+        ids << pipeline.value(QStringLiteral("id")).toInteger();
+    }
+    return ids;
+}
+
+QJsonObject createdAt(qint64 id, const QString &date)
+{
+    return QJsonObject{{QStringLiteral("id"), id}, {QStringLiteral("created_at"), date}};
 }
 
 // Waits for the job to finish, and checks it finished once.
@@ -444,8 +479,131 @@ private slots:
         QCOMPARE(status.data.value(QStringLiteral("branch")).toString(), QStringLiteral("feature/retry-button"));
         QCOMPARE(status.data.value(QStringLiteral("pipeline")).toObject().value(QStringLiteral("id")).toInt(), 9001);
         QCOMPARE(status.data.value(QStringLiteral("jobs")).toArray().size(), 4);
-        QCOMPARE(job.client.requestKeys(), (QStringList{kLatest, kJobs}));
+        QCOMPARE(job.client.requestKeys(), (QStringList{kLatest, kRecent, kOpenMergeRequest, kJobs}));
         QVERIFY(job.client.requests().constLast().options.followLinks);
+    }
+
+    // The group: within 10 minutes of the latest, each with its jobs. A failed
+    // sibling counts with its own key. A failed pipeline just outside does not.
+    // The summary still describes the latest.
+    void pipelineGroupOfABranch()
+    {
+        FakeStatusJob job;
+        setUpBranch(job);
+        QVERIFY(job.client.setJsonFile(kRecent, dataFile(QStringLiteral("pipelines.json"))));
+        QVERIFY(job.client.setJsonFile(kSiblingJobs, dataFile(QStringLiteral("pipeline_jobs_sibling.json"))));
+        QVERIFY(job.client.setJsonFile(kRunningJobs, dataFile(QStringLiteral("pipeline_jobs_running.json"))));
+        fetchPipelineStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QCOMPARE(status.summary, QStringLiteral("Failed · feature/retry-button · 1 failed job"));
+        QCOMPARE(keysOf(status),
+                 (QStringList{QStringLiteral("pipeline-failed:9001"), QStringLiteral("pipeline-failed:9000")}));
+        QVERIFY(findReason(status, QStringLiteral("pipeline-failed:9000"))->notify);
+
+        // The latest keeps the fields only its own answer has.
+        QCOMPARE(status.data.value(QStringLiteral("pipeline")).toObject().value(QStringLiteral("duration")).toInt(), 699);
+        const QJsonArray siblings = status.data.value(QStringLiteral("siblings")).toArray();
+        QCOMPARE(idsOf(siblings), (QList<qint64>{9000, 8999}));
+        QCOMPARE(siblings.at(0).toObject().value(QStringLiteral("jobs")).toArray().size(), 3);
+        QCOMPARE(siblings.at(1).toObject().value(QStringLiteral("jobs")).toArray().size(), 2);
+        QCOMPARE(idsOf(status.data.value(QStringLiteral("older")).toArray()), (QList<qint64>{8990, 8950}));
+
+        // No jobs are asked for outside the group.
+        const QStringList keys = job.client.requestKeys();
+        QVERIFY(!keys.contains(QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/8990/jobs?per_page=100")));
+        QCOMPARE(keys.size(), 6);
+    }
+
+    // A failed request for the pipelines keeps the status of the latest.
+    void pipelineWhenTheListFails()
+    {
+        FakeStatusJob job;
+        setUpBranch(job);
+        job.client.setReply(kRecent, forbiddenReply());
+        fetchPipelineStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QCOMPARE(status.summary, QStringLiteral("Failed · feature/retry-button · 1 failed job"));
+        QCOMPARE(keysOf(status), QStringList{QStringLiteral("pipeline-failed:9001")});
+        QVERIFY(!status.data.contains(QStringLiteral("siblings")));
+        QVERIFY(!status.data.contains(QStringLiteral("older")));
+    }
+
+    // So does a failed request for a sibling's jobs, and that sibling still
+    // counts.
+    void pipelineWhenASiblingsJobsFail()
+    {
+        FakeStatusJob job;
+        setUpBranch(job);
+        QVERIFY(job.client.setJsonFile(kRecent, dataFile(QStringLiteral("pipelines.json"))));
+        job.client.setReply(kSiblingJobs, forbiddenReply());
+        QVERIFY(job.client.setJsonFile(kRunningJobs, dataFile(QStringLiteral("pipeline_jobs_running.json"))));
+        fetchPipelineStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QCOMPARE(status.summary, QStringLiteral("Failed · feature/retry-button · 1 failed job"));
+        QVERIFY(findReason(status, QStringLiteral("pipeline-failed:9000")));
+        const QJsonArray siblings = status.data.value(QStringLiteral("siblings")).toArray();
+        QCOMPARE(idsOf(siblings), (QList<qint64>{9000, 8999}));
+        QVERIFY(!siblings.at(0).toObject().contains(QStringLiteral("jobs")));
+        QVERIFY(siblings.at(1).toObject().contains(QStringLiteral("jobs")));
+    }
+
+    // A failed request for the latest's jobs is still an error.
+    void pipelineWhenTheLatestsJobsFail()
+    {
+        FakeStatusJob job;
+        setUpBranch(job);
+        job.client.setReply(kJobs, forbiddenReply());
+        fetchPipelineStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->message, QStringLiteral("Forbidden (403)"));
+        QVERIFY(job.finished->data.isEmpty());
+    }
+
+    // The window, on both sides of its end, whatever the order of the answer.
+    void groupWindow_data()
+    {
+        QTest::addColumn<QString>("date");
+        QTest::addColumn<bool>("together");
+
+        QTest::newRow("at once") << "2026-10-28T12:00:00.000Z" << true;
+        QTest::newRow("exactly 10 minutes") << "2026-10-28T11:50:00.000Z" << true;
+        QTest::newRow("a second more") << "2026-10-28T11:49:59.000Z" << false;
+        QTest::newRow("no date") << "" << false;
+    }
+
+    void groupWindow()
+    {
+        QFETCH(QString, date);
+        QFETCH(bool, together);
+
+        const QJsonObject latest = createdAt(2, QStringLiteral("2026-10-28T12:00:00.000Z"));
+        const PipelineGroup group = pipelineGroup(latest, QJsonArray{createdAt(1, date), latest});
+        QCOMPARE(group.latest.value(QStringLiteral("id")).toInt(), 2);
+        QCOMPARE(group.siblings.size(), together ? 1 : 0);
+        QCOMPARE(group.older.size(), together ? 0 : 1);
+    }
+
+    // The newest leads the group, also when it is not the answer to latest, as
+    // when a merge request runs on a ref of its own.
+    void newestLeadsTheGroup()
+    {
+        const QJsonObject latest = createdAt(5, QStringLiteral("2026-10-28T12:00:00.000Z"));
+        const QJsonObject newer = createdAt(6, QStringLiteral("2026-10-28T12:30:00.000Z"));
+        const PipelineGroup group = pipelineGroup(latest, QJsonArray{newer});
+        QCOMPARE(group.latest, newer);
+        QVERIFY(group.siblings.isEmpty());
+        QCOMPARE(idsOf(group.older), QList<qint64>{5});
+
+        QVERIFY(pipelineGroup({}, {}).latest.isEmpty());
     }
 
     // The branch of a linked merge request: the merge request first.
@@ -463,7 +621,80 @@ private slots:
 
         QCOMPARE(job.finished->state, ItemStatus::State::Ok);
         QCOMPARE(keysOf(*job.finished), QStringList{QStringLiteral("pipeline-failed:9001")});
-        QCOMPARE(job.client.requestKeys(), (QStringList{kMergeRequest, kLatest, kJobs}));
+        // Its pipelines come from its own endpoint, and it is its own link.
+        QCOMPARE(job.client.requestKeys(), (QStringList{kMergeRequest, kLatest, kMergeRequestPipelines, kJobs}));
+        QCOMPARE(job.finished->data.value(QStringLiteral("mergeRequest")).toObject().value(QStringLiteral("iid")).toInt(),
+                 42);
+    }
+
+    // A merge request's group, from its own endpoint.
+    void pipelineGroupOfAMergeRequest()
+    {
+        FakeStatusJob job;
+        job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                       {QStringLiteral("branchSource"), QStringLiteral("mergeRequest")},
+                                       {QStringLiteral("iid"), 42}};
+        QVERIFY(job.client.setJsonFile(kMergeRequest, dataFile(QStringLiteral("merge_request.json"))));
+        QVERIFY(job.client.setJsonFile(kLatest, dataFile(QStringLiteral("pipeline_latest.json"))));
+        QVERIFY(job.client.setJsonFile(kMergeRequestPipelines, dataFile(QStringLiteral("pipelines.json"))));
+        QVERIFY(job.client.setJsonFile(kJobs, dataFile(QStringLiteral("pipeline_jobs.json"))));
+        QVERIFY(job.client.setJsonFile(kSiblingJobs, dataFile(QStringLiteral("pipeline_jobs_sibling.json"))));
+        QVERIFY(job.client.setJsonFile(kRunningJobs, dataFile(QStringLiteral("pipeline_jobs_running.json"))));
+        fetchPipelineStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(keysOf(*job.finished),
+                 (QStringList{QStringLiteral("pipeline-failed:9001"), QStringLiteral("pipeline-failed:9000")}));
+        QVERIFY(!job.client.requestKeys().contains(kRecent));
+        QVERIFY(!job.client.requestKeys().contains(kOpenMergeRequest));
+    }
+
+    // A merge request whose pipelines run only on its own ref has no latest
+    // pipeline on the branch. The newest of its list leads.
+    void mergeRequestWithoutABranchPipeline()
+    {
+        FakeStatusJob job;
+        job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                       {QStringLiteral("branchSource"), QStringLiteral("mergeRequest")},
+                                       {QStringLiteral("iid"), 42}};
+        QVERIFY(job.client.setJsonFile(kMergeRequest, dataFile(QStringLiteral("merge_request.json"))));
+        QVERIFY(job.client.setJsonFile(kMergeRequestPipelines, dataFile(QStringLiteral("pipelines.json"))));
+        QVERIFY(job.client.setJsonFile(kJobs, dataFile(QStringLiteral("pipeline_jobs.json"))));
+        fetchPipelineStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->data.value(QStringLiteral("pipeline")).toObject().value(QStringLiteral("id")).toInt(), 9001);
+    }
+
+    // The open merge request of a fixed branch is in the data. Without one, or
+    // when the request fails, the status stands.
+    void openMergeRequestOfABranch()
+    {
+        FakeStatusJob found;
+        setUpBranch(found);
+        found.client.setJson(kOpenMergeRequest,
+                             QJsonDocument(QJsonArray{readJson(QStringLiteral("merge_request.json")).object()}));
+        fetchPipelineStatus(found);
+        WAIT_FOR_FINISH(found);
+        QCOMPARE(found.finished->data.value(QStringLiteral("mergeRequest")).toObject().value(QStringLiteral("iid")).toInt(),
+                 42);
+
+        FakeStatusJob none;
+        setUpBranch(none);
+        none.client.setJson(kOpenMergeRequest, QJsonDocument(QJsonArray()));
+        fetchPipelineStatus(none);
+        WAIT_FOR_FINISH(none);
+        QCOMPARE(none.finished->state, ItemStatus::State::Ok);
+        QVERIFY(!none.finished->data.contains(QStringLiteral("mergeRequest")));
+
+        FakeStatusJob failed;
+        setUpBranch(failed);
+        failed.client.setReply(kOpenMergeRequest, forbiddenReply());
+        fetchPipelineStatus(failed);
+        WAIT_FOR_FINISH(failed);
+        QCOMPARE(failed.finished->state, ItemStatus::State::Ok);
+        QVERIFY(!failed.finished->data.contains(QStringLiteral("mergeRequest")));
     }
 
     void passedPipeline()
@@ -492,7 +723,10 @@ private slots:
         QCOMPARE(job.finished->summary, QStringLiteral("No pipeline on main"));
         QVERIFY(job.finished->attention.isEmpty());
         QCOMPARE(job.client.requestKeys(),
-                 QStringList{QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/latest?ref=main")});
+                 (QStringList{QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/latest?ref=main"),
+                              QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines?ref=main&per_page=20"),
+                              QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests?source_branch=main"
+                                             "&state=opened&per_page=1")}));
     }
 
     void mainFolderWaitsForM7()
@@ -549,9 +783,11 @@ private slots:
 
         FakeStatusJob noBranch;
         noBranch.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}};
+        // An empty branch is the default one.
         fetchPipelineStatus(noBranch);
-        QCOMPARE(noBranch.finished->message, QStringLiteral("Set the branch in the item's settings."));
-        QVERIFY(noBranch.client.requests().isEmpty());
+        QVERIFY(!noBranch.client.requests().isEmpty());
+        QVERIFY(noBranch.client.requestKeys().join(QLatin1Char(' ')).contains(QStringLiteral("ref=master")));
+        WAIT_FOR_FINISH(noBranch);
     }
 
     // A missing token reaches the status as NoToken, once, for every type.

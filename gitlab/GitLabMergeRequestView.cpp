@@ -10,6 +10,7 @@
 
 #include <QLabel>
 #include <QLayout>
+#include <QPushButton>
 #include <QString>
 
 #include <utility>
@@ -21,18 +22,7 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
-const QString kApprove = QStringLiteral("approve");
 const QString kRetryPipeline = QStringLiteral("retry-pipeline");
-const QString kComment = QStringLiteral("comment");
-
-bool approvedBy(const QJsonObject &approvals, qint64 id)
-{
-    for (const QJsonValue &entry : approvals.value(QStringLiteral("approved_by")).toArray()) {
-        if (entry.toObject().value(QStringLiteral("user")).toObject().value(QStringLiteral("id")).toInteger() == id)
-            return true;
-    }
-    return false;
-}
 
 class MergeRequestView : public GitLabSummary
 {
@@ -40,24 +30,11 @@ public:
     MergeRequestView(ItemContext &context, const QJsonObject &ownConfig, QWidget *parent)
         : GitLabSummary(context, ownConfig, parent)
     {
-        actions()->addAction(kApprove, tr("Approve"), tr("Approve"), [this] {
-            runAction(kApprove, [project = project(), iid = number()](const GitLabClient &client,
-                                                                     GitLabClient::Done done) {
-                client.approve(project, iid, std::move(done));
-            });
-        });
         actions()->addAction(kRetryPipeline, tr("Retry pipeline"), tr("Retry"), [this] {
             runAction(kRetryPipeline, [project = project(), pipeline = m_pipelineId](const GitLabClient &client,
                                                                                      GitLabClient::Done done) {
                 client.retryPipeline(project, pipeline, std::move(done));
             });
-        });
-        actions()->addAction(kComment, tr("Comment"), tr("Comment"), [this] {
-            addComment(tr("Comment on the merge request"),
-                       [project = project(), iid = number()](const GitLabClient &client, const QString &text,
-                                                             GitLabClient::Done done) {
-                           client.commentOnMergeRequest(project, iid, text, std::move(done));
-                       });
         });
         addOpenPage();
     }
@@ -67,7 +44,6 @@ protected:
     {
         const QJsonObject mergeRequest = status.data.value(QStringLiteral("mergeRequest")).toObject();
         const QJsonObject approvals = status.data.value(QStringLiteral("approvals")).toObject();
-        const qint64 me = status.data.value(QStringLiteral("user")).toObject().value(QStringLiteral("id")).toInteger();
         const QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
         const bool open = mergeRequest.value(QStringLiteral("state")).toString() == QLatin1String("opened");
 
@@ -75,7 +51,6 @@ protected:
         setStateRow(stateRow(mergeRequest, open));
 
         m_pipelineId = pipeline.value(QStringLiteral("id")).toInteger();
-        actions()->setActionVisible(kApprove, open && !approvedBy(approvals, me));
         actions()->setActionVisible(kRetryPipeline,
                                     canRetryPipeline(pipeline.value(QStringLiteral("status")).toString()));
         setPageAddress(webAddress(mergeRequest, mergeRequestUrl(baseUrl(), config(), defaultProject())));
@@ -118,14 +93,32 @@ private:
         const QString state = pipeline.value(QStringLiteral("status")).toString();
         flow->addWidget(new StatusPill(statusText(state), statusRole(state)));
         flow->addWidget(plainWord(QStringLiteral("#%1").arg(pipeline.value(QStringLiteral("id")).toInteger())));
+        if (QPushButton *web = webButton(tr("Web"), QStringLiteral("pipeline-web"), webAddress(pipeline, {})))
+            flow->addWidget(web);
         column->layout()->addWidget(top);
 
         for (const QJsonValue &value : jobs) {
             const QJsonObject job = value.toObject();
             if (job.value(QStringLiteral("status")).toString() == QLatin1String("failed"))
-                column->layout()->addWidget(jobRow(job, false));
+                column->layout()->addWidget(failedJobRow(job));
         }
         return column;
+    }
+
+    // Its name, status, duration and a link to its log.
+    static QWidget *failedJobRow(const QJsonObject &job)
+    {
+        auto *row = new QWidget;
+        auto *flow = new widgets::FlowRow(row);
+        flow->addWidget(plainWord(job.value(QStringLiteral("name")).toString()));
+        flow->addWidget(jobPill(job));
+        const QString duration = durationText(job.value(QStringLiteral("duration")));
+        if (!duration.isEmpty())
+            flow->addWidget(plainWord(duration));
+        const QString log = QStringLiteral("log-%1").arg(job.value(QStringLiteral("id")).toInteger());
+        if (QPushButton *button = webButton(tr("Log"), log, QUrl(job.value(QStringLiteral("web_url")).toString())))
+            flow->addWidget(button);
+        return row;
     }
 
     static QWidget *approvalsSection(const QJsonObject &approvals)

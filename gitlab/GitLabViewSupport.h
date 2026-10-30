@@ -1,6 +1,6 @@
 // What the three GitLab summaries share: drawing from a status, the actions,
 // dates and the small widgets. Private to the module. See
-// docs/plans/m6-native-item-types.md.
+// docs/plans/m6-native-item-types.md and docs/plans/m6-feedback.md.
 #pragma once
 
 #include "GitLabClient.h"
@@ -19,6 +19,7 @@
 #include <functional>
 
 class QLabel;
+class QPushButton;
 class QWidget;
 
 namespace mirante {
@@ -58,6 +59,13 @@ QLabel *plainLine(const QString &text);
 QLabel *plainWord(const QString &text);
 // A merge request's or an issue's state as a pill.
 widgets::StatusPill *statePill(const QString &state);
+// A job's status as a pill. A failed job that may fail says so.
+widgets::StatusPill *jobPill(const QJsonObject &job);
+// A button that reads as a link, for a row of a section.
+QPushButton *linkButton(const QString &text, const QString &name);
+// The same, which opens url in the external browser. Null if it is not a web
+// address, so the row goes without it.
+QPushButton *webButton(const QString &text, const QString &name, const QUrl &url);
 // A widget with a column of its own, for a section's content.
 QWidget *newColumn();
 // The labels as a wrapping row of pills, or a line that says there are none.
@@ -81,6 +89,9 @@ public:
     void readItself(void (*fetch)(StatusJob &));
 
 protected:
+    // Reads the status again.
+    void refreshStatus();
+
     // Makes the request of an action, and passes done on to it.
     using Request = std::function<void(const GitLabClient &, GitLabClient::Done)>;
 
@@ -93,7 +104,8 @@ protected:
 
     QJsonObject config() const;
     QString project() const;
-    qint64 number() const;
+    // The item's server, for a request that is not an action, or null.
+    ApiClient *server() const;
     // The server's base URL, for an address that the data does not give.
     QUrl baseUrl() const;
     // The project's default project path, for building an address.
@@ -113,14 +125,6 @@ protected:
     // Like runAction, for a button outside the action row. finished runs when
     // the answer comes, before anything else.
     void run(const Request &request, const std::function<void()> &finished);
-    // Asks for a comment, then runs the "comment" action with send.
-    void addComment(const QString &title,
-                    const std::function<void(const GitLabClient &, const QString &, GitLabClient::Done)> &send);
-
-    // One job: its name, status and duration. A failed job has a log link and,
-    // if canRetry, a Retry button.
-    QWidget *jobRow(const QJsonObject &job, bool canRetry);
-
 private:
     void showStatus(const ItemStatus &status);
     void openPage();

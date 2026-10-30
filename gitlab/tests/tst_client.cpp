@@ -115,6 +115,26 @@ private slots:
         QCOMPARE(f.answers, 5);
     }
 
+    // A project's pipelines take a filter, and a merge request's have their
+    // own endpoint. Both follow the Link header.
+    void pipelineLists()
+    {
+        Fixture f;
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("ref"), GitLabClient::encodePath(QStringLiteral("feature/a+b&c")));
+        f.client().pipelines(QStringLiteral("acme/backend"), query, 20, f.done());
+        QCOMPARE(f.fake.requestKeys().constLast(),
+                 QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines?ref=feature%2Fa%2Bb%26c&per_page=20"));
+        QVERIFY(f.last().options.followLinks);
+        QCOMPARE(f.last().options.maxRows, 20);
+
+        f.client().mergeRequestPipelines(QStringLiteral("acme/backend"), 42, 20, f.done());
+        QCOMPARE(f.fake.requestKeys().constLast(),
+                 QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests/42/pipelines?per_page=20"));
+        QVERIFY(f.last().options.followLinks);
+        QCOMPARE(f.answers, 2);
+    }
+
     void onePipeline()
     {
         Fixture f;
@@ -159,19 +179,6 @@ private slots:
         QCOMPARE(f.answers, 2);
     }
 
-    void issueStateIsPut()
-    {
-        Fixture f;
-        f.client().setIssueState(QStringLiteral("acme/backend"), 7, QStringLiteral("close"), f.done());
-        QCOMPARE(f.last().method, QStringLiteral("PUT"));
-        QCOMPARE(f.last().path, QStringLiteral("api/v4/projects/acme%2Fbackend/issues/7"));
-        QCOMPARE(f.last().body, QJsonDocument(QJsonObject{{QStringLiteral("state_event"), QStringLiteral("close")}}));
-
-        f.client().setIssueState(QStringLiteral("acme/backend"), 7, QStringLiteral("reopen"), f.done());
-        QCOMPARE(f.last().body, QJsonDocument(QJsonObject{{QStringLiteral("state_event"), QStringLiteral("reopen")}}));
-        QCOMPARE(f.answers, 2);
-    }
-
     void actionsPost()
     {
         Fixture f;
@@ -179,30 +186,17 @@ private slots:
         f.client().retryPipeline(project, 9001, f.done());
         f.client().cancelPipeline(project, 9001, f.done());
         f.client().retryJob(project, 70002, f.done());
-        f.client().approve(project, 42, f.done());
+        f.client().playJob(project, 71003, f.done());
+        f.client().createPipeline(project, QStringLiteral("feature/a+b&c"), f.done());
         QCOMPARE(f.fake.requestKeys(),
                  (QStringList{QStringLiteral("POST api/v4/projects/acme%2Fbackend/pipelines/9001/retry"),
                               QStringLiteral("POST api/v4/projects/acme%2Fbackend/pipelines/9001/cancel"),
                               QStringLiteral("POST api/v4/projects/acme%2Fbackend/jobs/70002/retry"),
-                              QStringLiteral("POST api/v4/projects/acme%2Fbackend/merge_requests/42/approve")}));
+                              QStringLiteral("POST api/v4/projects/acme%2Fbackend/jobs/71003/play"),
+                              QStringLiteral("POST api/v4/projects/acme%2Fbackend/pipeline?ref=feature%2Fa%2Bb%26c")}));
         for (const FakeApiClient::Request &request : f.fake.requests())
             QCOMPARE(request.body, QJsonDocument(QJsonObject()));
-        QCOMPARE(f.answers, 4);
-    }
-
-    void commentsPostTheText()
-    {
-        Fixture f;
-        const QString text = QStringLiteral("Looks good.\nOne question about `retry()`.");
-        f.client().commentOnMergeRequest(QStringLiteral("acme/backend"), 42, text, f.done());
-        QCOMPARE(f.last().method, QStringLiteral("POST"));
-        QCOMPARE(f.last().path, QStringLiteral("api/v4/projects/acme%2Fbackend/merge_requests/42/notes"));
-        QCOMPARE(f.last().body, QJsonDocument(QJsonObject{{QStringLiteral("body"), text}}));
-
-        f.client().commentOnIssue(QStringLiteral("acme/backend"), 7, text, f.done());
-        QCOMPARE(f.last().path, QStringLiteral("api/v4/projects/acme%2Fbackend/issues/7/notes"));
-        QCOMPARE(f.last().body, QJsonDocument(QJsonObject{{QStringLiteral("body"), text}}));
-        QCOMPARE(f.answers, 2);
+        QCOMPARE(f.answers, 5);
     }
 
     // A reply reaches the callback unchanged, errors included.
@@ -213,10 +207,10 @@ private slots:
         forbidden.error = ApiReply::Error::Forbidden;
         forbidden.httpStatus = 403;
         forbidden.message = QStringLiteral("Forbidden (403)");
-        f.fake.setReply(QStringLiteral("POST api/v4/projects/acme%2Fbackend/merge_requests/42/approve"), forbidden);
+        f.fake.setReply(QStringLiteral("POST api/v4/projects/acme%2Fbackend/pipelines/9001/retry"), forbidden);
 
         std::optional<ApiReply> got;
-        f.client().approve(QStringLiteral("acme/backend"), 42, [&got](const ApiReply &reply) { got = reply; });
+        f.client().retryPipeline(QStringLiteral("acme/backend"), 9001, [&got](const ApiReply &reply) { got = reply; });
         QVERIFY(got);
         QCOMPARE(got->error, ApiReply::Error::Forbidden);
         QCOMPARE(got->message, QStringLiteral("Forbidden (403)"));

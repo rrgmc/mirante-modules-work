@@ -9,7 +9,7 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 | `gitlab.mr.summary` | GitLab MR (summary) | native | A summary of one merge request: its state, branches, people, pipeline and approvals. |
 | `gitlab.mr.page` | GitLab MR (page) | web | The web page of one merge request, on the GitLab server of the item's profile. |
 | `gitlab.mr.list` | GitLab MR List | native | A table of merge requests in a project, a group or everywhere, such as those that wait for your review. |
-| `gitlab.pipeline` | GitLab CI Pipeline | native | The latest pipeline of a branch, with its stages and jobs. The branch is a fixed one, the main folder's current branch or a merge request's branch. |
+| `gitlab.pipeline` | GitLab CI Pipeline | native | The latest pipeline of a branch and those started with it, with their stages and jobs. The branch is a fixed one, the main folder's current branch or a merge request's branch. |
 | `gitlab.issue.summary` | GitLab Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `gitlab.issue.page` | GitLab Issue (page) | web | The web page of one issue, on the GitLab server of the item's profile. |
 | `gitlab.issue.list` | GitLab Issue List | native | A table of issues in a project, a group or everywhere, such as those assigned to you. |
@@ -35,10 +35,10 @@ The module never reads the token itself. It makes every request through the `Api
 
 - Paths are relative to the base URL and start with `api/v4/`, so a server installed at a path works.
 - Project and group paths are percent-encoded into the path: `acme/backend` becomes `acme%2Fbackend`.
-- The branch of the latest pipeline is percent-encoded into the `ref` query, so a branch with `+` or `&` in its name reaches GitLab whole.
-- Lists (the three merge request lists, the three issue lists, a pipeline's jobs and an issue's notes) set `followLinks` with a row limit, and ask for `per_page` of at most 100 unless the filter names its own.
+- A branch is percent-encoded into its query, so a branch with `+` or `&` in its name reaches GitLab whole.
+- Lists (the three merge request lists, the three issue lists, the two pipeline lists, a pipeline's jobs and an issue's notes) set `followLinks` with a row limit, and ask for `per_page` of at most 100 unless the filter names its own.
 - An issue's notes are asked for with `sort=desc&order_by=created_at`, so the latest come first. System notes are included.
-- The light actions send a JSON body: `{}` for retry, cancel and approve, `{"body": "<text>"}` for a comment, and `{"state_event": "close"}` or `{"state_event": "reopen"}` for an issue's state, which is a `PUT`.
+- The CI actions send an empty JSON body, `{}`. `createPipeline` names its branch in the path's query, because `ApiClient::post()` takes no query of its own.
 
 | Method | Request |
 |---|---|
@@ -49,6 +49,8 @@ The module never reads the token itself. It makes every request through the `Api
 | `projectMergeRequests` | `GET api/v4/projects/<project>/merge_requests` |
 | `groupMergeRequests` | `GET api/v4/groups/<group>/merge_requests` |
 | `latestPipeline` | `GET api/v4/projects/<project>/pipelines/latest?ref=<branch>` |
+| `pipelines` | `GET api/v4/projects/<project>/pipelines`, with a query such as `ref=<branch>` |
+| `mergeRequestPipelines` | `GET api/v4/projects/<project>/merge_requests/<iid>/pipelines` |
 | `pipelineJobs` | `GET api/v4/projects/<project>/pipelines/<id>/jobs` |
 | `pipeline` | `GET api/v4/projects/<project>/pipelines/<id>` |
 | `issue` | `GET api/v4/projects/<project>/issues/<iid>` |
@@ -57,10 +59,8 @@ The module never reads the token itself. It makes every request through the `Api
 | `projectIssues` | `GET api/v4/projects/<project>/issues` |
 | `groupIssues` | `GET api/v4/groups/<group>/issues` |
 | `retryPipeline`, `cancelPipeline` | `POST api/v4/projects/<project>/pipelines/<id>/retry`, `.../cancel` |
-| `retryJob` | `POST api/v4/projects/<project>/jobs/<id>/retry` |
-| `approve` | `POST api/v4/projects/<project>/merge_requests/<iid>/approve` |
-| `commentOnMergeRequest`, `commentOnIssue` | `POST .../merge_requests/<iid>/notes`, `POST .../issues/<iid>/notes` |
-| `setIssueState` | `PUT api/v4/projects/<project>/issues/<iid>` |
+| `retryJob`, `playJob` | `POST api/v4/projects/<project>/jobs/<id>/retry`, `.../play` |
+| `createPipeline` | `POST api/v4/projects/<project>/pipeline?ref=<branch>` |
 
 The list and action methods are tested in `tests/tst_client.cpp`.
 
@@ -72,17 +72,24 @@ Every type reports status: `hasStatus()` is true and `fetchStatus()` runs a func
 |---|---|---|---|
 | `gitlab.mr.summary`, `gitlab.mr.page` | the merge request, its approvals and the current user, at once; for the summary, when `head_pipeline.status` is `failed`, then that pipeline's jobs | "Pipeline failed" (`pipeline-failed`, notify) when `head_pipeline.status` is `failed`; "Review requested" (`review`) when I am a reviewer and have not approved; "Approved" (`approved`, clears on view) when I am the author and `approved` is true; "Has conflicts" (`conflicts`) when I am the author and `has_conflicts` is true | `state` is `merged` or `closed` |
 | `gitlab.issue.summary`, `gitlab.issue.page` | the issue; for the summary, then its latest 20 notes | none | `state` is `closed` |
-| `gitlab.pipeline` | for `mergeRequest`, the merge request and then its `source_branch`; for `fixed`, `branch`; then the latest pipeline of the branch and its jobs | "Pipeline failed" (`pipeline-failed:<pipeline id>`, notify) when its `status` is `failed` | never |
+| `gitlab.pipeline` | for `mergeRequest`, the merge request and then its `source_branch`; for `fixed`, `branch`; then the latest pipeline of the branch; then, at once, the latest 20 pipelines (`mergeRequestPipelines` or `pipelines?ref=<branch>`) and, for `fixed`, the open merge request of the branch (`projectMergeRequests`); then the jobs of each pipeline in the [group](#the-group), at once | "Pipeline failed" (`pipeline-failed:<pipeline id>`, notify) for each pipeline of the group whose `status` is `failed` | never |
 
 - **Only open merge requests need attention.** A merged or closed merge request reports no reasons, even with a failed pipeline.
 - **Summaries.** A merge request reads like "Open · 2 of 3 approvals · pipeline failed": the state, "draft" for an open draft, the approvals given of those required (or just the count when none are required), the head pipeline's status, and "has conflicts" while open. An issue reads like "Open · assigned to Ana". A pipeline reads like "Failed · main · 1 failed job"; failed jobs that are allowed to fail are not counted. `success` reads as "passed".
-- **A branch without pipelines.** GitLab answers `404` for the latest pipeline of such a branch. The status is then `Ok` with "No pipeline on <branch>".
+- **A branch without pipelines.** GitLab answers `404` for the latest pipeline of such a branch. The status is then `Ok` with "No pipeline on <branch>", unless the list has pipelines, as for a merge request whose pipelines run on a ref of its own.
 - **The main folder's branch.** A pipeline with `branchSource` `mainFolder` reports `State::None` with "Follows the main folder from M7", without a request.
 - **An incomplete configuration,** without a project, a number or a branch, reports `State::None` with a message, such as "Set the project and number in the item's settings.", without a request.
-- **Errors.** Any other failed reply becomes its state with `statusFromReply()`, such as `NoToken` or `NotFound`. A merge request's own reply wins over those of the user and the approvals. A failed request for a summary's jobs or notes is not an error: the status stands, and `data` leaves them out. An unknown issue asks for no notes.
-- **Data.** `data` holds what M6's summaries need: `mergeRequest`, `approvals` and `user` (`id` and `username`) for a merge request; `issue` for an issue; `branch`, `pipeline` and `jobs` for a pipeline. The objects are GitLab's answers, unchanged. A merge request summary adds `jobs` when its head pipeline failed. An issue summary adds `notes`, newest first, without the notes that have `system` set. The 20 are counted before system notes are left out, so `notes` can hold fewer. Page types add neither.
+- **Errors.** Any other failed reply becomes its state with `statusFromReply()`, such as `NoToken` or `NotFound`. A merge request's own reply wins over those of the user and the approvals. A failed request for a summary's jobs or notes is not an error: the status stands, and `data` leaves them out. The same holds for a pipeline's list, a sibling's jobs and the open merge request of a branch. A failed request for the latest pipeline's jobs is an error. An unknown issue asks for no notes.
+- **Data.** `data` holds what M6's summaries need: `mergeRequest`, `approvals` and `user` (`id` and `username`) for a merge request; `issue` for an issue; `branch`, `pipeline` and `jobs` for a pipeline, which also adds `siblings` and `older`, as [the group](#the-group) says, and `mergeRequest`, when it knows one. The objects are GitLab's answers, unchanged. A merge request summary adds `jobs` when its head pipeline failed. An issue summary adds `notes`, newest first, without the notes that have `system` set. The 20 are counted before system notes are left out, so `notes` can hold fewer. Page types add neither.
 
-The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded from a GitLab server, trimmed by hand, with names and emails replaced. `issue_notes.json` was written by hand in the shape of GitLab's API.
+### The group
+
+`pipelineGroup()` sorts the answers of decision [0072](../../../docs/decisions/0072-pipelines-started-together.md) by `created_at`, newest first. The newest leads, and it is the latest of the status: its summary, `pipeline` and `jobs`. An entry of a list lacks fields such as `duration`, so the answer to `pipelines/latest` takes the place of its own entry.
+
+- **`siblings`** are the others created at most 10 minutes before the newest, each as `{"pipeline": ..., "jobs": [...]}`, without `jobs` if that request failed.
+- **`older`** are the rest, as pipelines without jobs. A date that cannot be read counts as older. They need no attention.
+
+The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded from a GitLab server, trimmed by hand, with names and emails replaced. `issue_notes.json`, `pipelines.json`, `pipeline_jobs_sibling.json` and `pipeline_jobs_running.json` were written by hand in the shape of GitLab's API.
 
 ## Summary views
 
@@ -92,9 +99,16 @@ The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded 
 - **Previews.** `createMergeRequestPreview()` and `createIssuePreview()` take a project and a number, for a list's preview. `readItself()` runs the same status fetch through a small `StatusJob` of its own, on the context's server, and draws the result with the same code. It reads again after an action. A preview's configuration holds only `project` and `iid`, so its sections are all on. It has the same actions.
 - **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status, or reads again in a preview. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
 - **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
-- **Dialogs.** The comment dialog and the question before cancelling run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
+- **Dialogs.** The questions before cancelling and triggering run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
 
-The action ids, which are also the buttons' object names, are `approve`, `retry-pipeline`, `cancel-pipeline`, `comment`, `close`, `reopen` and `open-page`. A job's buttons are `log-<job id>` and `retry-job-<job id>`. They are not in the action row, so a job's Retry clears the last error itself.
+The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline`, `trigger-pipeline`, `merge-request` and `open-page`. A job's buttons are `log-<job id>`, `retry-job-<job id>` and `play-job-<job id>`. They are not in the action row, so a job's Retry and Play clear the last error themselves. The merge request summary's link to its pipeline is `pipeline-web`.
+
+`GitLabPipelineView.cpp` keeps more state than the other two:
+
+- **What it shows.** `m_selectedId` is the pipeline the user chose, or 0 for the latest. It stays through a new status while that pipeline is still there. The latest is never held on to, so the view follows a newer one.
+- **The head.** The state row is one widget that stays, so Previous and Next (`previous-pipeline`, `next-pipeline`) keep the keyboard's focus. Only the line of state and the pills (`pipeline-pill-<id>`) inside it change.
+- **Jobs.** One section, `jobs`, holds one grid, so its columns line up across stages. A pipeline without `jobs` in the status, either older or a sibling whose request failed, asks for them with `pipelineJobs()` each time it shows. It shows what it last read meanwhile. Only the answer to the latest read counts.
+- **The refresh.** A `QTimer` named `pipeline-refresh` asks the status source for a refresh every 15 seconds. It runs between the view's show and hide events, while the shown pipeline is unfinished, which is every status but `success`, `failed`, `canceled`, `skipped` and `manual`. A manual pipeline waits for a person, so it does not ask.
 
 Text from a server is plain text in every label. The tests are in `tests/tst_summary_views.cpp`, with a fake context and a fake status source, on the responses in `tests/data/`.
 
@@ -135,7 +149,7 @@ The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json` and `i
 
 - **Drawing.** `follow()` draws the item's status now and at each change, as a summary does. An empty list shows the table and a line of its own, because `setMessage()` shows instead of the table.
 - **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests, a preview or "Add to task as item".
-- **Previews.** A click on a row makes `createMergeRequestPreview()` or `createIssuePreview()`. After a new status, if the preview's row is still there, it calls `readItself()` again on the same widget, so its scroll position, its action errors and an open comment dialog stay. A status that comes while the view is hidden waits until it shows.
+- **Previews.** A click on a row makes `createMergeRequestPreview()` or `createIssuePreview()`. After a new status, if the preview's row is still there, it calls `readItself()` again on the same widget, so its scroll position and its action errors stay. A status that comes while the view is hidden waits until it shows.
 - **The row menu** is a `QMenu` that belongs to the view and uses `popup()`, so nothing waits on it if the view is made again.
 
 `GitLabMergeRequestListView.cpp` also fills the Pipeline and Approvals columns, as decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0068](../../../docs/decisions/0068-views-read-what-the-user-asked-for.md) describe:
@@ -171,7 +185,7 @@ Every type implements `fromUrl()`, through `matchUrl()` in `GitLabUrls.cpp`. It 
 | `issues/<iid>` | `gitlab.issue.summary`, `gitlab.issue.page` | `project`, `iid` | `group/project#7` |
 | `merge_requests` | `gitlab.mr.list` | `scope` = `project`, `project`, `preset` = `allOpen` | `group/project MRs` |
 | `issues` | `gitlab.issue.list` | `scope` = `project`, `project`, `preset` = `allOpen` | `group/project issues` |
-| `pipelines[/<id>][?ref=<branch>]` | `gitlab.pipeline` | `project`, `branchSource` = `fixed`, `branch` from `ref` | `group/project <branch> CI` |
+| `pipelines[/<id>][?ref=<branch>]` | `gitlab.pipeline` | `project`, `branchSource` = `fixed`, `branch` from `ref`, or `master` without one | `group/project <branch> CI` |
 
 The pipeline type follows a branch, so a pipeline's id is not kept. Other pages, such as a project's home page, `merge_requests/new` or `tree/main`, are refused. The tests are in `tests/tst_from_url.cpp`.
 
@@ -188,7 +202,7 @@ The keys each type stores in the item's configuration. "Required" means the item
 | `preset` | choice | lists | MR List: `createdByMe` (the default), `reviewRequested`, `assignedToMe` or `allOpen`. Issue List: `assignedToMe` (the default), `createdByMe` or `allOpen`. |
 | `filter` | text | lists | Optional custom filter parameters passed to the GitLab API, such as `labels=bug&target_branch=main`. |
 | `branchSource` | choice | pipeline | `fixed` (the `branch` field, the default), `mainFolder` (the current branch of the main folder) or `mergeRequest` (the source branch of the merge request `iid`). |
-| `branch` | text | pipeline | The branch, used when `branchSource` is `fixed`. |
+| `branch` | text | pipeline | The branch, used when `branchSource` is `fixed`. `master` by default, also as its placeholder. |
 
 The keys of each type, in the order the form shows them:
 
