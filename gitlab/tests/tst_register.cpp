@@ -91,6 +91,22 @@ private slots:
         }
     }
 
+    // A new pipeline item follows master, and the empty field says so.
+    void pipelineBranchDefaultsToMaster()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+
+        for (const mirante::Field &field : registry.type(QStringLiteral("gitlab.pipeline")).fields()) {
+            if (field.key == QLatin1String("branch")) {
+                QCOMPARE(field.defaultValue.toString(), QStringLiteral("master"));
+                QCOMPARE(field.placeholder, QStringLiteral("master"));
+                return;
+            }
+        }
+        QFAIL("No branch field");
+    }
+
     // Keys and labels are set and keys are unique. A new item's defaults
     // validate, except that each required field without a default is reported.
     void fieldsValidateTheirDefaults()

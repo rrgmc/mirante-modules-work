@@ -14,6 +14,9 @@
 
 namespace mirante::modules::gitlab {
 
+// The branch of a new pipeline item, and of a pipelines address without "ref".
+inline const QString kDefaultBranch = QStringLiteral("master");
+
 // The project path of the item: its "project" key, or defaultProject when that
 // is empty. Slashes at the start and end are removed. Empty if neither is set.
 QString projectPath(const QJsonObject &config, const QJsonValue &defaultProject);

@@ -114,12 +114,19 @@ private slots:
                                                {QStringLiteral("branch"), QStringLiteral("feature/login")}}));
         QCOMPARE(fromRef->name, QStringLiteral("acme/backend feature/login CI"));
 
-        // One pipeline gives the project only; its id is not kept.
+        // One pipeline gives the project and the default branch; its id is not kept.
         const auto one = matchUrl(QStringLiteral("gitlab.pipeline"),
                                   url("https://gitlab.com/acme/backend/-/pipelines/123456"), {});
         QVERIFY(one);
         QCOMPARE(one->config, (QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
-                                           {QStringLiteral("branchSource"), QStringLiteral("fixed")}}));
+                                           {QStringLiteral("branchSource"), QStringLiteral("fixed")},
+                                           {QStringLiteral("branch"), QStringLiteral("master")}}));
+        QCOMPARE(one->name, QStringLiteral("acme/backend master CI"));
+
+        // So does the list of pipelines without a "ref".
+        const auto all = matchUrl(QStringLiteral("gitlab.pipeline"), url("https://gitlab.com/acme/backend/-/pipelines"), {});
+        QVERIFY(all);
+        QCOMPARE(all->config.value(QStringLiteral("branch")).toString(), QStringLiteral("master"));
 
         // An issue has no pipeline.
         QVERIFY(!matchUrl(QStringLiteral("gitlab.pipeline"), url("https://gitlab.com/acme/backend/-/issues/1"), {}));

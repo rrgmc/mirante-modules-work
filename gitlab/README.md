@@ -168,7 +168,7 @@ Every type implements `fromUrl()`, through `matchUrl()` in `GitLabUrls.cpp`. It 
 | `issues/<iid>` | `gitlab.issue.summary`, `gitlab.issue.page` | `project`, `iid` | `group/project#7` |
 | `merge_requests` | `gitlab.mr.list` | `scope` = `project`, `project`, `preset` = `allOpen` | `group/project MRs` |
 | `issues` | `gitlab.issue.list` | `scope` = `project`, `project`, `preset` = `allOpen` | `group/project issues` |
-| `pipelines[/<id>][?ref=<branch>]` | `gitlab.pipeline` | `project`, `branchSource` = `fixed`, `branch` from `ref` | `group/project <branch> CI` |
+| `pipelines[/<id>][?ref=<branch>]` | `gitlab.pipeline` | `project`, `branchSource` = `fixed`, `branch` from `ref`, or `master` without one | `group/project <branch> CI` |
 
 The pipeline type follows a branch, so a pipeline's id is not kept. Other pages, such as a project's home page, `merge_requests/new` or `tree/main`, are refused. The tests are in `tests/tst_from_url.cpp`.
 
@@ -185,7 +185,7 @@ The keys each type stores in the item's configuration. "Required" means the item
 | `preset` | choice | lists | MR List: `createdByMe` (the default), `reviewRequested`, `assignedToMe` or `allOpen`. Issue List: `assignedToMe` (the default), `createdByMe` or `allOpen`. |
 | `filter` | text | lists | Optional custom filter parameters passed to the GitLab API, such as `labels=bug&target_branch=main`. |
 | `branchSource` | choice | pipeline | `fixed` (the `branch` field, the default), `mainFolder` (the current branch of the main folder) or `mergeRequest` (the source branch of the merge request `iid`). |
-| `branch` | text | pipeline | The branch, used when `branchSource` is `fixed`. |
+| `branch` | text | pipeline | The branch, used when `branchSource` is `fixed`. `master` by default, also as its placeholder. |
 
 The keys of each type, in the order the form shows them:
 

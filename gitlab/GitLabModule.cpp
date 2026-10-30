@@ -210,6 +210,9 @@ std::vector<Field> listFields(const QStringList &presets, const QStringList &pre
 
 std::vector<Field> pipelineFields()
 {
+    Field branch = makeField(QStringLiteral("branch"), QCoreApplication::translate("gitlab", "Branch"),
+                             Field::Type::Text, false, kDefaultBranch);
+    branch.defaultValue = kDefaultBranch;
     return {
         projectField(),
         choiceField(QStringLiteral("branchSource"), QCoreApplication::translate("gitlab", "Branch from"),
@@ -217,8 +220,7 @@ std::vector<Field> pipelineFields()
                     {QCoreApplication::translate("gitlab", "A fixed branch"),
                      QCoreApplication::translate("gitlab", "Current branch of the main folder"),
                      QCoreApplication::translate("gitlab", "Branch of a linked merge request")}),
-        makeField(QStringLiteral("branch"), QCoreApplication::translate("gitlab", "Branch"), Field::Type::Text,
-                  false, QStringLiteral("main")),
+        branch,
         makeField(QStringLiteral("iid"), QCoreApplication::translate("gitlab", "Merge request number"),
                   Field::Type::Integer),
     };
