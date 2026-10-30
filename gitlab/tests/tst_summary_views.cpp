@@ -14,7 +14,6 @@
 #include <QApplication>
 #include <QDesktopServices>
 #include <QDialog>
-#include <QDialogButtonBox>
 #include <QDateTime>
 #include <QFile>
 #include <QJsonArray>
@@ -23,7 +22,6 @@
 #include <QLabel>
 #include <QLocale>
 #include <QMessageBox>
-#include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
 #include <QTest>
@@ -191,13 +189,6 @@ ItemStatus openIssue(const QJsonValue &notes = QJsonValue(QJsonValue::Undefined)
     return status;
 }
 
-ItemStatus issueInState(const QString &state)
-{
-    QJsonObject issue = readObject(QStringLiteral("issue.json"));
-    issue.insert(QStringLiteral("state"), state);
-    return issueStatus(issue);
-}
-
 ItemStatus pipelineWithStatus(const QString &state)
 {
     QJsonObject pipeline = readObject(QStringLiteral("pipeline_latest.json"));
@@ -236,14 +227,6 @@ void withDialog(QPushButton *start, const std::function<void(QDialog *)> &answer
         answer(dialog);
     });
     start->click();
-}
-
-void writeComment(QPushButton *start, const QString &text)
-{
-    withDialog(start, [text](QDialog *dialog) {
-        dialog->findChild<QPlainTextEdit *>()->setPlainText(text);
-        dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
-    });
 }
 
 void answerQuestion(QPushButton *start, QMessageBox::StandardButton answer)
@@ -529,33 +512,6 @@ private slots:
 
     // The buttons' rules.
 
-    void approveFollowsTheRules()
-    {
-        const QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
-        const QJsonObject user = readObject(QStringLiteral("user.json"));
-
-        FakeContext context;
-        context.source.status = mergeRequestWith(mergeRequest, readObject(QStringLiteral("approvals.json")), user);
-        View view(createMergeRequestView(context, nullptr));
-        QVERIFY(showsAction(view, QStringLiteral("approve")));
-
-        // Approved by me.
-        const QJsonObject carla{{QStringLiteral("id"), 3003}, {QStringLiteral("username"), QStringLiteral("carla")}};
-        context.source.change(
-            mergeRequestWith(mergeRequest, readObject(QStringLiteral("approvals_approved.json")), carla));
-        QVERIFY(!showsAction(view, QStringLiteral("approve")));
-
-        // Approved by someone else only.
-        context.source.change(
-            mergeRequestWith(mergeRequest, readObject(QStringLiteral("approvals_approved.json")), user));
-        QVERIFY(showsAction(view, QStringLiteral("approve")));
-
-        // Not open.
-        context.source.change(mergeRequestWith(readObject(QStringLiteral("merge_request_merged.json")),
-                                               readObject(QStringLiteral("approvals.json")), user));
-        QVERIFY(!showsAction(view, QStringLiteral("approve")));
-    }
-
     void retryPipelineFollowsTheRules_data()
     {
         QTest::addColumn<QString>("status");
@@ -597,37 +553,7 @@ private slots:
         QVERIFY(!showsAction(view, QStringLiteral("retry-pipeline")));
     }
 
-    void closeOrReopenFollowsTheState()
-    {
-        FakeContext context;
-        context.source.status = issueInState(QStringLiteral("opened"));
-        View view(createIssueView(context, nullptr));
-        QVERIFY(showsAction(view, QStringLiteral("close")));
-        QVERIFY(!showsAction(view, QStringLiteral("reopen")));
-
-        context.source.change(issueInState(QStringLiteral("closed")));
-        QVERIFY(!showsAction(view, QStringLiteral("close")));
-        QVERIFY(showsAction(view, QStringLiteral("reopen")));
-    }
-
     // The requests of the actions, and a success refreshing the status.
-
-    void approvePosts()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/approve");
-        succeed(context, key);
-        View view(createMergeRequestView(context, nullptr));
-
-        QPushButton *approve = button(view, QStringLiteral("approve"));
-        approve->click();
-        QVERIFY(!approve->isEnabled());
-        QCOMPARE(context.client.requestKeys(), QStringList{key});
-        QTRY_COMPARE(context.source.refreshes, 1);
-        QVERIFY(approve->isEnabled());
-        QVERIFY(errorOf(view).isEmpty());
-    }
 
     void retryPipelineOfAMergeRequestPosts()
     {
@@ -640,44 +566,6 @@ private slots:
         button(view, QStringLiteral("retry-pipeline"))->click();
         QCOMPARE(context.client.requestKeys(), QStringList{key});
         QTRY_COMPARE(context.source.refreshes, 1);
-    }
-
-    void commentOnAMergeRequestPosts()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/notes");
-        succeed(context, key);
-        View view(createMergeRequestView(context, nullptr));
-
-        writeComment(button(view, QStringLiteral("comment")), QStringLiteral("Looks good"));
-        QCOMPARE(context.client.requestKeys(), QStringList{key});
-        QCOMPARE(context.client.requests().first().body.object().value(QStringLiteral("body")).toString(),
-                 QStringLiteral("Looks good"));
-        QTRY_COMPARE(context.source.refreshes, 1);
-    }
-
-    void aCancelledCommentSendsNothing()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        View view(createMergeRequestView(context, nullptr));
-
-        withDialog(button(view, QStringLiteral("comment")), [](QDialog *dialog) { dialog->reject(); });
-        QVERIFY(context.client.requests().isEmpty());
-        QCOMPARE(context.source.refreshes, 0);
-    }
-
-    void aViewThatGoesWhileTheDialogIsOpenSendsNothing()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        auto *view = createMergeRequestView(context, nullptr);
-
-        QPushButton *comment = view->findChild<QPushButton *>(QStringLiteral("comment"));
-        QTimer::singleShot(0, qApp, [view] { delete view; });
-        comment->click();
-        QVERIFY(context.client.requests().isEmpty());
     }
 
     void pipelineActionsPost()
@@ -716,49 +604,37 @@ private slots:
         QTRY_COMPARE(context.source.refreshes, 1);
     }
 
-    void issueActionsSend()
-    {
-        FakeContext context;
-        context.itemConfig.insert(QStringLiteral("iid"), 7);
-        context.source.status = issueInState(QStringLiteral("opened"));
-        const QString putKey = QStringLiteral("PUT ") + kIssue;
-        const QString noteKey = QStringLiteral("POST ") + kIssue + QStringLiteral("/notes");
-        succeed(context, putKey);
-        succeed(context, noteKey);
-        View view(createIssueView(context, nullptr));
-
-        button(view, QStringLiteral("close"))->click();
-        QCOMPARE(context.client.requests().last().body.object().value(QStringLiteral("state_event")).toString(),
-                 QStringLiteral("close"));
-        QCOMPARE(context.client.requestKeys().last(), putKey);
-        QTRY_COMPARE(context.source.refreshes, 1);
-
-        context.source.change(issueInState(QStringLiteral("closed")));
-        button(view, QStringLiteral("reopen"))->click();
-        QCOMPARE(context.client.requests().last().body.object().value(QStringLiteral("state_event")).toString(),
-                 QStringLiteral("reopen"));
-        QTRY_COMPARE(context.source.refreshes, 2);
-
-        writeComment(button(view, QStringLiteral("comment")), QStringLiteral("Done"));
-        QCOMPARE(context.client.requestKeys().last(), noteKey);
-        QTRY_COMPARE(context.source.refreshes, 3);
-    }
-
     // Failures.
 
     void failureShowsTheMessage()
     {
         FakeContext context;
         context.source.status = failedMergeRequest();
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/approve");
+        const QString key = QStringLiteral("POST ") + kPipeline + QStringLiteral("/retry");
         context.client.setReply(key, failure(ApiReply::Error::Http, 500, QStringLiteral("Server error (500)")));
         View view(createMergeRequestView(context, nullptr));
 
-        QPushButton *approve = button(view, QStringLiteral("approve"));
-        approve->click();
+        QPushButton *retry = button(view, QStringLiteral("retry-pipeline"));
+        retry->click();
         QTRY_COMPARE(errorOf(view), QStringLiteral("Server error (500)"));
-        QVERIFY(approve->isEnabled());
+        QVERIFY(retry->isEnabled());
         QCOMPARE(context.source.refreshes, 0);
+    }
+
+    // Decision 0070: these are done on the web page, so no view offers them.
+    void removedActionsAreGone()
+    {
+        FakeContext context;
+        context.source.status = failedMergeRequest();
+        View mergeRequest(createMergeRequestView(context, nullptr));
+        context.itemConfig.insert(QStringLiteral("iid"), 7);
+        context.source.status = openIssue(QJsonArray());
+        View issue(createIssueView(context, nullptr));
+
+        for (const char *id : {"approve", "comment", "close", "reopen"}) {
+            QVERIFY(!button(mergeRequest, QLatin1String(id)));
+            QVERIFY(!button(issue, QLatin1String(id)));
+        }
     }
 
     void forbiddenNamesTheScope()
@@ -997,24 +873,23 @@ private slots:
     {
         FakeContext context;
         setUpMergeRequestPreview(context);
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/approve");
+        const QString key = QStringLiteral("POST ") + kPipeline + QStringLiteral("/retry");
         succeed(context, key);
         View view(createMergeRequestPreview(context, QStringLiteral("acme/backend"), 42, nullptr));
         view->show();
         QTRY_VERIFY(shownText(view).contains(QStringLiteral("test:unit")));
 
-        // The answer to the second read says that I approved.
-        QJsonObject approved = readObject(QStringLiteral("approvals.json"));
-        QJsonArray entries = approved.value(QStringLiteral("approved_by")).toArray();
-        entries.append(QJsonObject{{QStringLiteral("user"), readObject(QStringLiteral("user.json"))}});
-        approved.insert(QStringLiteral("approved_by"), entries);
-        context.client.setJson(QStringLiteral("GET ") + kMergeRequest + QStringLiteral("/approvals"),
-                               QJsonDocument(approved));
+        // The answer to the second read says that the pipeline runs again.
+        QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
+        QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
+        pipeline.insert(QStringLiteral("status"), QStringLiteral("running"));
+        mergeRequest.insert(QStringLiteral("head_pipeline"), pipeline);
+        context.client.setJson(QStringLiteral("GET ") + kMergeRequest, QJsonDocument(mergeRequest));
 
-        QVERIFY(showsAction(view, QStringLiteral("approve")));
-        button(view, QStringLiteral("approve"))->click();
+        QVERIFY(showsAction(view, QStringLiteral("retry-pipeline")));
+        button(view, QStringLiteral("retry-pipeline"))->click();
         QVERIFY(context.client.requestKeys().contains(key));
-        QTRY_VERIFY(!showsAction(view, QStringLiteral("approve")));
+        QTRY_VERIFY(!showsAction(view, QStringLiteral("retry-pipeline")));
         QCOMPARE(context.source.refreshes, 0);
     }
 
@@ -1043,12 +918,6 @@ private slots:
         QVERIFY(summary(view)->isSectionVisible(QStringLiteral("comments")));
         QCOMPARE(summary(view)->actions()->webLink(), QUrl(kIssueAddress));
 
-        succeed(context, QStringLiteral("PUT ") + kIssue);
-        const qsizetype before = context.client.requests().size();
-        button(view, QStringLiteral("close"))->click();
-        QCOMPARE(context.client.requests().at(before).method, QStringLiteral("PUT"));
-        QTRY_VERIFY(context.client.requests().size() > before + 1);
-        QCOMPARE(context.client.requests().at(before + 1).path, kIssue);
     }
 
     void openPageOfAPreviewCallsShowPage()

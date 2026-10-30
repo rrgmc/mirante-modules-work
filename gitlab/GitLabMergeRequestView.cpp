@@ -21,18 +21,7 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
-const QString kApprove = QStringLiteral("approve");
 const QString kRetryPipeline = QStringLiteral("retry-pipeline");
-const QString kComment = QStringLiteral("comment");
-
-bool approvedBy(const QJsonObject &approvals, qint64 id)
-{
-    for (const QJsonValue &entry : approvals.value(QStringLiteral("approved_by")).toArray()) {
-        if (entry.toObject().value(QStringLiteral("user")).toObject().value(QStringLiteral("id")).toInteger() == id)
-            return true;
-    }
-    return false;
-}
 
 class MergeRequestView : public GitLabSummary
 {
@@ -40,24 +29,11 @@ public:
     MergeRequestView(ItemContext &context, const QJsonObject &ownConfig, QWidget *parent)
         : GitLabSummary(context, ownConfig, parent)
     {
-        actions()->addAction(kApprove, tr("Approve"), tr("Approve"), [this] {
-            runAction(kApprove, [project = project(), iid = number()](const GitLabClient &client,
-                                                                     GitLabClient::Done done) {
-                client.approve(project, iid, std::move(done));
-            });
-        });
         actions()->addAction(kRetryPipeline, tr("Retry pipeline"), tr("Retry"), [this] {
             runAction(kRetryPipeline, [project = project(), pipeline = m_pipelineId](const GitLabClient &client,
                                                                                      GitLabClient::Done done) {
                 client.retryPipeline(project, pipeline, std::move(done));
             });
-        });
-        actions()->addAction(kComment, tr("Comment"), tr("Comment"), [this] {
-            addComment(tr("Comment on the merge request"),
-                       [project = project(), iid = number()](const GitLabClient &client, const QString &text,
-                                                             GitLabClient::Done done) {
-                           client.commentOnMergeRequest(project, iid, text, std::move(done));
-                       });
         });
         addOpenPage();
     }
@@ -67,7 +43,6 @@ protected:
     {
         const QJsonObject mergeRequest = status.data.value(QStringLiteral("mergeRequest")).toObject();
         const QJsonObject approvals = status.data.value(QStringLiteral("approvals")).toObject();
-        const qint64 me = status.data.value(QStringLiteral("user")).toObject().value(QStringLiteral("id")).toInteger();
         const QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
         const bool open = mergeRequest.value(QStringLiteral("state")).toString() == QLatin1String("opened");
 
@@ -75,7 +50,6 @@ protected:
         setStateRow(stateRow(mergeRequest, open));
 
         m_pipelineId = pipeline.value(QStringLiteral("id")).toInteger();
-        actions()->setActionVisible(kApprove, open && !approvedBy(approvals, me));
         actions()->setActionVisible(kRetryPipeline,
                                     canRetryPipeline(pipeline.value(QStringLiteral("status")).toString()));
         setPageAddress(webAddress(mergeRequest, mergeRequestUrl(baseUrl(), config(), defaultProject())));

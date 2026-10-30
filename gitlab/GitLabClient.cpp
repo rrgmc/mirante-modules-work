@@ -40,11 +40,6 @@ QJsonDocument emptyBody()
     return QJsonDocument(QJsonObject());
 }
 
-QJsonDocument noteBody(const QString &text)
-{
-    return QJsonDocument(QJsonObject{{QStringLiteral("body"), text}});
-}
-
 } // namespace
 
 GitLabClient::GitLabClient(ApiClient &server, QObject *receiver)
@@ -137,12 +132,6 @@ void GitLabClient::groupIssues(const QString &group, const QUrlQuery &filter, in
          std::move(done));
 }
 
-void GitLabClient::setIssueState(const QString &project, qint64 iid, const QString &stateEvent, Done done) const
-{
-    put(issuePath(project, iid), QJsonDocument(QJsonObject{{QStringLiteral("state_event"), stateEvent}}),
-        std::move(done));
-}
-
 void GitLabClient::retryPipeline(const QString &project, qint64 pipelineId, Done done) const
 {
     post(pipelinePath(project, pipelineId) + QStringLiteral("/retry"), emptyBody(), std::move(done));
@@ -157,21 +146,6 @@ void GitLabClient::retryJob(const QString &project, qint64 jobId, Done done) con
 {
     post(projectPathOf(project) + QStringLiteral("/jobs/") + QString::number(jobId) + QStringLiteral("/retry"),
          emptyBody(), std::move(done));
-}
-
-void GitLabClient::approve(const QString &project, qint64 iid, Done done) const
-{
-    post(mergeRequestPath(project, iid) + QStringLiteral("/approve"), emptyBody(), std::move(done));
-}
-
-void GitLabClient::commentOnMergeRequest(const QString &project, qint64 iid, const QString &text, Done done) const
-{
-    post(mergeRequestPath(project, iid) + QStringLiteral("/notes"), noteBody(text), std::move(done));
-}
-
-void GitLabClient::commentOnIssue(const QString &project, qint64 iid, const QString &text, Done done) const
-{
-    post(issuePath(project, iid) + QStringLiteral("/notes"), noteBody(text), std::move(done));
 }
 
 void GitLabClient::get(const QString &path, const QUrlQuery &query, Done done) const
@@ -192,11 +166,6 @@ void GitLabClient::list(const QString &path, QUrlQuery query, int maxRows, Done 
 void GitLabClient::post(const QString &path, const QJsonDocument &body, Done done) const
 {
     m_server->post(path, body, m_receiver, std::move(done));
-}
-
-void GitLabClient::put(const QString &path, const QJsonDocument &body, Done done) const
-{
-    m_server->put(path, body, m_receiver, std::move(done));
 }
 
 } // namespace mirante::modules::gitlab

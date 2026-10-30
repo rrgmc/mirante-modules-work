@@ -93,7 +93,6 @@ protected:
 
     QJsonObject config() const;
     QString project() const;
-    qint64 number() const;
     // The server's base URL, for an address that the data does not give.
     QUrl baseUrl() const;
     // The project's default project path, for building an address.
@@ -113,10 +112,6 @@ protected:
     // Like runAction, for a button outside the action row. finished runs when
     // the answer comes, before anything else.
     void run(const Request &request, const std::function<void()> &finished);
-    // Asks for a comment, then runs the "comment" action with send.
-    void addComment(const QString &title,
-                    const std::function<void(const GitLabClient &, const QString &, GitLabClient::Done)> &send);
-
     // One job: its name, status and duration. A failed job has a log link and,
     // if canRetry, a Retry button.
     QWidget *jobRow(const QJsonObject &job, bool canRetry);

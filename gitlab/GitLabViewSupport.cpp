@@ -5,7 +5,6 @@
 
 #include <mirante/ItemContext.h>
 #include <mirante/widgets/ActionRow.h>
-#include <mirante/widgets/CommentDialog.h>
 #include <mirante/widgets/FlowRow.h>
 
 #include <QDate>
@@ -21,7 +20,6 @@
 #include <QVBoxLayout>
 
 #include <cmath>
-#include <optional>
 #include <utility>
 
 using mirante::widgets::StatusPill;
@@ -32,7 +30,6 @@ namespace mirante::modules::gitlab {
 namespace {
 
 const QString kOpenPage = QStringLiteral("open-page");
-const QString kComment = QStringLiteral("comment");
 
 QString translated(const char *source)
 {
@@ -265,11 +262,6 @@ QString GitLabSummary::project() const
     return projectPath(config(), defaultProject());
 }
 
-qint64 GitLabSummary::number() const
-{
-    return itemNumber(config());
-}
-
 QUrl GitLabSummary::baseUrl() const
 {
     return baseUrlOf(m_context->moduleSettings(kGeneralScreen));
@@ -325,19 +317,6 @@ void GitLabSummary::run(const Request &request, const std::function<void()> &fin
             actions()->showError(actionError(reply));
         else if (m_refresh)
             m_refresh();
-    });
-}
-
-void GitLabSummary::addComment(
-    const QString &title, const std::function<void(const GitLabClient &, const QString &, GitLabClient::Done)> &send)
-{
-    // The dialog runs its own event loop, and the view can be made again in it.
-    const QPointer<GitLabSummary> self(this);
-    const std::optional<QString> comment = widgets::askComment(this, title);
-    if (!self || !comment)
-        return;
-    runAction(kComment, [send, comment = *comment](const GitLabClient &client, GitLabClient::Done done) {
-        send(client, comment, std::move(done));
     });
 }
 

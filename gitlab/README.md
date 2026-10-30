@@ -38,7 +38,7 @@ The module never reads the token itself. It makes every request through the `Api
 - The branch of the latest pipeline is percent-encoded into the `ref` query, so a branch with `+` or `&` in its name reaches GitLab whole.
 - Lists (the three merge request lists, the three issue lists, a pipeline's jobs and an issue's notes) set `followLinks` with a row limit, and ask for `per_page` of at most 100 unless the filter names its own.
 - An issue's notes are asked for with `sort=desc&order_by=created_at`, so the latest come first. System notes are included.
-- The light actions send a JSON body: `{}` for retry, cancel and approve, `{"body": "<text>"}` for a comment, and `{"state_event": "close"}` or `{"state_event": "reopen"}` for an issue's state, which is a `PUT`.
+- The CI actions send an empty JSON body, `{}`.
 
 | Method | Request |
 |---|---|
@@ -58,9 +58,6 @@ The module never reads the token itself. It makes every request through the `Api
 | `groupIssues` | `GET api/v4/groups/<group>/issues` |
 | `retryPipeline`, `cancelPipeline` | `POST api/v4/projects/<project>/pipelines/<id>/retry`, `.../cancel` |
 | `retryJob` | `POST api/v4/projects/<project>/jobs/<id>/retry` |
-| `approve` | `POST api/v4/projects/<project>/merge_requests/<iid>/approve` |
-| `commentOnMergeRequest`, `commentOnIssue` | `POST .../merge_requests/<iid>/notes`, `POST .../issues/<iid>/notes` |
-| `setIssueState` | `PUT api/v4/projects/<project>/issues/<iid>` |
 
 The list and action methods are tested in `tests/tst_client.cpp`.
 
@@ -92,9 +89,9 @@ The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded 
 - **Previews.** `createMergeRequestPreview()` and `createIssuePreview()` take a project and a number, for a list's preview. `readItself()` runs the same status fetch through a small `StatusJob` of its own, on the context's server, and draws the result with the same code. It reads again after an action. A preview's configuration holds only `project` and `iid`, so its sections are all on. It has the same actions.
 - **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status, or reads again in a preview. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
 - **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
-- **Dialogs.** The comment dialog and the question before cancelling run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
+- **Dialogs.** The question before cancelling runs an event loop of its own, and the view can be made again during it. So it is on the heap, and nothing runs afterwards if it or the view is gone.
 
-The action ids, which are also the buttons' object names, are `approve`, `retry-pipeline`, `cancel-pipeline`, `comment`, `close`, `reopen` and `open-page`. A job's buttons are `log-<job id>` and `retry-job-<job id>`. They are not in the action row, so a job's Retry clears the last error itself.
+The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline` and `open-page`. A job's buttons are `log-<job id>` and `retry-job-<job id>`. They are not in the action row, so a job's Retry clears the last error itself.
 
 Text from a server is plain text in every label. The tests are in `tests/tst_summary_views.cpp`, with a fake context and a fake status source, on the responses in `tests/data/`.
 
@@ -135,7 +132,7 @@ The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json` and `i
 
 - **Drawing.** `follow()` draws the item's status now and at each change, as a summary does. An empty list shows the table and a line of its own, because `setMessage()` shows instead of the table.
 - **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests, a preview or "Add to task as item".
-- **Previews.** A click on a row makes `createMergeRequestPreview()` or `createIssuePreview()`. After a new status, if the preview's row is still there, it calls `readItself()` again on the same widget, so its scroll position, its action errors and an open comment dialog stay. A status that comes while the view is hidden waits until it shows.
+- **Previews.** A click on a row makes `createMergeRequestPreview()` or `createIssuePreview()`. After a new status, if the preview's row is still there, it calls `readItself()` again on the same widget, so its scroll position and its action errors stay. A status that comes while the view is hidden waits until it shows.
 - **The row menu** is a `QMenu` that belongs to the view and uses `popup()`, so nothing waits on it if the view is made again.
 
 `GitLabMergeRequestListView.cpp` also fills the Pipeline and Approvals columns, as decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0068](../../../docs/decisions/0068-views-read-what-the-user-asked-for.md) describe:

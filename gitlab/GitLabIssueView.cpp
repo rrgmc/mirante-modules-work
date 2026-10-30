@@ -14,15 +14,10 @@
 #include <QString>
 
 #include <algorithm>
-#include <utility>
 
 namespace mirante::modules::gitlab {
 
 namespace {
-
-const QString kComment = QStringLiteral("comment");
-const QString kClose = QStringLiteral("close");
-const QString kReopen = QStringLiteral("reopen");
 
 // The latest comments a summary shows.
 constexpr qsizetype kShownComments = 5;
@@ -33,15 +28,6 @@ public:
     IssueView(ItemContext &context, const QJsonObject &ownConfig, QWidget *parent)
         : GitLabSummary(context, ownConfig, parent)
     {
-        actions()->addAction(kComment, tr("Comment"), tr("Comment"), [this] {
-            addComment(tr("Comment on the issue"),
-                       [project = project(), iid = number()](const GitLabClient &client, const QString &text,
-                                                             GitLabClient::Done done) {
-                           client.commentOnIssue(project, iid, text, std::move(done));
-                       });
-        });
-        actions()->addAction(kClose, tr("Close"), tr("Close"), [this] { setState(kClose); });
-        actions()->addAction(kReopen, tr("Reopen"), tr("Reopen"), [this] { setState(kReopen); });
         addOpenPage();
     }
 
@@ -57,8 +43,6 @@ protected:
         flow->addWidget(statePill(state));
         setStateRow(row);
 
-        actions()->setActionVisible(kClose, state == QLatin1String("opened"));
-        actions()->setActionVisible(kReopen, state == QLatin1String("closed"));
         setPageAddress(webAddress(issue, issueUrl(baseUrl(), config(), defaultProject())));
 
         setSection(QStringLiteral("details"), tr("Details"), detailsSection(issue));
@@ -71,15 +55,6 @@ protected:
     }
 
 private:
-    // The action's id is also GitLab's state event: "close" or "reopen".
-    void setState(const QString &event)
-    {
-        runAction(event, [project = project(), iid = number(), event](const GitLabClient &client,
-                                                                     GitLabClient::Done done) {
-            client.setIssueState(project, iid, event, std::move(done));
-        });
-    }
-
     static QWidget *detailsSection(const QJsonObject &issue)
     {
         QWidget *column = newColumn();
