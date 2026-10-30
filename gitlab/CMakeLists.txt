@@ -1,5 +1,5 @@
 mirante_add_module(gitlab
-    SOURCES   GitLabClient.cpp GitLabClient.h GitLabIssueListView.cpp GitLabIssueListView.h
+    SOURCES   GitLabQuickAdd.cpp GitLabQuickAdd.h GitLabClient.cpp GitLabClient.h GitLabIssueListView.cpp GitLabIssueListView.h
               GitLabIssueView.cpp GitLabIssueView.h GitLabLists.cpp GitLabLists.h GitLabListSupport.cpp
               GitLabListSupport.h GitLabMergeRequestListView.cpp GitLabMergeRequestListView.h GitLabMergeRequestView.cpp
               GitLabMergeRequestView.h GitLabModule.cpp GitLabPipelineListView.cpp GitLabPipelineListView.h

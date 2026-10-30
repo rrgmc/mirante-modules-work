@@ -1,5 +1,6 @@
 // The claude module: Claude sessions as items. See README.md.
 #include "ClaudeUrls.h"
+#include "LocalSessionView.h"
 
 #include <mirante/Fields.h>
 #include <mirante/ItemContext.h>
@@ -75,6 +76,18 @@ public:
     }
 };
 
+// A session on one device, resumed in a terminal.
+class LocalSessionItemType : public StubItemType
+{
+public:
+    using StubItemType::StubItemType;
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        return createLocalSessionView(context, parent);
+    }
+};
+
 std::vector<Field> webFields()
 {
     Field url;
@@ -119,12 +132,20 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("claude", "A Claude session on claude.ai, such as a Remote Control or cloud "
                                               "session, in a web view."),
         webFields()));
-    registrar.addItemType(std::make_unique<StubItemType>(
+    registrar.addItemType(std::make_unique<LocalSessionItemType>(
         QStringLiteral("claude.session.local"), QCoreApplication::translate("claude", "Claude session (local)"),
         QCoreApplication::translate("claude", "Claude"),
         QCoreApplication::translate("claude", "A Claude Code session on one device, with a button that resumes it "
                                               "in a terminal in the project's folder."),
         localFields()));
+
+    // The program that runs Claude Code, kept on each device. See decision 0079.
+    Field program;
+    program.key = QStringLiteral("program");
+    program.label = QCoreApplication::translate("claude", "Claude Code program");
+    program.defaultValue = QStringLiteral("claude");
+    program.placeholder = QStringLiteral("claude");
+    registrar.addDeviceSetting(program);
 }
 
 } // namespace mirante::modules::claude

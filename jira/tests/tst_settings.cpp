@@ -8,6 +8,8 @@
 #include "items/FieldValidation.h"
 #include "items/ItemTypeRegistry.h"
 
+#include <mirante/QuickAdd.h>
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QNetworkRequest>
@@ -212,6 +214,9 @@ private:
         const mirante::ModuleSettings &settings() const override { return m_settings; }
         void setServerType(std::unique_ptr<mirante::ServerType> type) override { server = std::move(type); }
         void addProjectSetting(const mirante::Field &field) override { projectSettings.push_back(field); }
+        void addQuickAddHandler(std::unique_ptr<mirante::QuickAddHandler>) override {}
+        void addRelatedItemFinder(std::unique_ptr<mirante::RelatedItemFinder>) override {}
+        void addDeviceSetting(const mirante::Field &) override {}
 
         std::unique_ptr<mirante::ServerType> server;
         std::vector<mirante::Field> projectSettings;

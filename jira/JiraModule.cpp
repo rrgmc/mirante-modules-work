@@ -1,4 +1,5 @@
 // The jira module: Jira issues and issue lists as items. See README.md.
+#include "JiraQuickAdd.h"
 #include "JiraIssueView.h"
 #include "JiraListView.h"
 #include "JiraLists.h"
@@ -233,6 +234,9 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("jira", "A table of issues from a preset, such as your open issues or the "
                                             "current sprint, or from a JQL query."),
         listFields(), settings, &fetchListStatus, &createListView));
+
+    registrar.addQuickAddHandler(std::make_unique<JiraQuickAddHandler>());
+    registrar.addRelatedItemFinder(std::make_unique<JiraRelatedItemFinder>());
 }
 
 } // namespace mirante::modules::jira
