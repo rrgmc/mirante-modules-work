@@ -101,6 +101,19 @@ private slots:
             QCOMPARE(reported, missing);
         }
     }
+
+    // The module has a name and a description, and so has every type, for
+    // Help > Modules. See docs/decisions/0056-modules-window.md.
+    void namesAndDescriptions()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
+
+        QCOMPARE(registry.moduleName(QStringLiteral("jira")), QStringLiteral("Jira"));
+        QVERIFY(!registry.moduleDescription(QStringLiteral("jira")).isEmpty());
+        for (const mirante::ItemType *type : registry.types())
+            QVERIFY2(!type->description().isEmpty(), qPrintable(type->id()));
+    }
 };
 
 QTEST_MAIN(TestRegister)

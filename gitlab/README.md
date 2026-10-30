@@ -4,15 +4,17 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 
 ## Item types
 
-| Id | Name | Rendering |
-|---|---|---|
-| `gitlab.mr.summary` | GitLab MR (summary) | native |
-| `gitlab.mr.page` | GitLab MR (page) | web |
-| `gitlab.mr.list` | GitLab MR List | native |
-| `gitlab.pipeline` | GitLab CI Pipeline | native |
-| `gitlab.issue.summary` | GitLab Issue (summary) | native |
-| `gitlab.issue.page` | GitLab Issue (page) | web |
-| `gitlab.issue.list` | GitLab Issue List | native |
+| Id | Name | Rendering | Description |
+|---|---|---|---|
+| `gitlab.mr.summary` | GitLab MR (summary) | native | A summary of one merge request: its state, branches, people, pipeline and approvals. |
+| `gitlab.mr.page` | GitLab MR (page) | web | The web page of one merge request, on the GitLab server of the item's profile. |
+| `gitlab.mr.list` | GitLab MR List | native | A table of merge requests in a project, a group or everywhere, such as those that wait for your review. |
+| `gitlab.pipeline` | GitLab CI Pipeline | native | The latest pipeline of a branch, with its stages and jobs. The branch is a fixed one, the main folder's current branch or a merge request's branch. |
+| `gitlab.issue.summary` | GitLab Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
+| `gitlab.issue.page` | GitLab Issue (page) | web | The web page of one issue, on the GitLab server of the item's profile. |
+| `gitlab.issue.list` | GitLab Issue List | native | A table of issues in a project, a group or everywhere, such as those assigned to you. |
+
+The module calls itself "GitLab" and describes itself as: "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
 Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. The other types still show a placeholder; their views arrive in a later milestone.
 

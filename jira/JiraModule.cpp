@@ -24,11 +24,12 @@ namespace {
 class StubItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, const QString &shortName, std::vector<Field> fields,
-                 const ModuleSettings &settings)
+    StubItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
+                 std::vector<Field> fields, const ModuleSettings &settings)
         : m_id(id)
         , m_name(name)
         , m_shortName(shortName)
+        , m_description(description)
         , m_icon(QStringLiteral(":/modules/jira/icons/jira.svg"))
         , m_fields(std::move(fields))
         , m_settings(settings)
@@ -39,6 +40,7 @@ public:
     QString name() const override { return m_name; }
     QIcon icon() const override { return m_icon; }
     QString shortName() const override { return m_shortName; }
+    QString description() const override { return m_description; }
     std::vector<Field> fields() const override { return m_fields; }
     Rendering rendering() const override { return Rendering::Native; }
 
@@ -57,6 +59,7 @@ private:
     QString m_id;
     QString m_name;
     QString m_shortName;
+    QString m_description;
     QIcon m_icon;
     std::vector<Field> m_fields;
     const ModuleSettings &m_settings;
@@ -128,17 +131,28 @@ void registerModule(ModuleRegistrar &registrar)
 {
     const ModuleSettings &settings = registrar.settings();
     registrar.setModuleName(QStringLiteral("Jira"));
+    registrar.setModuleDescription(QCoreApplication::translate(
+        "jira", "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's "
+                "General Configuration."));
     registrar.addSettingsScreen(makeGeneralScreen());
 
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.issue.summary"), QCoreApplication::translate("jira", "Jira Issue (summary)"),
-        QCoreApplication::translate("jira", "Jira"), issueFields(), settings));
+        QCoreApplication::translate("jira", "Jira"),
+        QCoreApplication::translate("jira", "A summary of one issue: its status, people, sprint, description and "
+                                            "latest comments."),
+        issueFields(), settings));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("jira.issue.page"), QCoreApplication::translate("jira", "Jira Issue (page)"),
-        QCoreApplication::translate("jira", "Jira"), issueFields(), settings));
+        QCoreApplication::translate("jira", "Jira"),
+        QCoreApplication::translate("jira", "The web page of one issue, on the Jira site of the item's profile."),
+        issueFields(), settings));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.list"), QCoreApplication::translate("jira", "Jira List"),
-        QCoreApplication::translate("jira", "Jira"), listFields(), settings));
+        QCoreApplication::translate("jira", "Jira"),
+        QCoreApplication::translate("jira", "A table of issues from a preset, such as your open issues or the "
+                                            "current sprint, or from a JQL query."),
+        listFields(), settings));
 }
 
 } // namespace mirante::modules::jira

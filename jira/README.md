@@ -4,11 +4,13 @@ Jira issues and issue lists as items. See [item types](../../../docs/item-types.
 
 ## Item types
 
-| Id | Name | Rendering |
-|---|---|---|
-| `jira.issue.summary` | Jira Issue (summary) | native |
-| `jira.issue.page` | Jira Issue (page) | web |
-| `jira.list` | Jira List | native |
+| Id | Name | Rendering | Description |
+|---|---|---|---|
+| `jira.issue.summary` | Jira Issue (summary) | native | A summary of one issue: its status, people, sprint, description and latest comments. |
+| `jira.issue.page` | Jira Issue (page) | web | The web page of one issue, on the Jira site of the item's profile. |
+| `jira.list` | Jira List | native | A table of issues from a preset, such as your open issues or the current sprint, or from a JQL query. |
+
+The module calls itself "Jira" and describes itself as: "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
 Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. The other types still show a placeholder; their views arrive in a later milestone.
 
