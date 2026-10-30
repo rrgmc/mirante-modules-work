@@ -214,7 +214,7 @@ private slots:
         QCOMPARE(view->property("message").toString(), message);
     }
 
-    void nativeTypesHaveNoView()
+    void listTypesHaveNoViewYet()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
@@ -222,10 +222,8 @@ private slots:
         FakeContext context;
         context.general = server(QStringLiteral("https://gitlab.example.com"));
         context.itemConfig = config("g/p", 1);
-        for (const mirante::ItemType *type : registry.types()) {
-            if (type->rendering() == mirante::Rendering::Native)
-                QVERIFY2(!type->createView(context, nullptr), qPrintable(type->id()));
-        }
+        for (const QString &id : {QStringLiteral("gitlab.mr.list"), QStringLiteral("gitlab.issue.list")})
+            QVERIFY2(!registry.type(id).createView(context, nullptr), qPrintable(id));
     }
 };
 
