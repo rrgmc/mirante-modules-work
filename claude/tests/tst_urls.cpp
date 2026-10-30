@@ -132,14 +132,19 @@ private slots:
         QCOMPARE(view->property("message").toString(), message);
     }
 
-    void localSessionHasNoView()
+    // The view itself is tested in tst_views.cpp.
+    void localSessionHasAView()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         FakeContext context;
         context.itemConfig = QJsonObject{{QStringLiteral("sessionId"), QStringLiteral("abc")}};
-        QVERIFY(!registry.type(QStringLiteral("claude.session.local")).createView(context, nullptr));
+        QWidget parent;
+        std::unique_ptr<QWidget> view(
+            registry.type(QStringLiteral("claude.session.local")).createView(context, &parent));
+        QVERIFY(view);
+        QCOMPARE(view->parentWidget(), &parent);
     }
 };
 
