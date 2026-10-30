@@ -203,6 +203,7 @@ NumberedList::NumberedList(ItemContext &context, const ListTraits &traits, QWidg
                  parent)
     , m_traits(traits)
 {
+    setDescription(listDescription(traits.kind, context.config(), context.projectSetting(kProjectSettingKey)));
 }
 
 ListRowTarget NumberedList::rowTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const

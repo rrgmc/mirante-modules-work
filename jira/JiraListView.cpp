@@ -118,6 +118,10 @@ public:
             setColumnVisible(FirstExtraColumn + i, false);
         addFilter(StatusColumn, trJira("Status"));
         setPageSize(listPageSize(context.config()));
+        const QJsonObject config = context.config();
+        setDescription(listDescription(config.value(QStringLiteral("preset")).toString(),
+                                       config.value(QStringLiteral("jql")).toString(),
+                                       context.projectSetting(QStringLiteral("projectKey")).toString()));
 
         connect(this, &widgets::ItemListView::rowLinkActivated, this,
                 [this](const QString &key, const QString &link) { activateLink(key, link); });

@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QList>
 #include <QPair>
+#include <QStringList>
 
 #include <utility>
 
@@ -208,6 +209,60 @@ QUrlQuery listQuery(ListKind kind, const QString &preset, qint64 userId, const Q
             query.addQueryItem(item.first, item.second);
     }
     return query;
+}
+
+QString listDescription(ListKind kind, const QJsonObject &config, const QJsonValue &defaultProject)
+{
+    const QString preset = config.value(QStringLiteral("preset")).toString();
+    const bool mergeRequests = kind == ListKind::MergeRequests;
+    QStringList parts;
+    if (preset == QLatin1String("allOpen"))
+        parts << tr("All open");
+    else if (preset == QLatin1String("reviewRequested") && mergeRequests)
+        parts << tr("Review requested from me");
+    else if (preset == QLatin1String("createdByMe") || (mergeRequests && preset != QLatin1String("assignedToMe")))
+        parts << tr("Created by me");
+    else
+        parts << tr("Assigned to me");
+
+    const ListScope scope = readScope(config, defaultProject);
+    if (scope.problem.isEmpty()) {
+        switch (scope.where) {
+        case ListScope::Where::Project:
+            parts << scope.path;
+            break;
+        case ListScope::Where::Group:
+            parts << tr("group %1").arg(scope.path);
+            break;
+        case ListScope::Where::All:
+            parts << tr("all projects");
+            break;
+        }
+    }
+    const QString filter = config.value(QStringLiteral("filter")).toString().trimmed();
+    if (!filter.isEmpty())
+        parts << filter;
+    return parts.join(QStringLiteral(" · "));
+}
+
+QString pipelineListDescription(const QJsonObject &config, const QJsonValue &defaultProject)
+{
+    const QString source = config.value(QStringLiteral("source")).toString();
+    QStringList parts;
+    if (source == QLatin1String("mine")) {
+        parts << tr("Started by me");
+    } else if (source == QLatin1String("branch")) {
+        const QString branch = config.value(QStringLiteral("branch")).toString().trimmed();
+        parts << tr("Of branch %1").arg(branch.isEmpty() ? kDefaultBranch : branch);
+    } else if (source == QLatin1String("mergeRequest")) {
+        parts << tr("Of merge request !%1").arg(itemNumber(config));
+    } else {
+        parts << tr("All pipelines");
+    }
+    const QString project = projectPath(config, defaultProject);
+    if (!project.isEmpty())
+        parts << project;
+    return parts.join(QStringLiteral(" · "));
 }
 
 QUrl listWebUrl(ListKind kind, const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)

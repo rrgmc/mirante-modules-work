@@ -1,6 +1,7 @@
 // The GitLab lists, drawn from the responses in tests/data/. A handler stands
 // in for the external browser, so nothing is opened.
 #include "../GitLabIssueListView.h"
+#include "../GitLabLists.h"
 #include "../GitLabMergeRequestListView.h"
 #include "../GitLabPipelineListView.h"
 
@@ -998,6 +999,12 @@ private slots:
         context.source.status = pipelines();
         View view(createPipelineListView(context, nullptr));
         show(view);
+
+        // The line above the table says what the item shows.
+        const auto *description = view->findChild<QLabel *>(QStringLiteral("description"));
+        QVERIFY(description && !description->isHidden());
+        QCOMPARE(description->text(),
+                 mirante::modules::gitlab::pipelineListDescription(context.itemConfig, QJsonValue(QJsonValue::Undefined)));
 
         // Sorted on the id, newest first.
         QCOMPARE(rowCount(view), 4);

@@ -24,6 +24,21 @@ class TestListJql : public QObject
     Q_OBJECT
 
 private slots:
+    // The line above a list's table says what the item is set to show.
+    void descriptions()
+    {
+        using mirante::modules::jira::listDescription;
+        QCOMPARE(listDescription(QString(), QString(), QStringLiteral("OPS")), QStringLiteral("My open issues"));
+        QCOMPARE(listDescription(QStringLiteral("currentSprint"), QString(), QStringLiteral("OPS")),
+                 QStringLiteral("Current sprint of OPS"));
+        QCOMPARE(listDescription(QStringLiteral("recentlyUpdated"), QString(), QStringLiteral("OPS")),
+                 QStringLiteral("Recently updated in OPS"));
+        QCOMPARE(listDescription(QStringLiteral("currentSprint"), QString(), QString()),
+                 QStringLiteral("Current sprint"));
+        QCOMPARE(listDescription(QStringLiteral("jql"), QStringLiteral(" project = OPS "), QString()),
+                 QStringLiteral("project = OPS"));
+    }
+
     void presets_data()
     {
         QTest::addColumn<QString>("preset");

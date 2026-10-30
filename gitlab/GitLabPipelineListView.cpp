@@ -44,6 +44,7 @@ public:
                     {tr("Links"), 0}},
                    IdColumn);
         addFilter(StatusColumn, tr("Status"));
+        setDescription(pipelineListDescription(context.config(), context.projectSetting(kProjectSettingKey)));
     }
 
 protected:

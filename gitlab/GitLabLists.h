@@ -33,6 +33,11 @@ QUrlQuery listQuery(ListKind kind, const QString &preset, qint64 userId, const Q
 // complete.
 QUrl listWebUrl(ListKind kind, const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject);
 
+// What a list's configuration shows, in words, for the line above its table, such
+// as "Assigned to me · acme/backend" or "Of merge request !42 · acme/backend".
+QString listDescription(ListKind kind, const QJsonObject &config, const QJsonValue &defaultProject);
+QString pipelineListDescription(const QJsonObject &config, const QJsonValue &defaultProject);
+
 // The fetches of ItemType::fetchStatus(). data holds rows and total.
 void fetchMergeRequestListStatus(StatusJob &job);
 void fetchIssueListStatus(StatusJob &job);
