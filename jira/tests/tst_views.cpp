@@ -40,7 +40,6 @@
 #include <functional>
 #include <memory>
 
-using mirante::ApiReply;
 using mirante::ItemStatus;
 using mirante::testing::FakeApiClient;
 using mirante::widgets::ActionRow;
