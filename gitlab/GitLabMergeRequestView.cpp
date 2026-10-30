@@ -27,8 +27,8 @@ const QString kRetryPipeline = QStringLiteral("retry-pipeline");
 class MergeRequestView : public GitLabSummary
 {
 public:
-    MergeRequestView(ItemContext &context, const QJsonObject &ownConfig, QWidget *parent)
-        : GitLabSummary(context, ownConfig, parent)
+    MergeRequestView(ItemContext &context, QWidget *parent)
+        : GitLabSummary(context, parent)
     {
         actions()->addAction(kRetryPipeline, tr("Retry pipeline"), tr("Retry"), [this] {
             runAction(kRetryPipeline, [project = project(), pipeline = m_pipelineId](const GitLabClient &client,
@@ -170,16 +170,8 @@ private:
 
 QWidget *createMergeRequestView(ItemContext &context, QWidget *parent)
 {
-    auto *view = new MergeRequestView(context, {}, parent);
+    auto *view = new MergeRequestView(context, parent);
     view->follow(context.status());
-    return view;
-}
-
-QWidget *createMergeRequestPreview(ItemContext &context, const QString &project, qint64 iid, QWidget *parent)
-{
-    auto *view = new MergeRequestView(
-        context, QJsonObject{{QStringLiteral("project"), project}, {QStringLiteral("iid"), iid}}, parent);
-    view->readItself(&fetchMergeRequestSummaryStatus);
     return view;
 }
 

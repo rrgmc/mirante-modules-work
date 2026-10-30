@@ -25,8 +25,8 @@ constexpr qsizetype kShownComments = 5;
 class IssueView : public GitLabSummary
 {
 public:
-    IssueView(ItemContext &context, const QJsonObject &ownConfig, QWidget *parent)
-        : GitLabSummary(context, ownConfig, parent)
+    IssueView(ItemContext &context, QWidget *parent)
+        : GitLabSummary(context, parent)
     {
         addOpenPage();
     }
@@ -101,16 +101,8 @@ private:
 
 QWidget *createIssueView(ItemContext &context, QWidget *parent)
 {
-    auto *view = new IssueView(context, {}, parent);
+    auto *view = new IssueView(context, parent);
     view->follow(context.status());
-    return view;
-}
-
-QWidget *createIssuePreview(ItemContext &context, const QString &project, qint64 iid, QWidget *parent)
-{
-    auto *view = new IssueView(context, QJsonObject{{QStringLiteral("project"), project}, {QStringLiteral("iid"), iid}},
-                               parent);
-    view->readItself(&fetchIssueSummaryStatus);
     return view;
 }
 

@@ -190,10 +190,23 @@ std::vector<Field> singleFields(const QString &numberLabel)
     return {projectField(), makeField(QStringLiteral("iid"), numberLabel, Field::Type::Integer, true)};
 }
 
-// A list: its scope, a preset and an optional custom filter.
+// How many rows a list fetches, and how many its view shows at a time. A view and
+// a status also take the default when the key is absent. See decision 0071.
+std::vector<Field> listSizeFields()
+{
+    Field limit = makeField(QStringLiteral("limit"), QCoreApplication::translate("gitlab", "Rows to fetch"),
+                            Field::Type::Integer);
+    limit.defaultValue = kDefaultListLimit;
+    Field pageSize = makeField(QStringLiteral("pageSize"), QCoreApplication::translate("gitlab", "Rows per page"),
+                               Field::Type::Integer);
+    pageSize.defaultValue = kDefaultListPageSize;
+    return {limit, pageSize};
+}
+
+// A list: its scope, a preset, an optional custom filter and its sizes.
 std::vector<Field> listFields(const QStringList &presets, const QStringList &presetLabels)
 {
-    return {
+    std::vector<Field> fields{
         choiceField(QStringLiteral("scope"), QCoreApplication::translate("gitlab", "Scope"),
                     {QStringLiteral("project"), QStringLiteral("group"), QStringLiteral("all")},
                     {QCoreApplication::translate("gitlab", "One project"),
@@ -206,6 +219,7 @@ std::vector<Field> listFields(const QStringList &presets, const QStringList &pre
         makeField(QStringLiteral("filter"), QCoreApplication::translate("gitlab", "Custom filter"),
                   Field::Type::Text, false, QStringLiteral("labels=bug&target_branch=main")),
     };
+    return withSections(std::move(fields), listSizeFields());
 }
 
 std::vector<Field> pipelineFields()

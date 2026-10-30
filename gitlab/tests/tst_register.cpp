@@ -61,8 +61,11 @@ private slots:
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         const QStringList single{QStringLiteral("project"), QStringLiteral("iid")};
-        const QStringList list{QStringLiteral("scope"), QStringLiteral("project"), QStringLiteral("group"),
-                               QStringLiteral("preset"), QStringLiteral("filter")};
+        const QStringList sizes{QStringLiteral("limit"), QStringLiteral("pageSize")};
+        const QStringList list = QStringList{QStringLiteral("scope"), QStringLiteral("project"),
+                                             QStringLiteral("group"), QStringLiteral("preset"),
+                                             QStringLiteral("filter")}
+            + sizes;
         QMap<QString, QStringList> expected;
         expected.insert(QStringLiteral("gitlab.mr.summary"),
                         single
@@ -92,12 +95,19 @@ private slots:
     }
 
     // A new pipeline item follows master, and the empty field says so.
+    void pipelineBranchDefaultsToMaster_data()
+    {
+        QTest::addColumn<QString>("typeId");
+        QTest::newRow("pipeline") << QStringLiteral("gitlab.pipeline");
+    }
+
     void pipelineBranchDefaultsToMaster()
     {
+        QFETCH(QString, typeId);
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
-        for (const mirante::Field &field : registry.type(QStringLiteral("gitlab.pipeline")).fields()) {
+        for (const mirante::Field &field : registry.type(typeId).fields()) {
             if (field.key == QLatin1String("branch")) {
                 QCOMPARE(field.defaultValue.toString(), QStringLiteral("master"));
                 QCOMPARE(field.placeholder, QStringLiteral("master"));
@@ -105,6 +115,24 @@ private slots:
             }
         }
         QFAIL("No branch field");
+    }
+
+    void listsHaveSizes_data()
+    {
+        QTest::addColumn<QString>("typeId");
+        QTest::newRow("merge requests") << QStringLiteral("gitlab.mr.list");
+        QTest::newRow("issues") << QStringLiteral("gitlab.issue.list");
+    }
+
+    void listsHaveSizes()
+    {
+        QFETCH(QString, typeId);
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+
+        const QJsonObject defaults = mirante::defaultConfig(registry.type(typeId).fields());
+        QCOMPARE(defaults.value(QStringLiteral("limit")).toInt(), 100);
+        QCOMPARE(defaults.value(QStringLiteral("pageSize")).toInt(), 50);
     }
 
     // Keys and labels are set and keys are unique. A new item's defaults

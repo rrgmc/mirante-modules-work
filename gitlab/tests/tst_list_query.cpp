@@ -1,5 +1,5 @@
-// The GitLab lists: their queries, their addresses on the site and their
-// status, on responses in tests/data/ written by hand in the shape of GitLab's
+// The GitLab lists: their queries, their sizes, their addresses on the site and
+// their status, on responses in tests/data/ written by hand in the shape of GitLab's
 // API. "Me" is the user in data/user.json, id 1001.
 #include "../GitLabLists.h"
 
@@ -456,6 +456,80 @@ private slots:
         WAIT_FOR_FINISH(issues);
         QCOMPARE(issues.finished->state, ItemStatus::State::NoToken);
         QCOMPARE(issues.finished->message, QStringLiteral("Token not set on this device"));
+    }
+
+    // Sizes.
+
+    void sizes_data()
+    {
+        QTest::addColumn<QJsonValue>("value");
+        QTest::addColumn<int>("number");
+
+        QTest::newRow("absent") << QJsonValue(QJsonValue::Undefined) << 0;
+        QTest::newRow("a number") << QJsonValue(30) << 30;
+        QTest::newRow("one") << QJsonValue(1) << 1;
+        QTest::newRow("zero") << QJsonValue(0) << 0;
+        QTest::newRow("below zero") << QJsonValue(-5) << 0;
+        QTest::newRow("null") << QJsonValue() << 0;
+        QTest::newRow("as text") << QJsonValue(QStringLiteral(" 30 ")) << 30;
+        QTest::newRow("other text") << QJsonValue(QStringLiteral("many")) << 0;
+    }
+
+    // Zero stands for the default, which differs per field.
+    void sizes()
+    {
+        QFETCH(QJsonValue, value);
+        QFETCH(int, number);
+
+        QJsonObject config;
+        if (!value.isUndefined()) {
+            config.insert(QStringLiteral("limit"), value);
+            config.insert(QStringLiteral("pageSize"), value);
+        }
+        QCOMPARE(listLimit(config), number > 0 ? number : 100);
+        QCOMPARE(listPageSize(config), number > 0 ? number : 50);
+    }
+
+    // The limit reaches the request, and "+" follows it.
+    void limitReachesTheRequest()
+    {
+        const QString key = QStringLiteral("GET api/v4/issues?state=opened&scope=all&order_by=updated_at&per_page=30");
+        FakeStatusJob job;
+        job.configValues = allOpen();
+        job.configValues.insert(QStringLiteral("limit"), 30);
+        job.client.setJson(key, rows(30));
+        fetchIssueListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.client.requestKeys(), QStringList{key});
+        QCOMPARE(job.client.requests().constLast().options.maxRows, 30);
+        QCOMPARE(job.finished->summary, QStringLiteral("30+ issues"));
+    }
+
+    // More than a page of GitLab's allows, so the client follows the links.
+    void limitAboveAPage()
+    {
+        const QString key = QStringLiteral("GET api/v4/merge_requests") + kQuery;
+        FakeStatusJob job;
+        job.configValues = allOpen();
+        job.configValues.insert(QStringLiteral("limit"), 250);
+        job.client.setJson(key, rows(100));
+        fetchMergeRequestListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.client.requests().constLast().options.maxRows, 250);
+        QCOMPARE(job.finished->summary, QStringLiteral("100 merge requests"));
+    }
+
+    void limitBelowOneUsesTheDefault()
+    {
+        const QString key = QStringLiteral("GET api/v4/merge_requests") + kQuery;
+        FakeStatusJob job;
+        job.configValues = allOpen();
+        job.configValues.insert(QStringLiteral("limit"), 0);
+        job.client.setJson(key, rows(100));
+        fetchMergeRequestListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.client.requests().constLast().options.maxRows, 100);
+        QCOMPARE(job.finished->summary, QStringLiteral("100+ merge requests"));
     }
 
     // A failed request for the user asks for no list.

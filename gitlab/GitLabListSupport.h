@@ -1,6 +1,5 @@
-// What the two GitLab lists share: drawing rows from a status, the preview of
-// the selected row, the row menu and the Web link. Private to the module. See
-// docs/plans/m6-native-item-types.md.
+// What the GitLab lists share: drawing rows from a status, the links and menu of
+// a row, the pages and the Web link. Private to the module. See decision 0071.
 #pragma once
 
 #include "GitLabLists.h"
@@ -12,10 +11,11 @@
 #include <QCoreApplication>
 #include <QHash>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QList>
 #include <QString>
-#include <QStringList>
 #include <QUrl>
+#include <QVariant>
 
 class QLabel;
 
@@ -25,25 +25,17 @@ class ItemContext;
 
 namespace mirante::modules::gitlab {
 
-// What differs between the two lists.
-struct ListTraits
-{
-    ListKind kind;
-    QChar separator;        // between a project and a number: '!' or '#'
-    QString summaryType;    // the type that "Add to task as item" adds
-    QString emptyText;      // the line under a table with no rows
-    QWidget *(*createPreview)(ItemContext &, const QString &project, qint64 iid, QWidget *parent);
-    void (*fetchPreview)(StatusJob &);
-};
-
-// The merge request or issue of a row. A list can span projects, so the project
-// comes from the row, never from the item's configuration.
+// What a row points at, and what its links do.
 struct ListRowTarget
 {
     QString key;
+    QVariant sortKey;       // of the column that identifies the row, and of the links
     QString project;        // empty if the row does not say
-    qint64 iid = 0;
-    QUrl address;           // its page on the site, or empty
+    qint64 iid = 0;         // the merge request or issue number, or 0
+    QUrl address;           // its page on the site, or empty, and then Web and Open go
+    QString addType;        // the type that "Add" adds, or empty, and then Add goes
+    QString addName;
+    QJsonObject addConfig;
 
     bool complete() const { return !project.isEmpty() && iid > 0; }
 };
@@ -52,14 +44,15 @@ struct ListRowTarget
 // no use here, because it is a number. Empty if neither gives one.
 QString rowProject(const QJsonObject &row, QChar separator, const QUrl &baseUrl);
 
-// The cell of a column whose answer has not come.
+// The cell of a value that is missing, or of a column whose answer has not come.
 widgets::ListCell dashCell();
-// The date of the last update, short and local, sorted by the date.
-widgets::ListCell updatedCell(const QJsonObject &row);
+// A date from GitLab, in compact form and sorted by the date. A missing one is a
+// dash, and sorts as the oldest.
+widgets::ListCell dateCell(const QJsonValue &value);
 
-// The base of the two lists. A subclass sets its columns in its constructor, and
-// implements rowCells(). Requests use this view, or a child of it, as their
-// receiver, so an answer that comes after the view is gone is dropped.
+// The base of the lists. A subclass sets its columns in its constructor, and
+// implements rowTarget() and rowCells(). Requests use this view, or a child of it,
+// as their receiver, so an answer that comes after the view is gone is dropped.
 class GitLabList : public widgets::ItemListView
 {
     Q_DECLARE_TR_FUNCTIONS(gitlab)
@@ -70,12 +63,17 @@ public:
     void follow(ItemStatusSource *source);
 
 protected:
-    GitLabList(ItemContext &context, const ListTraits &traits, QWidget *parent);
+    // page is the Web link above the table, which hides without a web address.
+    // The item's pageSize field sets the rows per page.
+    GitLabList(ItemContext &context, const QString &emptyText, const QUrl &page, QWidget *parent);
 
+    virtual ListRowTarget rowTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const = 0;
     // The cells of one row, in the order of the columns.
     virtual QList<widgets::ListCell> rowCells(const ListRowTarget &target, const QJsonObject &row) const = 0;
     // Called while visible, after each new status and each time the view shows.
     virtual void askForCells() {}
+    // Called while visible, when a new page, sort or filter changes visibleKeys().
+    virtual void askForNewKeys() {}
     // Called when the view hides.
     virtual void stopAsking() {}
 
@@ -83,31 +81,48 @@ protected:
     void hideEvent(QHideEvent *event) override;
 
     ItemContext &context() const { return *m_context; }
-    // Such as "backend!42", sorted by the whole path and then by the number.
-    widgets::ListCell refCell(const ListRowTarget &target) const;
+    // "Web", "Open" and "Add", as far as the target allows.
+    widgets::ListCell linksCell(const ListRowTarget &target) const;
     ListRowTarget target(const QString &key) const { return m_targets.value(key); }
-    // The keys of the rows from the top of the table, as it is sorted now.
-    QStringList keysInTableOrder() const;
 
 private:
     void showStatus(const ItemStatus &status);
-    ListRowTarget readTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const;
-    void showPreviewOf(const QString &key);
-    void readPreviewAgain();
     void showRowMenu(const QString &key, const QPoint &globalPos);
+    void activateLink(const QString &key, const QString &link);
     void openPage(const QUrl &address);
+    void addToTask(const ListRowTarget &target);
 
     ItemContext *m_context;
-    ListTraits m_traits;
     QLabel *m_emptyLine;
-    // In the order given to setRows().
-    QStringList m_keys;
     QHash<QString, ListRowTarget> m_targets;
-    QString m_previewKey;
-    // The list's status changed while the view was hidden.
-    bool m_previewOutdated = false;
     bool m_drawn = false;
     bool m_shown = false;
+    // setRows() also changes visibleKeys(), and showStatus() asks after it.
+    bool m_settingRows = false;
+};
+
+// What differs between the two lists of numbered objects.
+struct ListTraits
+{
+    ListKind kind;
+    QChar separator;        // between a project and a number: '!' or '#'
+    QString summaryType;    // the type that "Add" adds
+    QString emptyText;      // the line under a table with no rows
+};
+
+// A list of merge requests or issues. A list can span projects, so a row's project
+// comes from the row, never from the item's configuration.
+class NumberedList : public GitLabList
+{
+protected:
+    NumberedList(ItemContext &context, const ListTraits &traits, QWidget *parent);
+
+    ListRowTarget rowTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const override;
+    // Such as "backend!42", sorted by the whole path and then by the number.
+    widgets::ListCell refCell(const ListRowTarget &target) const;
+
+private:
+    ListTraits m_traits;
 };
 
 } // namespace mirante::modules::gitlab

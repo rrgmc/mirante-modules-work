@@ -1,8 +1,6 @@
 #include "GitLabIssueListView.h"
 
-#include "GitLabIssueView.h"
 #include "GitLabListSupport.h"
-#include "GitLabStatus.h"
 #include "GitLabViewSupport.h"
 
 #include <mirante/ItemContext.h>
@@ -17,16 +15,14 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
-enum Column { RefColumn, TitleColumn, AssigneesColumn, LabelsColumn, UpdatedColumn };
+enum Column { RefColumn, TitleColumn, AssigneesColumn, LabelsColumn, UpdatedColumn, LinksColumn };
 
 ListTraits issueTraits()
 {
     return {ListKind::Issues,
             QLatin1Char('#'),
             QStringLiteral("gitlab.issue.summary"),
-            QCoreApplication::translate("gitlab", "No issues"),
-            &createIssuePreview,
-            &fetchIssueSummaryStatus};
+            QCoreApplication::translate("gitlab", "No issues")};
 }
 
 QString labelNames(const QJsonArray &labels)
@@ -37,17 +33,18 @@ QString labelNames(const QJsonArray &labels)
     return names.join(QStringLiteral(", "));
 }
 
-class IssueListView : public GitLabList
+class IssueListView : public NumberedList
 {
 public:
     IssueListView(ItemContext &context, QWidget *parent)
-        : GitLabList(context, issueTraits(), parent)
+        : NumberedList(context, issueTraits(), parent)
     {
         setColumns({{tr("Ref"), 1},
                     {tr("Title"), 0, true},
                     {tr("Assignees"), 3},
                     {tr("Labels"), 4},
-                    {tr("Updated"), 2}},
+                    {tr("Updated"), 2},
+                    {tr("Links"), 0}},
                    UpdatedColumn);
     }
 
@@ -58,7 +55,8 @@ protected:
                 {row.value(QStringLiteral("title")).toString(), {}, {}},
                 {userNames(row.value(QStringLiteral("assignees")).toArray()), {}, {}},
                 {labelNames(row.value(QStringLiteral("labels")).toArray()), {}, {}},
-                updatedCell(row)};
+                dateCell(row.value(QStringLiteral("updated_at"))),
+                linksCell(target)};
     }
 };
 

@@ -19,7 +19,22 @@ QString trimSlashes(QString text)
     return text;
 }
 
-// <baseUrl>/<project>/-/<kind>/<iid>, without doubling a slash at the end of baseUrl.
+// <baseUrl>/<project>/-/<rest>, without doubling a slash at the end of baseUrl.
+QUrl projectPageUrl(const QUrl &baseUrl, const QString &project, const QString &rest)
+{
+    QString path = baseUrl.path();
+    while (path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    path += QLatin1Char('/') + project + QStringLiteral("/-/") + rest;
+
+    QUrl url = baseUrl;
+    url.setPath(path);
+    url.setQuery(QString());
+    url.setFragment(QString());
+    return url;
+}
+
+// <baseUrl>/<project>/-/<kind>/<iid>.
 QUrl pageUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject,
              const QString &kind)
 {
@@ -27,17 +42,7 @@ QUrl pageUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &d
     const qint64 iid = itemNumber(config);
     if (project.isEmpty() || iid == 0)
         return {};
-
-    QString path = baseUrl.path();
-    while (path.endsWith(QLatin1Char('/')))
-        path.chop(1);
-    path += QLatin1Char('/') + project + QStringLiteral("/-/") + kind + QLatin1Char('/') + QString::number(iid);
-
-    QUrl url = baseUrl;
-    url.setPath(path);
-    url.setQuery(QString());
-    url.setFragment(QString());
-    return url;
+    return projectPageUrl(baseUrl, project, kind + QLatin1Char('/') + QString::number(iid));
 }
 
 } // namespace

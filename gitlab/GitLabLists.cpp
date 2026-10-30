@@ -16,9 +16,6 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
-// The rows a list asks for. A list that reaches this many may have more.
-constexpr int kMaxRows = 100;
-
 QString tr(const char *text)
 {
     return QCoreApplication::translate("gitlab", text);
@@ -57,37 +54,46 @@ ListScope readScope(const QJsonObject &config, const QJsonValue &defaultProject)
     return scope;
 }
 
-void requestRows(const GitLabClient &client, ListKind kind, const ListScope &scope, const QUrlQuery &query,
+// A positive whole number, which a file edited by hand may hold as text, or
+// fallback.
+int positiveNumber(const QJsonValue &value, int fallback)
+{
+    const int number = value.isString() ? value.toString().trimmed().toInt() : value.toInt();
+    return number >= 1 ? number : fallback;
+}
+
+void requestRows(const GitLabClient &client, ListKind kind, const ListScope &scope, const QUrlQuery &query, int limit,
                  GitLabClient::Done done)
 {
     const bool mergeRequests = kind == ListKind::MergeRequests;
     switch (scope.where) {
     case ListScope::Where::Project:
         if (mergeRequests)
-            client.projectMergeRequests(scope.path, query, kMaxRows, std::move(done));
+            client.projectMergeRequests(scope.path, query, limit, std::move(done));
         else
-            client.projectIssues(scope.path, query, kMaxRows, std::move(done));
+            client.projectIssues(scope.path, query, limit, std::move(done));
         break;
     case ListScope::Where::Group:
         if (mergeRequests)
-            client.groupMergeRequests(scope.path, query, kMaxRows, std::move(done));
+            client.groupMergeRequests(scope.path, query, limit, std::move(done));
         else
-            client.groupIssues(scope.path, query, kMaxRows, std::move(done));
+            client.groupIssues(scope.path, query, limit, std::move(done));
         break;
     case ListScope::Where::All:
         if (mergeRequests)
-            client.mergeRequests(query, kMaxRows, std::move(done));
+            client.mergeRequests(query, limit, std::move(done));
         else
-            client.issues(query, kMaxRows, std::move(done));
+            client.issues(query, limit, std::move(done));
         break;
     }
 }
 
-QString listSummary(ListKind kind, int total)
+// A list that reaches its limit may have more.
+QString listSummary(ListKind kind, int total, int limit)
 {
     const bool mergeRequests = kind == ListKind::MergeRequests;
-    if (total >= kMaxRows)
-        return (mergeRequests ? tr("%1+ merge requests") : tr("%1+ issues")).arg(kMaxRows);
+    if (total >= limit)
+        return (mergeRequests ? tr("%1+ merge requests") : tr("%1+ issues")).arg(limit);
     if (total == 1)
         return mergeRequests ? tr("1 merge request") : tr("1 issue");
     return (mergeRequests ? tr("%1 merge requests") : tr("%1 issues")).arg(total);
@@ -95,14 +101,13 @@ QString listSummary(ListKind kind, int total)
 
 // No attention, and closed stays unset, so a list never counts towards a task
 // being done. See decision 0067.
-ItemStatus listStatus(ListKind kind, const QJsonArray &rows)
+ItemStatus listStatus(const QString &summary, const QJsonArray &rows)
 {
-    const int total = int(rows.size());
     ItemStatus status;
     status.state = ItemStatus::State::Ok;
     status.updatedAt = QDateTime::currentDateTimeUtc();
-    status.summary = listSummary(kind, total);
-    status.data = QJsonObject{{QStringLiteral("rows"), rows}, {QStringLiteral("total"), total}};
+    status.summary = summary;
+    status.data = QJsonObject{{QStringLiteral("rows"), rows}, {QStringLiteral("total"), int(rows.size())}};
     return status;
 }
 
@@ -119,10 +124,16 @@ void fetchList(StatusJob &job, ListKind kind)
 
     const QString preset = config.value(QStringLiteral("preset")).toString();
     const QString filter = config.value(QStringLiteral("filter")).toString();
+    const int limit = listLimit(config);
     StatusJob *target = &job;
     const GitLabClient client(job.server(), job.owner());
-    const GitLabClient::Done finishWithRows = [target, kind](const ApiReply &reply) {
-        target->finish(reply.ok() ? listStatus(kind, reply.json.array()) : statusFromReply(reply));
+    const GitLabClient::Done finishWithRows = [target, kind, limit](const ApiReply &reply) {
+        if (!reply.ok()) {
+            target->finish(statusFromReply(reply));
+            return;
+        }
+        const QJsonArray rows = reply.json.array();
+        target->finish(listStatus(listSummary(kind, int(rows.size()), limit), rows));
     };
 
     if (kind == ListKind::MergeRequests && preset == QLatin1String("reviewRequested")) {
@@ -132,14 +143,24 @@ void fetchList(StatusJob &job, ListKind kind)
                 return;
             }
             const qint64 userId = user.json.object().value(QStringLiteral("id")).toInteger();
-            requestRows(client, kind, scope, listQuery(kind, preset, userId, filter), finishWithRows);
+            requestRows(client, kind, scope, listQuery(kind, preset, userId, filter), limit, finishWithRows);
         });
         return;
     }
-    requestRows(client, kind, scope, listQuery(kind, preset, 0, filter), finishWithRows);
+    requestRows(client, kind, scope, listQuery(kind, preset, 0, filter), limit, finishWithRows);
 }
 
 } // namespace
+
+int listLimit(const QJsonObject &config)
+{
+    return positiveNumber(config.value(QStringLiteral("limit")), kDefaultListLimit);
+}
+
+int listPageSize(const QJsonObject &config)
+{
+    return positiveNumber(config.value(QStringLiteral("pageSize")), kDefaultListPageSize);
+}
 
 QUrlQuery listQuery(ListKind kind, const QString &preset, qint64 userId, const QString &filter)
 {
