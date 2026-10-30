@@ -1,0 +1,30 @@
+{
+  "id": 300042,
+  "iid": 42,
+  "project_id": 77,
+  "title": "Add the retry button to the pipeline panel",
+  "state": "opened",
+  "approved": false,
+  "approvals_required": 3,
+  "approvals_left": 1,
+  "approved_by": [
+    {
+      "user": {
+        "id": 3003,
+        "username": "carla.reviewer",
+        "name": "Carla Reviewer",
+        "state": "active",
+        "web_url": "https://gitlab.example/carla.reviewer"
+      }
+    },
+    {
+      "user": {
+        "id": 4004,
+        "username": "dora.maintainer",
+        "name": "Dora Maintainer",
+        "state": "active",
+        "web_url": "https://gitlab.example/dora.maintainer"
+      }
+    }
+  ]
+}

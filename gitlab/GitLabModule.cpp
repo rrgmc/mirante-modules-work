@@ -1,5 +1,6 @@
 // The gitlab module: GitLab merge requests, pipelines and issues as items. See README.md.
 #include "GitLabSettings.h"
+#include "GitLabStatus.h"
 #include "GitLabUrls.h"
 
 #include <mirante/Fields.h>
@@ -18,15 +19,18 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
+// Fetches one item's status, for ItemType::fetchStatus(). See GitLabStatus.h.
+using FetchStatus = void (*)(StatusJob &job);
+
 // A type with an id, a name, an icon and its configuration fields. All GitLab
 // types talk to the server in the General Configuration of the item's
 // profile. Native views arrive later. The "project" field offers the paths
-// of that screen.
+// of that screen. A type with a fetch reports status.
 class StubItemType : public ItemType
 {
 public:
     StubItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
-                 std::vector<Field> fields, const ModuleSettings &settings)
+                 std::vector<Field> fields, const ModuleSettings &settings, FetchStatus fetch = nullptr)
         : m_id(id)
         , m_name(name)
         , m_shortName(shortName)
@@ -34,6 +38,7 @@ public:
         , m_icon(QStringLiteral(":/modules/gitlab/icons/gitlab.svg"))
         , m_fields(std::move(fields))
         , m_settings(settings)
+        , m_fetch(fetch)
     {
     }
 
@@ -48,6 +53,15 @@ public:
         return withProjectPaths(m_fields, m_settings, profileId);
     }
     Rendering rendering() const override { return Rendering::Native; }
+
+    bool hasStatus() const override { return m_fetch != nullptr; }
+    void fetchStatus(StatusJob &job) const override
+    {
+        if (m_fetch)
+            m_fetch(job);
+        else
+            job.finish(ItemStatus());
+    }
 
     // An address on the profile's server, or on any server whose addresses
     // look like GitLab's.
@@ -64,6 +78,7 @@ private:
     QIcon m_icon;
     std::vector<Field> m_fields;
     const ModuleSettings &m_settings;
+    FetchStatus m_fetch;
 };
 
 // Builds a page address from the server's base URL, the item's configuration
@@ -77,8 +92,8 @@ class PageItemType : public StubItemType
 {
 public:
     PageItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
-                 std::vector<Field> fields, const ModuleSettings &settings, PageUrl pageUrl)
-        : StubItemType(id, name, shortName, description, std::move(fields), settings)
+                 std::vector<Field> fields, const ModuleSettings &settings, PageUrl pageUrl, FetchStatus fetch)
+        : StubItemType(id, name, shortName, description, std::move(fields), settings, fetch)
         , m_pageUrl(pageUrl)
     {
     }
@@ -94,7 +109,7 @@ public:
                                                       "General Configuration, in the Profiles menu."),
                 parent);
         }
-        const QUrl url = m_pageUrl(baseUrl, context.config(), context.projectSetting(QStringLiteral("project")));
+        const QUrl url = m_pageUrl(baseUrl, context.config(), context.projectSetting(kProjectSettingKey));
         if (url.isEmpty()) {
             return context.createMessageView(
                 QCoreApplication::translate("gitlab", "Set the project and number in the item's settings."), parent);
@@ -191,19 +206,21 @@ void registerModule(ModuleRegistrar &registrar)
         "gitlab", "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and "
                   "token in the module's General Configuration."));
     registrar.addSettingsScreen(makeGeneralScreen());
+    registrar.setServerType(std::make_unique<GitLabServerType>());
+    registrar.addProjectSetting(makeProjectSetting());
 
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.summary"), QCoreApplication::translate("gitlab", "GitLab MR (summary)"),
         QCoreApplication::translate("gitlab", "MR"),
         QCoreApplication::translate("gitlab", "A summary of one merge request: its state, branches, people, "
                                               "pipeline and approvals."),
-        mergeRequest, settings));
+        mergeRequest, settings, &fetchMergeRequestStatus));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("gitlab.mr.page"), QCoreApplication::translate("gitlab", "GitLab MR (page)"),
         QCoreApplication::translate("gitlab", "MR"),
         QCoreApplication::translate("gitlab", "The web page of one merge request, on the GitLab server of the "
                                               "item's profile."),
-        mergeRequest, settings, &mergeRequestUrl));
+        mergeRequest, settings, &mergeRequestUrl, &fetchMergeRequestStatus));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.mr.list"), QCoreApplication::translate("gitlab", "GitLab MR List"),
         QCoreApplication::translate("gitlab", "MRs"),
@@ -221,19 +238,19 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("gitlab", "The latest pipeline of a branch, with its stages and jobs. The branch "
                                               "is a fixed one, the main folder's current branch or a merge "
                                               "request's branch."),
-        pipelineFields(), settings));
+        pipelineFields(), settings, &fetchPipelineStatus));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),
         QCoreApplication::translate("gitlab", "Issue"),
         QCoreApplication::translate("gitlab", "A summary of one issue: its state, assignees, labels, milestone and "
                                               "latest comments."),
-        issue, settings));
+        issue, settings, &fetchIssueStatus));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("gitlab.issue.page"), QCoreApplication::translate("gitlab", "GitLab Issue (page)"),
         QCoreApplication::translate("gitlab", "Issue"),
         QCoreApplication::translate("gitlab", "The web page of one issue, on the GitLab server of the item's "
                                               "profile."),
-        issue, settings, &issueUrl));
+        issue, settings, &issueUrl, &fetchIssueStatus));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("gitlab.issue.list"), QCoreApplication::translate("gitlab", "GitLab Issue List"),
         QCoreApplication::translate("gitlab", "Issues"),

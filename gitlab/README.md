@@ -16,7 +16,67 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 
 The module calls itself "GitLab" and describes itself as: "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. The other types still show a placeholder; their views arrive in a later milestone.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). The other views still show a placeholder; they arrive in M6.
+
+## Server
+
+`GitLabServerType`, in `GitLabSettings.h`, tells the core where each profile's GitLab server is. The module registers it with `setServerType()`:
+
+- the screen is `general` and the token field is `token`;
+- the base URL is `baseUrlOf()` of the screen's values, so `https://gitlab.com` when none is set;
+- `authorize()` puts the token in the `PRIVATE-TOKEN` header;
+- `problem()` is always empty: a base URL and a token are all GitLab needs.
+
+The module never reads the token itself. It makes every request through the `ApiClient` of the item's profile, which adds the header. See [servers and tokens](../../../docs/modules.md#servers-and-tokens).
+
+## The client
+
+`GitLabClient`, in `GitLabClient.cpp`, is a thin, copyable wrapper over an `ApiClient` and a receiver. It has one method per endpoint in [integrations](../../../docs/integrations.md#gitlab). Each takes the parsed arguments, such as a project path and a number, and passes the `ApiReply` on unchanged.
+
+- Paths are relative to the base URL and start with `api/v4/`, so a server installed at a path works.
+- Project and group paths are percent-encoded into the path: `acme/backend` becomes `acme%2Fbackend`.
+- The branch of the latest pipeline is percent-encoded into the `ref` query, so a branch with `+` or `&` in its name reaches GitLab whole.
+- Lists (the three merge request lists, the issue list and a pipeline's jobs) set `followLinks` with a row limit, and ask for `per_page` of at most 100 unless the filter names its own.
+- The light actions post a JSON body: `{}` for retry, cancel and approve, and `{"body": "<text>"}` for a comment.
+
+| Method | Request |
+|---|---|
+| `currentUser` | `GET api/v4/user` |
+| `mergeRequest` | `GET api/v4/projects/<project>/merge_requests/<iid>` |
+| `approvals` | `GET api/v4/projects/<project>/merge_requests/<iid>/approvals` |
+| `mergeRequests` | `GET api/v4/merge_requests` |
+| `projectMergeRequests` | `GET api/v4/projects/<project>/merge_requests` |
+| `groupMergeRequests` | `GET api/v4/groups/<group>/merge_requests` |
+| `latestPipeline` | `GET api/v4/projects/<project>/pipelines/latest?ref=<branch>` |
+| `pipelineJobs` | `GET api/v4/projects/<project>/pipelines/<id>/jobs` |
+| `issue` | `GET api/v4/projects/<project>/issues/<iid>` |
+| `issues` | `GET api/v4/issues` |
+| `retryPipeline`, `cancelPipeline` | `POST api/v4/projects/<project>/pipelines/<id>/retry`, `.../cancel` |
+| `retryJob` | `POST api/v4/projects/<project>/jobs/<id>/retry` |
+| `approve` | `POST api/v4/projects/<project>/merge_requests/<iid>/approve` |
+| `commentOnMergeRequest`, `commentOnIssue` | `POST .../merge_requests/<iid>/notes`, `POST .../issues/<iid>/notes` |
+
+The list and action methods are tested in `tests/tst_client.cpp`. Nothing calls them before M6.
+
+## Status
+
+The types that name one object report status: `hasStatus()` is true and `fetchStatus()` runs a function of `GitLabStatus.cpp`. The lists report none in M5. The rules are in pure functions, `mergeRequestStatus()`, `issueStatus()` and `pipelineStatus()`, so they are tested without a job. "Me" is the user of `GET api/v4/user`, asked once per status job; the client's ETag memory makes it cheap.
+
+| Types | Requests | Attention | Closed |
+|---|---|---|---|
+| `gitlab.mr.summary`, `gitlab.mr.page` | the merge request, its approvals and the current user, at once | "Pipeline failed" (`pipeline-failed`, notify) when `head_pipeline.status` is `failed`; "Review requested" (`review`) when I am a reviewer and have not approved; "Approved" (`approved`, clears on view) when I am the author and `approved` is true; "Has conflicts" (`conflicts`) when I am the author and `has_conflicts` is true | `state` is `merged` or `closed` |
+| `gitlab.issue.summary`, `gitlab.issue.page` | the issue | none | `state` is `closed` |
+| `gitlab.pipeline` | for `mergeRequest`, the merge request and then its `source_branch`; for `fixed`, `branch`; then the latest pipeline of the branch and its jobs | "Pipeline failed" (`pipeline-failed:<pipeline id>`, notify) when its `status` is `failed` | never |
+
+- **Only open merge requests need attention.** A merged or closed merge request reports no reasons, even with a failed pipeline.
+- **Summaries.** A merge request reads like "Open · 2 of 3 approvals · pipeline failed": the state, "draft" for an open draft, the approvals given of those required (or just the count when none are required), the head pipeline's status, and "has conflicts" while open. An issue reads like "Open · assigned to Ana". A pipeline reads like "Failed · main · 1 failed job"; failed jobs that are allowed to fail are not counted. `success` reads as "passed".
+- **A branch without pipelines.** GitLab answers `404` for the latest pipeline of such a branch. The status is then `Ok` with "No pipeline on <branch>".
+- **The main folder's branch.** A pipeline with `branchSource` `mainFolder` reports `State::None` with "Follows the main folder from M7", without a request.
+- **An incomplete configuration,** without a project, a number or a branch, reports `State::None` with a message, such as "Set the project and number in the item's settings.", without a request.
+- **Errors.** Any other failed reply becomes its state with `statusFromReply()`, such as `NoToken` or `NotFound`. A merge request's own reply wins over those of the user and the approvals.
+- **Data.** `data` holds what M6's summaries need: `mergeRequest`, `approvals` and `user` (`id` and `username`) for a merge request; `issue` for an issue; `branch`, `pipeline` and `jobs` for a pipeline. The objects are GitLab's answers, unchanged.
+
+The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded from a GitLab server, trimmed by hand, with names and emails replaced.
 
 ## Pages
 
@@ -70,7 +130,7 @@ The keys of each type, in the order the form shows them:
 
 ## Settings
 
-The project setting `project`, read as `gitlab.project`: the default project path for items whose `project` is empty.
+The project setting `project`, "GitLab project path", a text field registered with `addProjectSetting()`. It is kept in the project's `moduleSettings.gitlab.project`, and read as `gitlab.project`: the default project path for items whose `project` is empty. The page views read it with `ItemContext::projectSetting()`, and status fetches with `StatusJob::projectSetting()`.
 
 ## Settings screens
 
@@ -79,7 +139,7 @@ The module calls itself "GitLab", so each profile's Modules submenu shows Profil
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
 | `general` | General Configuration | `baseUrl` | URL | The GitLab server, such as `https://gitlab.example.org/gitlab`. `https://gitlab.com` by default, and when empty. |
-| | | `token` | secret | The token for that server. Never stored with the values: the core keeps it in the keychain, under `<profile id>/gitlab/token`. |
+| | | `token` | secret | The token for that server. Never stored with the values: the core keeps it in the keychain, under `<workspace id>/<profile id>/gitlab/token`. |
 | | | `projects` | text list | Project paths the user works on, such as `group/project`, one per line. |
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The screen is opened for one profile at a time. See decisions [0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md) and [0054](../../../docs/decisions/0054-module-settings-replace-connections.md), which replaced connections with the base URL.

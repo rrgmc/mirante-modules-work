@@ -18,6 +18,10 @@ namespace mirante::modules::gitlab {
 // is empty. Slashes at the start and end are removed. Empty if neither is set.
 QString projectPath(const QJsonObject &config, const QJsonValue &defaultProject);
 
+// The "iid" key as a positive number, or 0. The form stores a number, but a
+// file edited by hand may hold the number as text.
+qint64 itemNumber(const QJsonObject &config);
+
 // <baseUrl>/<project>/-/merge_requests/<iid>, or an empty URL if the project or
 // the number is missing. defaultProject is the project's "project" setting.
 QUrl mergeRequestUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject);
