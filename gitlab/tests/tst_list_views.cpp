@@ -2,6 +2,7 @@
 // in for the external browser, so nothing is opened.
 #include "../GitLabIssueListView.h"
 #include "../GitLabMergeRequestListView.h"
+#include "../GitLabPipelineListView.h"
 
 #include <mirante/ItemContext.h>
 #include <mirante/Status.h>
@@ -13,6 +14,7 @@
 #include <QAbstractItemModel>
 #include <QAction>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QFile>
@@ -44,6 +46,7 @@ namespace {
 
 enum MrColumn { MrRef, MrTitle, MrAuthor, MrPipeline, MrApprovals, MrUpdated, MrLinks };
 enum IssueColumn { IssueRef, IssueTitle, IssueAssignees, IssueLabels, IssueUpdated, IssueLinks };
+enum PipelineColumn { PipelineId, PipelineStatus, PipelineRef, PipelineAuthor, PipelineStarted, PipelineLinks };
 
 const QString kDash = QStringLiteral("–");
 const QString kBase = QStringLiteral("https://gitlab.example");
@@ -78,6 +81,17 @@ ItemStatus mergeRequests()
 ItemStatus issues()
 {
     return statusOfRows(readJson(QStringLiteral("issue_list.json")).array());
+}
+
+ItemStatus pipelines()
+{
+    return statusOfRows(readJson(QStringLiteral("pipeline_list.json")).array());
+}
+
+QJsonObject pipelineConfig()
+{
+    return QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                       {QStringLiteral("source"), QStringLiteral("all")}};
 }
 
 // count merge requests of acme/backend, numbered from 1, where a higher number
@@ -835,8 +849,8 @@ private slots:
         QFETCH(QJsonValue, value);
         QFETCH(int, expected);
 
-        const std::vector<QWidget *(*)(mirante::ItemContext &, QWidget *)> factories{&createMergeRequestListView,
-                                                                                     &createIssueListView};
+        const std::vector<QWidget *(*)(mirante::ItemContext &, QWidget *)> factories{
+            &createMergeRequestListView, &createIssueListView, &createPipelineListView};
         for (const auto factory : factories) {
             FakeContext context;
             if (!value.isUndefined())
@@ -973,6 +987,191 @@ private slots:
         // A missing date is the oldest.
         QCOMPARE(cellText(view, 2, MrRef), QStringLiteral("backend!3"));
         QCOMPARE(cellText(view, 2, MrUpdated), kDash);
+    }
+
+    // The pipeline list.
+
+    void pipelineRowsDrawFromData()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        // Sorted on the id, newest first.
+        QCOMPARE(rowCount(view), 4);
+        QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("9105"));
+        QCOMPARE(cellText(view, 0, PipelineStatus), QStringLiteral("Passed"));
+        QCOMPARE(cellText(view, 0, PipelineRef), QStringLiteral("main"));
+        QCOMPARE(cellText(view, 0, PipelineAuthor), QStringLiteral("Bruno Author"));
+        const QDateTime started = QDateTime::fromString(QStringLiteral("2026-10-28T15:50:30.000Z"), Qt::ISODateWithMs);
+        QCOMPARE(cellText(view, 0, PipelineStarted), mirante::widgets::compactDate(started));
+
+        // GitLab's list answers usually lack these two.
+        QCOMPARE(cellText(view, 1, PipelineId), QStringLiteral("9104"));
+        QCOMPARE(cellText(view, 1, PipelineStatus), QStringLiteral("Failed"));
+        QCOMPARE(cellText(view, 1, PipelineAuthor), kDash);
+        QCOMPARE(cellText(view, 1, PipelineStarted), kDash);
+
+        // A pipeline list asks for nothing more.
+        QVERIFY(context.client.requests().isEmpty());
+    }
+
+    void pipelineIdsSortAsNumbers()
+    {
+        const auto row = [](int id) { return QJsonObject{{QStringLiteral("id"), id}}; };
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({row(99), row(1000), row(250)});
+        View view(createPipelineListView(context, nullptr));
+
+        QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("1000"));
+        QCOMPARE(cellText(view, 1, PipelineId), QStringLiteral("250"));
+        QCOMPARE(cellText(view, 2, PipelineId), QStringLiteral("99"));
+    }
+
+    void pipelineFilterOnStatus()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineStatus)));
+        QVERIFY(filter);
+        QCOMPARE(filter->count(), 4);
+        QCOMPARE(filter->itemText(0), QStringLiteral("All"));
+
+        filter->setCurrentIndex(filter->findText(QStringLiteral("Failed")));
+        QCOMPARE(rowCount(view), 2);
+        QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("9104"));
+
+        // It survives new rows.
+        context.source.change(pipelines());
+        QCOMPARE(rowCount(view), 2);
+        QCOMPARE(filter->currentText(), QStringLiteral("Failed"));
+    }
+
+    void pipelineAdd_data()
+    {
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QJsonObject>("config");
+
+        QTest::newRow("branch") << QStringLiteral("9104") << QStringLiteral("acme/backend feature/retry-button CI")
+                                << QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                               {QStringLiteral("branchSource"), QStringLiteral("fixed")},
+                                               {QStringLiteral("branch"), QStringLiteral("feature/retry-button")}};
+        QTest::newRow("merge request") << QStringLiteral("9103") << QStringLiteral("acme/backend!42 CI")
+                                       << QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                                      {QStringLiteral("branchSource"), QStringLiteral("mergeRequest")},
+                                                      {QStringLiteral("iid"), 42}};
+    }
+
+    void pipelineAdd()
+    {
+        QFETCH(QString, key);
+        QFETCH(QString, name);
+        QFETCH(QJsonObject, config);
+
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        emit list(view)->rowLinkActivated(key, QStringLiteral("add"));
+
+        QCOMPARE(context.added.size(), 1);
+        QCOMPARE(context.added.first().typeId, QStringLiteral("gitlab.pipeline"));
+        QCOMPARE(context.added.first().name, name);
+        QCOMPARE(context.added.first().config, config);
+
+        chooseFromMenu(view, key, QStringLiteral("Add to task as item"));
+        QCOMPARE(context.added.size(), 2);
+        QCOMPARE(context.added.last().config, config);
+    }
+
+    // Only the head of a merge request names it, as the plan says.
+    void pipelineOtherRefsAreBranches()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({QJsonObject{{QStringLiteral("id"), 1},
+                                                          {QStringLiteral("ref"), QStringLiteral("refs/merge-requests/x/head")}}});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        chooseFromMenu(view, QStringLiteral("1"), QStringLiteral("Add to task as item"));
+        QCOMPARE(context.added.first().config.value(QStringLiteral("branchSource")).toString(),
+                 QStringLiteral("fixed"));
+    }
+
+    void pipelineWebAndOpenUseTheRowsAddress()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        const QUrl address(kBase + QStringLiteral("/acme/backend/-/pipelines/9104"));
+        emit list(view)->rowLinkActivated(QStringLiteral("9104"), QStringLiteral("web"));
+        QCOMPARE(m_opened, QList<QUrl>{address});
+
+        emit list(view)->rowLinkActivated(QStringLiteral("9104"), QStringLiteral("open"));
+        QCOMPARE(context.pages, QList<QUrl>{address});
+    }
+
+    void pipelineAddressIsBuiltWithoutWebUrl()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({QJsonObject{{QStringLiteral("id"), 5}}});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        chooseFromMenu(view, QStringLiteral("5"), QStringLiteral("Web"));
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kBase + QStringLiteral("/acme/backend/-/pipelines/5"))});
+        // A row without a ref has no branch to add.
+        QVERIFY(!menuEntryEnabled(view, QStringLiteral("5"), QStringLiteral("Add to task as item")));
+    }
+
+    void pipelineWebLinkIsTheProjectsPage()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        View view(createPipelineListView(context, nullptr));
+        QCOMPARE(list(view)->webLink(), QUrl(kBase + QStringLiteral("/acme/backend/-/pipelines")));
+    }
+
+    // Without a project there is no link, and the status's message shows.
+    void pipelineIncompleteConfiguration()
+    {
+        FakeContext context;
+        context.itemConfig = QJsonObject{{QStringLiteral("source"), QStringLiteral("all")}};
+        context.source.status.message = QStringLiteral("Set the project in the item's settings.");
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        QVERIFY(list(view)->webLink().isEmpty());
+        QVERIFY(shownText(view).contains(context.source.status.message));
+        QVERIFY(!table(view)->isVisible());
+        QVERIFY(context.client.requests().isEmpty());
+    }
+
+    void pipelineEmptyListShowsALine()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        QVERIFY(table(view)->isVisible());
+        QVERIFY(shownText(view).contains(QStringLiteral("No pipelines")));
     }
 
     // The row menu.

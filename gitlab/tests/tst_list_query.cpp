@@ -20,6 +20,7 @@ namespace {
 
 const QString kQuery = QStringLiteral("?state=opened&scope=all&order_by=updated_at&per_page=100");
 const QString kUser = QStringLiteral("GET api/v4/user");
+const QString kPipelines = QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines");
 
 QString dataFile(const QString &name)
 {
@@ -51,6 +52,12 @@ QString queryText(ListKind kind, const QString &preset, const QString &filter = 
 QJsonObject allOpen(const QString &scope = QStringLiteral("all"))
 {
     return QJsonObject{{QStringLiteral("scope"), scope}, {QStringLiteral("preset"), QStringLiteral("allOpen")}};
+}
+
+QJsonObject pipelineList(const QString &source)
+{
+    return QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                       {QStringLiteral("source"), source}};
 }
 
 ApiReply forbiddenReply()
@@ -530,6 +537,160 @@ private slots:
         WAIT_FOR_FINISH(job);
         QCOMPARE(job.client.requests().constLast().options.maxRows, 100);
         QCOMPARE(job.finished->summary, QStringLiteral("100+ merge requests"));
+    }
+
+    // The pipeline list.
+
+    void pipelineListSources_data()
+    {
+        QTest::addColumn<QJsonObject>("config");
+        QTest::addColumn<QString>("key");
+
+        const QString all = kPipelines + QStringLiteral("?per_page=100");
+        QJsonObject branch = pipelineList(QStringLiteral("branch"));
+        branch.insert(QStringLiteral("branch"), QStringLiteral("feature/login"));
+        QJsonObject emptyBranch = pipelineList(QStringLiteral("branch"));
+        emptyBranch.insert(QStringLiteral("branch"), QStringLiteral("  "));
+        QJsonObject mergeRequest = pipelineList(QStringLiteral("mergeRequest"));
+        mergeRequest.insert(QStringLiteral("iid"), 42);
+
+        QTest::newRow("all") << pipelineList(QStringLiteral("all")) << all;
+        QTest::newRow("absent source") << QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}}
+                                       << all;
+        QTest::newRow("branch") << branch << kPipelines + QStringLiteral("?ref=feature%2Flogin&per_page=100");
+        QTest::newRow("absent branch") << pipelineList(QStringLiteral("branch"))
+                                       << kPipelines + QStringLiteral("?ref=master&per_page=100");
+        QTest::newRow("empty branch") << emptyBranch << kPipelines + QStringLiteral("?ref=master&per_page=100");
+        QTest::newRow("merge request")
+            << mergeRequest << QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests/42/pipelines?per_page=100");
+    }
+
+    void pipelineListSources()
+    {
+        QFETCH(QJsonObject, config);
+        QFETCH(QString, key);
+
+        FakeStatusJob job;
+        job.configValues = config;
+        QVERIFY(job.client.setJsonFile(key, dataFile(QStringLiteral("pipeline_list.json"))));
+        fetchPipelineListStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(job.client.requestKeys(), QStringList{key});
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QCOMPARE(status.summary, QStringLiteral("4 pipelines"));
+        QVERIFY(status.attention.isEmpty());
+        QVERIFY(!status.closed.has_value());
+        QVERIFY(status.updatedAt.isValid());
+        QCOMPARE(status.data.value(QStringLiteral("rows")).toArray(), readRows(QStringLiteral("pipeline_list.json")));
+        QCOMPARE(status.data.value(QStringLiteral("total")).toInt(), 4);
+        QVERIFY(job.client.requests().constLast().options.followLinks);
+    }
+
+    // "Mine" needs the current user first.
+    void pipelineListOfMine()
+    {
+        const QString key = kPipelines + QStringLiteral("?username=ana.reviewer&per_page=100");
+        FakeStatusJob job;
+        job.configValues = pipelineList(QStringLiteral("mine"));
+        QVERIFY(job.client.setJsonFile(kUser, dataFile(QStringLiteral("user.json"))));
+        QVERIFY(job.client.setJsonFile(key, dataFile(QStringLiteral("pipeline_list.json"))));
+        fetchPipelineListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.client.requestKeys(), (QStringList{kUser, key}));
+    }
+
+    void pipelineListOfMineWithoutAUser()
+    {
+        FakeStatusJob job;
+        job.configValues = pipelineList(QStringLiteral("mine"));
+        job.client.setReply(kUser, forbiddenReply());
+        fetchPipelineListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Error);
+        QCOMPARE(job.client.requestKeys(), QStringList{kUser});
+    }
+
+    void pipelineListProjectFromTheSetting()
+    {
+        const QString key = kPipelines + QStringLiteral("?per_page=100");
+        FakeStatusJob job;
+        job.configValues = QJsonObject{{QStringLiteral("source"), QStringLiteral("all")}};
+        job.projectSettings = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}};
+        job.client.setJson(key, rows(0));
+        fetchPipelineListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.client.requestKeys(), QStringList{key});
+    }
+
+    void pipelineListIncomplete_data()
+    {
+        QTest::addColumn<QJsonObject>("config");
+        QTest::addColumn<QString>("message");
+
+        QTest::newRow("no project") << QJsonObject{{QStringLiteral("source"), QStringLiteral("all")}}
+                                    << QStringLiteral("Set the project in the item's settings.");
+        QTest::newRow("no number") << pipelineList(QStringLiteral("mergeRequest"))
+                                   << QStringLiteral("Set the merge request number in the item's settings.");
+        QTest::newRow("unknown source") << pipelineList(QStringLiteral("everyone"))
+                                        << QStringLiteral("Set the source in the item's settings.");
+    }
+
+    void pipelineListIncomplete()
+    {
+        QFETCH(QJsonObject, config);
+        QFETCH(QString, message);
+
+        FakeStatusJob job;
+        job.configValues = config;
+        fetchPipelineListStatus(job);
+        QCOMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->state, ItemStatus::State::None);
+        QCOMPARE(job.finished->message, message);
+        QVERIFY(job.client.requests().isEmpty());
+    }
+
+    void pipelineListSummaries_data()
+    {
+        QTest::addColumn<int>("limit");
+        QTest::addColumn<int>("count");
+        QTest::addColumn<QString>("summary");
+
+        QTest::newRow("none") << 100 << 0 << "0 pipelines";
+        QTest::newRow("one") << 100 << 1 << "1 pipeline";
+        QTest::newRow("some") << 100 << 12 << "12 pipelines";
+        QTest::newRow("at the limit") << 100 << 100 << "100+ pipelines";
+        QTest::newRow("at another limit") << 20 << 20 << "20+ pipelines";
+    }
+
+    void pipelineListSummaries()
+    {
+        QFETCH(int, limit);
+        QFETCH(int, count);
+        QFETCH(QString, summary);
+
+        FakeStatusJob job;
+        job.configValues = pipelineList(QStringLiteral("all"));
+        job.configValues.insert(QStringLiteral("limit"), limit);
+        job.client.setJson(kPipelines + QStringLiteral("?per_page=%1").arg(limit), rows(count));
+        fetchPipelineListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->summary, summary);
+        QCOMPARE(job.finished->data.value(QStringLiteral("total")).toInt(), count);
+    }
+
+    void pipelineListFailedReply()
+    {
+        FakeStatusJob job;
+        job.configValues = pipelineList(QStringLiteral("all"));
+        job.client.setReply(kPipelines + QStringLiteral("?per_page=100"), forbiddenReply());
+        fetchPipelineListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Error);
+        QVERIFY(job.finished->data.isEmpty());
     }
 
     // A failed request for the user asks for no list.

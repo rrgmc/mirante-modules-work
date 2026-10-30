@@ -4,6 +4,7 @@
 #include "GitLabLists.h"
 #include "GitLabMergeRequestListView.h"
 #include "GitLabMergeRequestView.h"
+#include "GitLabPipelineListView.h"
 #include "GitLabPipelineView.h"
 #include "GitLabSettings.h"
 #include "GitLabStatus.h"
@@ -222,11 +223,17 @@ std::vector<Field> listFields(const QStringList &presets, const QStringList &pre
     return withSections(std::move(fields), listSizeFields());
 }
 
-std::vector<Field> pipelineFields()
+// Empty means kDefaultBranch, which the placeholder shows.
+Field branchField()
 {
     Field branch = makeField(QStringLiteral("branch"), QCoreApplication::translate("gitlab", "Branch"),
                              Field::Type::Text, false, kDefaultBranch);
     branch.defaultValue = kDefaultBranch;
+    return branch;
+}
+
+std::vector<Field> pipelineFields()
+{
     return {
         projectField(),
         choiceField(QStringLiteral("branchSource"), QCoreApplication::translate("gitlab", "Branch from"),
@@ -234,10 +241,28 @@ std::vector<Field> pipelineFields()
                     {QCoreApplication::translate("gitlab", "A fixed branch"),
                      QCoreApplication::translate("gitlab", "Current branch of the main folder"),
                      QCoreApplication::translate("gitlab", "Branch of a linked merge request")}),
-        branch,
+        branchField(),
         makeField(QStringLiteral("iid"), QCoreApplication::translate("gitlab", "Merge request number"),
                   Field::Type::Integer),
     };
+}
+
+std::vector<Field> pipelineListFields()
+{
+    std::vector<Field> fields{
+        projectField(),
+        choiceField(QStringLiteral("source"), QCoreApplication::translate("gitlab", "Show"),
+                    {QStringLiteral("all"), QStringLiteral("mine"), QStringLiteral("branch"),
+                     QStringLiteral("mergeRequest")},
+                    {QCoreApplication::translate("gitlab", "All pipelines"),
+                     QCoreApplication::translate("gitlab", "Started by me"),
+                     QCoreApplication::translate("gitlab", "Of a branch"),
+                     QCoreApplication::translate("gitlab", "Of a merge request")}),
+        branchField(),
+        makeField(QStringLiteral("iid"), QCoreApplication::translate("gitlab", "Merge request number"),
+                  Field::Type::Integer),
+    };
+    return withSections(std::move(fields), listSizeFields());
 }
 
 } // namespace
@@ -300,6 +325,12 @@ void registerModule(ModuleRegistrar &registrar)
                                               "stages and jobs. The branch is a fixed one, the main folder's current "
                                               "branch or a merge request's branch."),
         pipelineFields(), settings, &fetchPipelineStatus, &createPipelineView));
+    registrar.addItemType(std::make_unique<GitLabItemType>(
+        QStringLiteral("gitlab.pipeline.list"), QCoreApplication::translate("gitlab", "GitLab CI Pipeline List"),
+        QCoreApplication::translate("gitlab", "CI"),
+        QCoreApplication::translate("gitlab", "A table of a project's pipelines: all of them, those you started, or "
+                                              "those of a branch or a merge request."),
+        pipelineListFields(), settings, &fetchPipelineListStatus, &createPipelineListView));
     registrar.addItemType(std::make_unique<GitLabItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),
         QCoreApplication::translate("gitlab", "Issue"),

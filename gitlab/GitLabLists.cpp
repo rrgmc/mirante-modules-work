@@ -150,6 +150,21 @@ void fetchList(StatusJob &job, ListKind kind)
     requestRows(client, kind, scope, listQuery(kind, preset, 0, filter), limit, finishWithRows);
 }
 
+QString pipelineSummary(int total, int limit)
+{
+    if (total >= limit)
+        return tr("%1+ pipelines").arg(limit);
+    return total == 1 ? tr("1 pipeline") : tr("%1 pipelines").arg(total);
+}
+
+// A status without a request: the configuration is not complete.
+ItemStatus incompleteList(const QString &message)
+{
+    ItemStatus status;
+    status.message = message;
+    return status;
+}
+
 } // namespace
 
 int listLimit(const QJsonObject &config)
@@ -232,6 +247,59 @@ void fetchMergeRequestListStatus(StatusJob &job)
 void fetchIssueListStatus(StatusJob &job)
 {
     fetchList(job, ListKind::Issues);
+}
+
+void fetchPipelineListStatus(StatusJob &job)
+{
+    const QJsonObject config = job.config();
+    const QString project = projectPath(config, job.projectSetting(kProjectSettingKey));
+    if (project.isEmpty()) {
+        job.finish(incompleteList(tr("Set the project in the item's settings.")));
+        return;
+    }
+
+    const int limit = listLimit(config);
+    StatusJob *target = &job;
+    const GitLabClient client(job.server(), job.owner());
+    const GitLabClient::Done finishWithRows = [target, limit](const ApiReply &reply) {
+        if (!reply.ok()) {
+            target->finish(statusFromReply(reply));
+            return;
+        }
+        const QJsonArray rows = reply.json.array();
+        target->finish(listStatus(pipelineSummary(int(rows.size()), limit), rows));
+    };
+
+    // An absent source is the first choice of the form.
+    const QString source = config.value(QStringLiteral("source")).toString();
+    if (source == QLatin1String("mergeRequest")) {
+        const qint64 iid = itemNumber(config);
+        if (iid == 0) {
+            job.finish(incompleteList(tr("Set the merge request number in the item's settings.")));
+            return;
+        }
+        client.mergeRequestPipelines(project, iid, limit, finishWithRows);
+    } else if (source == QLatin1String("mine")) {
+        client.currentUser([=](const ApiReply &user) {
+            if (!user.ok()) {
+                target->finish(statusFromReply(user));
+                return;
+            }
+            // Encoded here, as a branch is, so the name reaches GitLab whole.
+            const QString username = user.json.object().value(QStringLiteral("username")).toString();
+            QUrlQuery query;
+            query.addQueryItem(QStringLiteral("username"), GitLabClient::encodePath(username));
+            client.pipelines(project, query, limit, finishWithRows);
+        });
+    } else if (source == QLatin1String("branch")) {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("ref"), GitLabClient::encodePath(configuredBranch(config)));
+        client.pipelines(project, query, limit, finishWithRows);
+    } else if (source.isEmpty() || source == QLatin1String("all")) {
+        client.pipelines(project, {}, limit, finishWithRows);
+    } else {
+        job.finish(incompleteList(tr("Set the source in the item's settings.")));
+    }
 }
 
 } // namespace mirante::modules::gitlab

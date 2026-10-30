@@ -55,6 +55,12 @@ QString projectPath(const QJsonObject &config, const QJsonValue &defaultProject)
     return trimSlashes(defaultProject.toString());
 }
 
+QString configuredBranch(const QJsonObject &config)
+{
+    const QString branch = config.value(QStringLiteral("branch")).toString().trimmed();
+    return branch.isEmpty() ? kDefaultBranch : branch;
+}
+
 qint64 itemNumber(const QJsonObject &config)
 {
     const QJsonValue value = config.value(QStringLiteral("iid"));
@@ -76,6 +82,12 @@ QUrl mergeRequestUrl(const QUrl &baseUrl, const QJsonObject &config, const QJson
 QUrl issueUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)
 {
     return pageUrl(baseUrl, config, defaultProject, QStringLiteral("issues"));
+}
+
+QUrl pipelinesUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)
+{
+    const QString project = projectPath(config, defaultProject);
+    return project.isEmpty() ? QUrl() : projectPageUrl(baseUrl, project, QStringLiteral("pipelines"));
 }
 
 std::optional<PageAddress> readPageAddress(const QUrl &url, const QList<QUrl> &baseUrls)
@@ -182,6 +194,12 @@ std::optional<UrlMatch> matchUrl(const QString &typeId, const QUrl &url, const Q
         } else {
             return std::nullopt;
         }
+    } else if (typeId == QLatin1String("gitlab.pipeline.list")) {
+        // A branch or one pipeline is what the pipeline type follows.
+        if (!pipelines || one || !address->ref.isEmpty())
+            return std::nullopt;
+        match.config.insert(QStringLiteral("source"), QStringLiteral("all"));
+        match.name = project + QStringLiteral(" pipelines");
     } else {
         return std::nullopt;
     }

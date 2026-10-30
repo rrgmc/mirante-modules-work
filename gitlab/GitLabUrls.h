@@ -21,6 +21,9 @@ inline const QString kDefaultBranch = QStringLiteral("master");
 // is empty. Slashes at the start and end are removed. Empty if neither is set.
 QString projectPath(const QJsonObject &config, const QJsonValue &defaultProject);
 
+// The "branch" key. Empty means kDefaultBranch, which the field's placeholder shows.
+QString configuredBranch(const QJsonObject &config);
+
 // The "iid" key as a positive number, or 0. The form stores a number, but a
 // file edited by hand may hold the number as text.
 qint64 itemNumber(const QJsonObject &config);
@@ -32,6 +35,9 @@ QUrl mergeRequestUrl(const QUrl &baseUrl, const QJsonObject &config, const QJson
 // <baseUrl>/<project>/-/issues/<iid>, or an empty URL if the project or the
 // number is missing. defaultProject is the project's "project" setting.
 QUrl issueUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject);
+
+// <baseUrl>/<project>/-/pipelines, or an empty URL if the project is missing.
+QUrl pipelinesUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject);
 
 // A GitLab page that the user pasted: its server, its project and what it
 // shows. See README.md#items-from-a-link.
@@ -53,7 +59,8 @@ std::optional<PageAddress> readPageAddress(const QUrl &url, const QList<QUrl> &b
 // What the type with typeId makes of url, for ItemType::fromUrl(). Merge
 // request and issue pages fill the summary and page types; their list pages
 // fill the list types; a merge request page or a pipelines page fills the CI
-// pipeline. Null if the type does not take the address.
+// pipeline; a pipelines page without a ref or an id also fills the CI pipeline
+// list. Null if the type does not take the address.
 std::optional<UrlMatch> matchUrl(const QString &typeId, const QUrl &url, const QList<QUrl> &baseUrls);
 
 } // namespace mirante::modules::gitlab

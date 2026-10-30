@@ -36,5 +36,6 @@ QUrl listWebUrl(ListKind kind, const QUrl &baseUrl, const QJsonObject &config, c
 // The fetches of ItemType::fetchStatus(). data holds rows and total.
 void fetchMergeRequestListStatus(StatusJob &job);
 void fetchIssueListStatus(StatusJob &job);
+void fetchPipelineListStatus(StatusJob &job);
 
 } // namespace mirante::modules::gitlab

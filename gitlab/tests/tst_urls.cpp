@@ -18,6 +18,7 @@ void registerModule(mirante::ModuleRegistrar &registrar);
 }
 
 using mirante::modules::gitlab::issueUrl;
+using mirante::modules::gitlab::pipelinesUrl;
 using mirante::modules::gitlab::mergeRequestUrl;
 using mirante::modules::gitlab::projectPath;
 
@@ -134,6 +135,17 @@ private slots:
         QVERIFY(mergeRequestUrl(base, config("a/b", -3), {}).isEmpty());
         QVERIFY(issueUrl(base, config("a/b", "x"), {}).isEmpty());
         QVERIFY(issueUrl(base, QJsonObject(), {}).isEmpty());
+    }
+
+    void pipelinesAddress()
+    {
+        const QJsonObject project{{QStringLiteral("project"), QStringLiteral("group/project")}};
+        const QJsonValue setting(QStringLiteral("team/app"));
+        QCOMPARE(pipelinesUrl(QUrl(QStringLiteral("https://gitlab.com/")), project, {}),
+                 QUrl(QStringLiteral("https://gitlab.com/group/project/-/pipelines")));
+        QCOMPARE(pipelinesUrl(QUrl(QStringLiteral("https://example.org/gitlab")), {}, setting),
+                 QUrl(QStringLiteral("https://example.org/gitlab/team/app/-/pipelines")));
+        QVERIFY(pipelinesUrl(QUrl(QStringLiteral("https://gitlab.com")), {}, {}).isEmpty());
     }
 
     void typesDeclareRendering()

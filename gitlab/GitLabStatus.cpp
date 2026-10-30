@@ -612,11 +612,7 @@ void fetchPipelineStatus(StatusJob &job)
         return;
     }
 
-    // An empty branch is the default that the field's placeholder shows.
-    QString branch = config.value(QStringLiteral("branch")).toString().trimmed();
-    if (branch.isEmpty())
-        branch = kDefaultBranch;
-    fetchPipelines(target, {project, branch, 0, {}});
+    fetchPipelines(target, {project, configuredBranch(config), 0, {}});
 }
 
 } // namespace mirante::modules::gitlab
