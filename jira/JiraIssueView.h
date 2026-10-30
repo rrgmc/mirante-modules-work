@@ -17,13 +17,6 @@ namespace mirante::modules::jira {
 
 QWidget *createIssueView(ItemContext &context, QWidget *parent);
 
-// The same summary of any issue, for a list's preview. It reads the issue
-// itself, through the context's server.
-QWidget *createIssuePreview(ItemContext &context, const QString &key, QWidget *parent);
-
-// Reads a preview's issue again. Does nothing for any other widget.
-void reloadIssuePreview(QWidget *preview);
-
 // The colour of a status, from Jira's status category.
 widgets::StatusRole statusCategoryRole(const QString &category);
 

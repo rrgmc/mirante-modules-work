@@ -1,0 +1,17 @@
+[
+    {
+        "id": "summary",
+        "name": "Summary",
+        "custom": false
+    },
+    {
+        "id": "fixVersions",
+        "name": "Fix Version/s",
+        "custom": false
+    },
+    {
+        "id": "customfield_10130",
+        "name": "Team",
+        "custom": true
+    }
+]

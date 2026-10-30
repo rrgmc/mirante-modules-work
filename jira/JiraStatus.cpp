@@ -1,12 +1,15 @@
 #include "JiraStatus.h"
 
 #include "JiraClient.h"
+#include "JiraLists.h"
 #include "JiraSettings.h"
 
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QRegularExpression>
+#include <QSet>
 
+#include <algorithm>
 #include <functional>
 #include <utility>
 
@@ -43,10 +46,10 @@ Sprint readSprint(const QJsonValue &value)
     return {sprint.value(QStringLiteral("name")).toString(), sprint.value(QStringLiteral("state")).toString()};
 }
 
-// Fetches the issue named by the job's "key", and finishes the job with what
-// read makes of the answer.
+// Fetches the issue named by the job's "key", and passes the answer on to read,
+// which finishes the job. A failed reply finishes it here.
 void fetchIssue(StatusJob &job, const QStringList &fields, const QStringList &expand,
-                std::function<ItemStatus(const QJsonObject &)> read)
+                std::function<void(StatusJob &, const QJsonObject &)> read)
 {
     const QString key = job.config().value(QStringLiteral("key")).toString().trimmed();
     if (key.isEmpty()) {
@@ -62,9 +65,76 @@ void fetchIssue(StatusJob &job, const QStringList &fields, const QStringList &ex
     client.issue(
         key, fields, job.owner(),
         [owner, read = std::move(read)](const ApiReply &reply) {
-            owner->finish(reply.ok() ? read(reply.json.object()) : statusFromReply(reply));
+            if (reply.ok())
+                read(*owner, reply.json.object());
+            else
+                owner->finish(statusFromReply(reply));
         },
         expand);
+}
+
+// What finishing the search for an issue's children needs.
+struct ChildrenSearch
+{
+    JiraClient client;
+    SearchOptions options;
+    ItemStatus status;
+    QSet<QString> listed;
+    int subtaskCount = 0;
+};
+
+// Searches with jql, adds the children to the status, and finishes the job. A
+// site that does not know Epic Link refuses the whole query with a 400, so
+// fallback, if any, is asked next. Any other failure keeps the status as it is.
+void searchChildren(StatusJob *owner, const ChildrenSearch &search, const QString &jql, const QString &fallback)
+{
+    search.client.search(jql, search.options, owner->owner(), [owner, search, fallback](const ApiReply &reply) {
+        if (reply.error == ApiReply::Error::Http && !fallback.isEmpty()) {
+            searchChildren(owner, search, fallback, {});
+            return;
+        }
+        ItemStatus result = search.status;
+        if (reply.ok()) {
+            const QJsonObject answer = reply.json.object();
+            const QJsonArray rows = answer.value(QStringLiteral("issues")).toArray();
+            QJsonArray children;
+            for (const QJsonValue &row : rows) {
+                const QString key = row.toObject().value(QStringLiteral("key")).toString();
+                if (!search.listed.contains(key) && children.size() < kMaxChildren)
+                    children.append(row);
+            }
+            const int total = answer.value(QStringLiteral("total")).toInt(int(rows.size()));
+            result.data.insert(QStringLiteral("children"), children);
+            result.data.insert(QStringLiteral("childrenTotal"),
+                               std::max(total - search.subtaskCount, int(children.size())));
+        }
+        owner->finish(result);
+    });
+}
+
+// Adds the issue's children to status, and finishes the job.
+void fetchChildren(StatusJob &job, const QJsonObject &issue, const ItemStatus &status)
+{
+    const QJsonArray subtasks =
+        issue.value(QStringLiteral("fields")).toObject().value(QStringLiteral("subtasks")).toArray();
+    QSet<QString> listed;
+    for (const QJsonValue &subtask : subtasks)
+        listed.insert(subtask.toObject().value(QStringLiteral("key")).toString());
+
+    const JiraClient client(job.server(), deploymentOf(job.moduleSettings(kGeneralScreen)));
+    SearchOptions options;
+    options.fields = QStringList{QStringLiteral("summary"), QStringLiteral("status")};
+    options.pageSize = 100;
+    // Jira Data Center gives the total, so the rows that will not show are not
+    // needed. Jira Cloud gives none, so they are the only way to count.
+    options.maxRows = client.deployment() == Deployment::Cloud ? kCountedChildren
+                                                               : kMaxChildren + int(subtasks.size());
+
+    const QString key = issue.value(QStringLiteral("key")).toString();
+    const QString jql = childrenJql(client.deployment(), key);
+    const QString parentOnly = childrenJql(Deployment::Cloud, key);
+    searchChildren(&job, {client, options, status, listed, int(subtasks.size())}, jql,
+                   jql == parentOnly ? QString() : parentOnly);
 }
 
 } // namespace
@@ -148,15 +218,16 @@ QString sprintOf(const QJsonObject &issue)
 
 void fetchIssueStatus(StatusJob &job)
 {
-    fetchIssue(job, statusFields(), {QStringLiteral("renderedFields")}, &issueStatus);
+    fetchIssue(job, statusFields(), {QStringLiteral("renderedFields")},
+               [](StatusJob &owner, const QJsonObject &issue) { owner.finish(issueStatus(issue)); });
 }
 
 void fetchIssueSummaryStatus(StatusJob &job)
 {
-    fetchIssue(job, {}, summaryExpand(), [](const QJsonObject &issue) {
+    fetchIssue(job, {}, summaryExpand(), [](StatusJob &owner, const QJsonObject &issue) {
         ItemStatus status = issueStatus(issue);
         status.data.insert(QStringLiteral("issue"), issue);
-        return status;
+        fetchChildren(owner, issue, status);
     });
 }
 

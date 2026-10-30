@@ -41,6 +41,8 @@ The keys each type stores in the item's configuration. "Required" means the item
 | `showDetails`, `showDescription`, `showComments`, `showLinks` | boolean | `jira.issue.summary` | Each shows one section of the [view](#views). On by default, and when absent. |
 | `preset` | choice, required | `jira.list` | `myOpen` (my open issues, the default), `currentSprint` (current sprint of the project's `jira.projectKey`), `recentlyUpdated` (recently updated in that project) or `jql` (the query in `jql`). |
 | `jql` | text | `jira.list` | A JQL query, used when `preset` is `jql`. |
+| `limit` | integer | `jira.list` | How many rows the list fetches. 100 by default, and when absent or below 1. |
+| `pageSize` | integer | `jira.list` | How many rows the view shows at a time. 50 by default, and when absent or below 1. |
 
 ## Settings
 
@@ -64,6 +66,7 @@ The module calls itself "Jira", so each profile's Modules submenu shows Profiles
 | | | `deployment` | choice | `auto` ("Automatic", the default), `cloud` ("Jira Cloud") or `dc` ("Jira Data Center"). See [server and authentication](#server-and-authentication). |
 | | | `email` | text | The email of the Atlassian account. Used only for Jira Cloud. Not a secret, so it is synced with the other values. |
 | | | `token` | secret | The token for that site: an API token on Jira Cloud, a personal access token on Data Center. Never stored with the values: the core keeps it in the keychain, under `<workspace id>/<profile id>/jira/token`. |
+| | | `extraFields` | text list | Extra fields to show, by name, one per line, such as `Team`. None by default. See [extra fields](#extra-fields). |
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.jira.general`, and synced. See decisions [0054](../../../docs/decisions/0054-module-settings-replace-connections.md) and [0060](../../../docs/decisions/0060-jira-cloud-or-data-center-by-setting.md).
 
@@ -82,10 +85,8 @@ Each profile has its own values, stored in its entry of `workspace.mirante` unde
 | Method | Request |
 |---|---|
 | `issue(key, fields, expand)` | `GET issue/<key>?fields=<fields>&expand=<expand>`. Without fields, all of them. `expand` is `renderedFields` unless given. |
-| `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues (100 by default). |
-| `transitions(key)` | `GET issue/<key>/transitions` |
-| `transition(key, id)` | `POST issue/<key>/transitions` with `{"transition": {"id": <id>}}` |
-| `comment(key, text)` | `POST issue/<key>/comment`. Cloud gets the text as an Atlassian Document Format (ADF) body: a paragraph for each block between blank lines, and a hard break between lines. Data Center gets it as plain text. |
+| `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues, with Jira's `total` where it gives one, which Cloud's `search/jql` does not, and its `names` if `options.expand` asks for them. |
+| `allFields()` | `GET field`: the id and name of each of the site's fields |
 | `myself()` | `GET myself` |
 
 The key is encoded as one path segment. A `+` or `%` in a query value is encoded, so the server reads the JQL as typed. The tests are in `tests/tst_client.cpp`.
@@ -96,9 +97,10 @@ All three types report status, in `JiraStatus.cpp` and `JiraLists.cpp`. See deci
 
 **An issue:**
 
-- **Request.** `jira.issue.page` makes one `issue()` call with the fields `summary`, `status`, `assignee`, `priority`, `issuetype` and `updated`. `jira.issue.summary` makes one with all fields and `expand=renderedFields,names`.
+- **Request.** `jira.issue.page` makes one `issue()` call with the fields `summary`, `status`, `assignee`, `priority`, `issuetype` and `updated`. `jira.issue.summary` makes one with all fields and `expand=renderedFields,names`, then a search for its [children](#status).
 - **Summary.** The status and the assignee, such as "In Review · assigned to Ana", or "Done · unassigned".
-- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`. For `jira.issue.summary` also `issue`, the whole answer, which the view draws from.
+- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`. For `jira.issue.summary` also `issue`, the whole answer, which the view draws from, and `children` and `childrenTotal`.
+- **Children.** The issues whose parent is this one, from `search()` with the fields `summary` and `status`. The query is `parent = "<key>"` on Cloud, and `"Epic Link" = "<key>" OR parent = "<key>"` on Data Center, with the key quoted as in a list's query. `children` holds up to 50, without those in the issue's `subtasks`. `childrenTotal` counts all of them, also without those. Data Center gives a total, so one request is enough. Cloud gives none, so the rows are fetched and counted, up to 500. If only this search fails, as on a site that does not know `Epic Link`, the status stands and `children` is left out.
 - **Sprint.** `sprintOf()` reads the field whose entry in `names` is "Sprint", because its id differs per site. It takes the open sprint, else the last one. Jira Cloud gives objects, and older Data Center gives text such as `...Sprint@1f[id=4,state=ACTIVE,name=Week 44,...]`.
 - **Attention.** "Status changed to <name>", with the key `status:<status id>`, which clears when seen. It is reported on every fetch. The core records it as seen on the item's first status, so it counts only after the status changes.
 - **Closed.** When the status category is `done`.
@@ -116,51 +118,64 @@ All three types report status, in `JiraStatus.cpp` and `JiraLists.cpp`. See deci
   | `jql` | the `jql` field |
 
   The project key is written as a JQL string, with its quotes and backslashes escaped, so a value cannot change the query.
-- **Request.** One `search()` with the fields `summary`, `status`, `assignee` and `updated`, up to 100 rows.
-- **Summary.** "12 issues", "1 issue", or "100+ issues" at the row limit.
-- **Data.** `rows`, the issues as Jira gives them, and `total`, their number.
+- **Request.** One `search()` with the fields `summary`, `status`, `assignee` and `updated`, up to `limit` rows. With [extra fields](#extra-fields), first `allFields()`, and the search also asks for those fields and for `expand=names`.
+- **Summary.** "12 issues", "1 issue", or "100+ issues" at the row limit, which is the item's `limit`.
+- **Data.** `rows`, the issues as Jira gives them, and `total`, their number. With extra fields also `names`, from field id to name.
 - **Attention and closed.** Neither: no reasons, and `closed` stays unset.
 - **Missing values.** Without a project key, the two project presets finish with `State::None` and "Set the Jira project key in the project's settings." An empty `jql` finishes the same way with "Set the JQL query in the item's settings." Neither sends a request.
 
 The tests are in `tests/tst_status.cpp` and `tests/tst_list_jql.cpp`, on responses from both deployments in `tests/data/`, with made-up names.
 
+## Extra fields
+
+The General Configuration's `extraFields` names fields that differ per site, such as "Team" and "Fix version". See [decision 0073](../../../docs/decisions/0073-jira-extra-fields.md). `JiraFields.cpp` holds the reading:
+
+- **By name.** `fieldIdByName()` ignores case. A name that differs only in a final `s` or `/s` also matches, so "Fix version" finds Cloud's "Fix versions" and Data Center's "Fix Version/s". An exact name comes first, and of two fields with the same name, the lowest id in Jira's map.
+- **The value.** `fieldText()`: text and numbers as they are; an object by its `name`, `value` or `displayName`; a list joined with commas. Anything else, such as Cloud's rich text document in a paragraph field, reads as empty. It is shown as plain text.
+- **A name the site lacks** is left out quietly, and so is an empty value in the summary.
+
+The two views find the ids differently:
+
+- **A summary** asks for all fields and for `names`, so it has what it needs. The label is the name as the user wrote it.
+- **A list** needs the ids before its search, since `fields` takes only ids. It asks `GET field` on each fetch, and only when there are extra fields. This works the same on Cloud and Data Center, whatever the query matches. The other way, reading the `names` of a first search, would not do: Jira gives names only for the fields asked for, and none without rows. The search still asks for `expand=names`, as the decision says, and `data.names` holds its answer, or the names from `GET field` if the server ignored it. If `GET field` fails, the list keeps its usual columns. The columns exist from the start and show once `data.names` has their field, so the sort and the filter do not start over. A new list of names takes effect in a new view.
+
 ## Views
 
-`JiraIssueView.cpp` has `createIssueView()` and `createIssuePreview()`, and `JiraListView.cpp` has `createListView()`. See decisions [0066](../../../docs/decisions/0066-fixed-native-layouts-with-sections.md), [0068](../../../docs/decisions/0068-views-read-what-the-user-asked-for.md) and [0069](../../../docs/decisions/0069-open-page-in-the-placement.md).
+`JiraIssueView.cpp` has `createIssueView()`, and `JiraListView.cpp` has `createListView()`. See decisions [0066](../../../docs/decisions/0066-fixed-native-layouts-with-sections.md), [0069](../../../docs/decisions/0069-open-page-in-the-placement.md), [0070](../../../docs/decisions/0070-read-mostly-native-views.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md).
 
 **The issue.** A `SummaryView` with the key and summary as its title, pills for the status and the type, and the actions. The sections, in order, are:
 
 | Section | Key | Field | Shows |
 |---|---|---|---|
-| Details | `details` | `showDetails` | Priority, assignee, reporter, sprint |
+| Details | `details` | `showDetails` | Priority, assignee, reporter, sprint, then the [extra fields](#extra-fields) |
 | Description | `description` | `showDescription` | The HTML in `renderedFields`, else the raw text on Data Center |
 | Comments | `comments` | `showComments` | The latest five, newest first, each with its author and date |
-| Sub-tasks and links | `links` | `showLinks` | Each with its key, as a button to the external browser, then its relation, summary and status |
+| Sub-tasks and links | `links` | `showLinks` | Each with its key, as a button to the external browser, then its relation, summary and status. Then the children, each with that button, its summary and a status pill, and a line such as "23 more" if there are others. |
 
 Development information is left out in M6.
 
 | Action | Id | What it does |
 |---|---|---|
-| Change status | `changeStatus` | A menu. `transitions()` fills it each time it opens, and an entry calls `transition()`. |
-| Comment | `comment` | `askComment()`, then `comment()`. The dialog runs its own event loop, so the view may be gone when it returns. |
 | Open page | `openPage` | `ItemContext::showPage()`, or the external browser if `Shift` is held. |
 | Web | `web` | `<baseUrl>/browse/<key>` in the external browser. |
 
-A button is disabled while its request runs. After a success, the view calls `refresh()` on the status source. A failure shows its message in the action row, and a `403` also says that the token cannot do this.
+The views only read. Changing an issue happens on its page, as [decision 0070](../../../docs/decisions/0070-read-mostly-native-views.md) says.
 
-**Where the data comes from.** The view draws from `ItemStatus::data`, and redraws only when the answer changed, so a poll does not lose a text selection. With no data it shows "Loading…" or the status's message. With old data and an error it keeps the data, and the cell header shows the error. A preview has no status of its own: it reads the issue through `ItemContext::server()`, with the same drawing code. It reads again after an action, and when the list has a new status. With old data, a failed read shows its message in the action row.
+**Where the data comes from.** The view draws from `ItemStatus::data`, and redraws only when the answer changed, so a poll does not lose a text selection. With no data it shows "Loading…" or the status's message. With old data and an error it keeps the data, and the cell header shows the error.
 
 **Rendered HTML.** `RichText`, a `QTextBrowser`, holds the description and the comments.
 
 - `loadResource()` loads nothing, and answers with a blank image, or an empty style sheet. It must not answer with nothing, because the document would then read a `file:` or network path in the HTML itself.
 - `setOpenLinks(false)` and `setOpenExternalLinks(false)` are set. A click resolves the link against the base URL, and opens it in the external browser only for `http` and `https`.
 
-Other text from the server goes in labels with `Qt::PlainText`. A `&` in a transition's name is escaped, so it does not mark a shortcut.
+Other text from the server goes in labels with `Qt::PlainText`. A `&` in an issue key on a button is escaped, so it does not mark a shortcut.
 
-**The list.** An `ItemListView` with the columns Key, Summary, Status, Assignee and Updated, sorted on Updated. Assignee hides first in a narrow cell, then Updated, Status and Key. Summary stays. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`.
+**The list.** An `ItemListView` with the columns Key, Summary, Status, Assignee, Updated, the [extra fields](#extra-fields) and Links, sorted on Updated. The extra fields hide first in a narrow cell, the last of them first, then Assignee, Updated, Status and Key. Summary and Links stay. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`. Updated reads as `compactDate()` and sorts by the real date. A click on a row only selects it: there is no preview.
 
-- **Web link.** `listWebUrl()`, `<baseUrl>/issues/?jql=<query>`. It is hidden when the query cannot be built.
-- **Preview.** A click on a row shows `createIssuePreview()`. If the row goes from the list, the preview stays until the user chooses another row or closes it.
-- **Row menu.** "Add to task as item" calls `ItemContext::addItemToTask()` with the type `jira.issue.summary`, the key as its name and `{"key": <key>}`. "Open page" works as above. "Copy link" copies `<baseUrl>/browse/<key>`.
+- **Web link.** `listWebUrl()`, `<baseUrl>/issues/?jql=<query>`, above the table. It is hidden when the query cannot be built.
+- **Row links.** "Web" opens `<baseUrl>/browse/<key>` in the external browser. "Open" works as Open page above. "Add" calls `ItemContext::addItemToTask()` with the type `jira.issue.summary`, the key as its name and `{"key": <key>}`. Without a site only "Add" is there. The column sorts by the key.
+- **Row menu.** The same, as "Web", "Open page" and "Add to task as item", then "Copy link", which copies `<baseUrl>/browse/<key>`.
+- **Pages.** `setPageSize()` with the item's `pageSize`. The rows fetched are the item's `limit`.
+- **Filter.** `addFilter()` on Status. The choice is not saved.
 
 The tests are in `tests/tst_views.cpp`, with a fake context and status source. A handler stands in for the external browser, so nothing opens.

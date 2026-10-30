@@ -6,6 +6,7 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 #include <memory>
@@ -23,13 +24,15 @@ inline const QString kEmailKey = QStringLiteral("email");
 // The key of the token field. The token is never stored in the values; the
 // core keeps it in the keychain. See decision 0054.
 inline const QString kTokenKey = QStringLiteral("token");
+// Its key with the names of the extra fields to show. See decision 0073.
+inline const QString kExtraFieldsKey = QStringLiteral("extraFields");
 
 // Jira Cloud or Jira Data Center. They differ in the API root, the
 // authentication and the text format. See docs/integrations.md#jira.
 enum class Deployment { Cloud, DataCenter };
 
 // The screen: the Jira site's base URL, its deployment, the email for Jira
-// Cloud and the token.
+// Cloud, the token and the extra fields.
 std::unique_ptr<SettingsScreen> makeGeneralScreen();
 
 // The site of the screen's values. Empty when none is set, or when it is not
@@ -43,5 +46,9 @@ Deployment deploymentOf(const QJsonObject &general);
 
 // The email of the screen's values, trimmed. Empty when none is set.
 QString emailOf(const QJsonObject &general);
+
+// The names of the extra fields of the screen's values, trimmed, without empty
+// ones and without a second copy of a name, whatever its case.
+QStringList extraFieldsOf(const QJsonObject &general);
 
 } // namespace mirante::modules::jira

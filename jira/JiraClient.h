@@ -6,7 +6,6 @@
 
 #include <mirante/ApiClient.h>
 
-#include <QJsonDocument>
 #include <QString>
 #include <QStringList>
 
@@ -22,6 +21,7 @@ using JiraDone = std::function<void(const ApiReply &)>;
 struct SearchOptions
 {
     QStringList fields;     // the fields of each issue; empty for Jira's default
+    QStringList expand;     // the values of expand, such as "names"; empty for none
     int maxRows = 100;      // stops after this many issues
     int pageSize = 50;      // issues asked for in each request
 };
@@ -47,24 +47,17 @@ public:
 
     // The issues of a JQL query. Jira Cloud pages with nextPageToken on
     // search/jql, Jira Data Center with startAt on search. The pages are
-    // joined: the reply's JSON is {"issues": [...]}, up to maxRows issues.
-    // An error on any page answers with that page's reply.
+    // joined: the reply's JSON is {"issues": [...]}, up to maxRows issues, with
+    // Jira's "total" where it gives one, which Jira Cloud does not, and its
+    // "names" if it answered to that expand. An error on any page answers with
+    // that page's reply.
     void search(const QString &jql, const SearchOptions &options, QObject *receiver, JiraDone done) const;
 
-    // GET issue/<key>/transitions: the transitions the user may take now.
-    void transitions(const QString &key, QObject *receiver, JiraDone done) const;
-    // POST issue/<key>/transitions: moves the issue with the transition id.
-    void transition(const QString &key, const QString &transitionId, QObject *receiver, JiraDone done) const;
-
-    // POST issue/<key>/comment with plain text. Jira Cloud gets it as an
-    // Atlassian Document Format (ADF) body, Jira Data Center as text.
-    void comment(const QString &key, const QString &text, QObject *receiver, JiraDone done) const;
+    // GET field: all the site's fields, as a list of objects with id and name.
+    void allFields(QObject *receiver, JiraDone done) const;
 
     // GET myself: the user the token belongs to.
     void myself(QObject *receiver, JiraDone done) const;
-
-    // The body of a comment with this text on a deployment.
-    static QJsonDocument commentBody(Deployment deployment, const QString &text);
 
 private:
     QString issuePath(const QString &key) const;

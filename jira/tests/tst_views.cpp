@@ -1,5 +1,5 @@
-// The Jira issue view, its preview and the list view, with a fake context and
-// a fake status source. Nothing opens for real: handlers stand in for the
+// The Jira issue view and the list view, with a fake context and a fake status
+// source. Nothing opens for real: handlers stand in for the
 // external browser. See README.md#views.
 #include "../JiraIssueView.h"
 #include "../JiraListView.h"
@@ -9,22 +9,22 @@
 #include <mirante/Status.h>
 #include <mirante/testing/FakeApiClient.h>
 #include <mirante/widgets/ActionRow.h>
+#include <mirante/widgets/CompactDate.h>
 #include <mirante/widgets/ItemListView.h>
 #include <mirante/widgets/StatusPill.h>
 #include <mirante/widgets/SummaryView.h>
 
 #include <QApplication>
 #include <QClipboard>
+#include <QComboBox>
+#include <QDate>
 #include <QDesktopServices>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QFile>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QMenu>
-#include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
 #include <QScopeGuard>
@@ -34,14 +34,12 @@
 #include <QTest>
 #include <QTextBrowser>
 #include <QTextDocument>
-#include <QTimer>
 #include <QToolButton>
 #include <QWindow>
 
 #include <functional>
 #include <memory>
 
-using mirante::ApiReply;
 using mirante::ItemStatus;
 using mirante::testing::FakeApiClient;
 using mirante::widgets::ActionRow;
@@ -56,6 +54,11 @@ namespace {
 
 const QString kCloudBase = QStringLiteral("https://acme.atlassian.net");
 const QString kDcBase = QStringLiteral("https://jira.example.org/jira");
+
+// The column of the row links without extra fields, and the role that
+// ItemListView.cpp keeps its link ids in, since no public accessor gives them.
+constexpr int kLinksColumn = 5;
+constexpr int kLinkIdsRole = Qt::UserRole + 4;
 
 class FakeSource : public mirante::ItemStatusSource
 {
@@ -207,13 +210,6 @@ void useDataCenter(FakeContext &context, const QString &key)
     context.general = {{QStringLiteral("baseUrl"), kDcBase}};
 }
 
-QString issueRequest(const QString &root, const QString &key)
-{
-    QUrlQuery query;
-    query.addQueryItem(QStringLiteral("expand"), QStringLiteral("renderedFields,names"));
-    return FakeApiClient::key(QStringLiteral("GET"), root + QStringLiteral("/issue/") + key, query);
-}
-
 // StatusPill has no Q_OBJECT, so findChildren() cannot look for it.
 QList<StatusPill *> pillsOf(const QWidget *view)
 {
@@ -244,28 +240,6 @@ QString shownText(const QWidget *view)
     for (const QTextBrowser *browser : browsers)
         texts << browser->toPlainText();
     return texts.join(QLatin1Char('\n'));
-}
-
-// Runs check on the dialog once its own event loop runs.
-void whenDialogOpens(std::function<void(QDialog &)> check)
-{
-    QTimer::singleShot(0, qApp, [check = std::move(check)] {
-        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
-        QVERIFY(dialog);
-        check(*dialog);
-    });
-}
-
-void writeComment(QDialog &dialog, const QString &text)
-{
-    dialog.findChild<QPlainTextEdit *>()->setPlainText(text);
-    dialog.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
-}
-
-QMenu *statusMenu(QWidget *view)
-{
-    auto *button = view->findChild<QPushButton *>(QStringLiteral("changeStatus"));
-    return button ? button->menu() : nullptr;
 }
 
 QTableView *tableOf(QWidget *view)
@@ -400,7 +374,7 @@ private slots:
 
         // The title, state and actions stay.
         QVERIFY(shownText(view.get()).contains(QStringLiteral("OPS-7 Rotate")));
-        QVERIFY(view->findChild<QPushButton *>(QStringLiteral("comment")));
+        QVERIFY(view->findChild<QPushButton *>(QStringLiteral("openPage")));
     }
 
     void withoutDataShowsWhyOrLoading()
@@ -435,8 +409,7 @@ private slots:
         failed.message = QStringLiteral("No answer");
         context.source.push(failed);
 
-        const auto *body = view->findChild<QPushButton *>(QStringLiteral("comment"));
-        QVERIFY(!body->isHidden());
+        QVERIFY(!view->findChild<QPushButton *>(QStringLiteral("openPage"))->isHidden());
         QVERIFY(shownText(view.get()).contains(QStringLiteral("OPS-7 Rotate")));
     }
 
@@ -466,166 +439,18 @@ private slots:
         QCOMPARE(seen, 2);
     }
 
-    // Change status.
-
-    void transitionsAreFetchedWhenTheMenuOpens()
-    {
-        FakeContext context;
-        useCloud(context, QStringLiteral("OPS-7"));
-        context.source.status = statusOf(cloudIssue());
-        const QString request = FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/issue/OPS-7/transitions"));
-        QVERIFY(context.client.setJsonFile(request, QFINDTESTDATA("data/transitions-cloud.json")));
-        context.client.setJson(FakeApiClient::key(QStringLiteral("POST"), QStringLiteral("rest/api/3/issue/OPS-7/transitions")),
-                               QJsonDocument());
-
-        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
-        QMenu *menu = statusMenu(view.get());
-        QVERIFY(menu);
-        QVERIFY(context.client.requests().isEmpty());
-
-        emit menu->aboutToShow();
-        QCOMPARE(context.client.requestKeys(), QStringList{request});
-        QTRY_COMPARE(menu->actions().size(), 2);
-        QCOMPARE(menu->actions().at(0)->text(), QStringLiteral("Start Progress"));
-        // "&" in a name is not a shortcut.
-        QCOMPARE(menu->actions().at(1)->text(), QStringLiteral("Review && Merge"));
-
-        // A menu entry clears the error of the last action itself.
-        actionsOf(view.get())->showError(QStringLiteral("Old error"));
-        menu->actions().at(1)->trigger();
-        const FakeApiClient::Request &posted = context.client.requests().last();
-        QCOMPARE(posted.method, QStringLiteral("POST"));
-        QCOMPARE(posted.path, QStringLiteral("rest/api/3/issue/OPS-7/transitions"));
-        QCOMPARE(posted.body.object().value(QStringLiteral("transition")).toObject().value(QStringLiteral("id")).toString(),
-                 QStringLiteral("31"));
-        QVERIFY(actionsOf(view.get())->error().isEmpty());
-        QVERIFY(!view->findChild<QPushButton *>(QStringLiteral("changeStatus"))->isEnabled());
-
-        QTRY_COMPARE(context.source.refreshCount, 1);
-        QVERIFY(view->findChild<QPushButton *>(QStringLiteral("changeStatus"))->isEnabled());
-
-        // Asked again at the next opening, since a move changes what is allowed.
-        emit menu->aboutToShow();
-        QCOMPARE(context.client.requests().last().path, QStringLiteral("rest/api/3/issue/OPS-7/transitions"));
-        QCOMPARE(context.client.requests().last().method, QStringLiteral("GET"));
-        QTRY_COMPARE(menu->actions().size(), 2);
-    }
-
-    void failedTransitionShowsTheMessage()
-    {
-        FakeContext context;
-        useCloud(context, QStringLiteral("OPS-7"));
-        context.source.status = statusOf(cloudIssue());
-        QVERIFY(context.client.setJsonFile(
-            FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/issue/OPS-7/transitions")),
-            QFINDTESTDATA("data/transitions-cloud.json")));
-        ApiReply refused;
-        refused.error = ApiReply::Error::Forbidden;
-        refused.httpStatus = 403;
-        refused.message = QStringLiteral("Forbidden (403)");
-        context.client.setReply(FakeApiClient::key(QStringLiteral("POST"), QStringLiteral("rest/api/3/issue/OPS-7/transitions")),
-                                refused);
-
-        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
-        QMenu *menu = statusMenu(view.get());
-        emit menu->aboutToShow();
-        QTRY_COMPARE(menu->actions().size(), 2);
-        menu->actions().at(0)->trigger();
-
-        QTRY_VERIFY(actionsOf(view.get())->error().contains(QStringLiteral("Forbidden (403)")));
-        QCOMPARE(context.source.refreshCount, 0);
-        QVERIFY(view->findChild<QPushButton *>(QStringLiteral("changeStatus"))->isEnabled());
-    }
-
-    void failedTransitionsListShowsTheMessage()
-    {
-        FakeContext context;
-        useCloud(context, QStringLiteral("OPS-7"));
-        context.source.status = statusOf(cloudIssue());
-        context.client.failAll(ApiReply::Error::Network, QStringLiteral("No answer"));
-
-        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
-        QMenu *menu = statusMenu(view.get());
-        emit menu->aboutToShow();
-        QTRY_COMPARE(actionsOf(view.get())->error(), QStringLiteral("No answer"));
-        QCOMPARE(menu->actions().size(), 1);
-        QVERIFY(!menu->actions().at(0)->isEnabled());
-    }
-
-    // Comment.
-
-    void commentIsPostedAndRefreshes_data()
-    {
-        QTest::addColumn<bool>("cloud");
-        QTest::addColumn<QString>("path");
-        QTest::newRow("cloud") << true << QStringLiteral("rest/api/3/issue/OPS-7/comment");
-        QTest::newRow("data center") << false << QStringLiteral("rest/api/2/issue/OPS-7/comment");
-    }
-
-    void commentIsPostedAndRefreshes()
-    {
-        QFETCH(bool, cloud);
-        QFETCH(QString, path);
-        FakeContext context;
-        cloud ? useCloud(context, QStringLiteral("OPS-7")) : useDataCenter(context, QStringLiteral("OPS-7"));
-        context.source.status = statusOf(cloudIssue());
-        context.client.setJson(FakeApiClient::key(QStringLiteral("POST"), path), QJsonDocument());
-        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
-
-        whenDialogOpens([](QDialog &dialog) { writeComment(dialog, QStringLiteral("Looks good")); });
-        view->findChild<QPushButton *>(QStringLiteral("comment"))->click();
-
-        QCOMPARE(context.client.requests().size(), 1);
-        const FakeApiClient::Request &posted = context.client.requests().last();
-        QCOMPARE(posted.path, path);
-        if (cloud) {
-            QCOMPARE(posted.body.object().value(QStringLiteral("body")).toObject().value(QStringLiteral("type")).toString(),
-                     QStringLiteral("doc"));
-        } else {
-            QCOMPARE(posted.body.object().value(QStringLiteral("body")).toString(), QStringLiteral("Looks good"));
-        }
-        QTRY_COMPARE(context.source.refreshCount, 1);
-        QVERIFY(actionsOf(view.get())->error().isEmpty());
-    }
-
-    void cancelledCommentSendsNothing()
+    // The view only reads. Changing an issue happens on its page.
+    void changingAnIssueIsGone()
     {
         FakeContext context;
         useCloud(context, QStringLiteral("OPS-7"));
         context.source.status = statusOf(cloudIssue());
         std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
 
-        whenDialogOpens([](QDialog &dialog) { dialog.reject(); });
-        view->findChild<QPushButton *>(QStringLiteral("comment"))->click();
-        QVERIFY(context.client.requests().isEmpty());
-    }
-
-    void failedCommentShowsTheMessage()
-    {
-        FakeContext context;
-        useCloud(context, QStringLiteral("OPS-7"));
-        context.source.status = statusOf(cloudIssue());
-        context.client.failAll(ApiReply::Error::Http, QStringLiteral("Server error (500)"));
-        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
-
-        whenDialogOpens([](QDialog &dialog) { writeComment(dialog, QStringLiteral("Hello")); });
-        view->findChild<QPushButton *>(QStringLiteral("comment"))->click();
-
-        QTRY_COMPARE(actionsOf(view.get())->error(), QStringLiteral("Server error (500)"));
-        QCOMPARE(context.source.refreshCount, 0);
-    }
-
-    // The dialog's event loop can outlive the view.
-    void viewGoingDuringACommentSendsNothing()
-    {
-        FakeContext context;
-        useCloud(context, QStringLiteral("OPS-7"));
-        context.source.status = statusOf(cloudIssue());
-        auto *view = jira::createIssueView(context, nullptr);
-        view->show();
-
-        whenDialogOpens([view](QDialog &) { delete view; });
-        view->findChild<QPushButton *>(QStringLiteral("comment"))->click();
+        QVERIFY(!view->findChild<QPushButton *>(QStringLiteral("changeStatus")));
+        QVERIFY(!view->findChild<QPushButton *>(QStringLiteral("comment")));
+        QVERIFY(view->findChild<QPushButton *>(QStringLiteral("openPage")));
+        QVERIFY(view->findChild<QPushButton *>(QStringLiteral("web")));
         QVERIFY(context.client.requests().isEmpty());
     }
 
@@ -686,6 +511,149 @@ private slots:
 
         view->findChild<QToolButton *>(QStringLiteral("issue:SEC-3"))->click();
         QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/SEC-3"))});
+    }
+
+    // Extra fields in the summary.
+
+    void extraFieldsShowInDetails()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.general.insert(QStringLiteral("extraFields"),
+                               QJsonArray{QStringLiteral("team"), QStringLiteral("Risk"), QStringLiteral("Reviewer"),
+                                          QStringLiteral("Points"), QStringLiteral("Area"), QStringLiteral("Fix version"),
+                                          QStringLiteral("Goal"), QStringLiteral("Not on this site")});
+        context.source.status = statusOf(cloudIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        const QString text = shownText(view.get());
+        for (const char *expected : {"team", "Platform", "Risk", "High", "Reviewer", "Dora Sample", "Points", "5.5",
+                                     "Area", "Build agents", "Fix version", "2026.11, 2026.12"})
+            QVERIFY2(text.contains(QLatin1String(expected)), expected);
+        // Without a value, or on a site without the field, nothing shows.
+        QVERIFY(!text.contains(QStringLiteral("Goal")));
+        QVERIFY(!text.contains(QStringLiteral("Not on this site")));
+    }
+
+    void extraFieldsOnDataCenter()
+    {
+        FakeContext context;
+        useDataCenter(context, QStringLiteral("INFRA-1203"));
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version")});
+        context.source.status = statusOf(dcIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        const QString text = shownText(view.get());
+        QVERIFY(text.contains(QStringLiteral("Storage")));
+        QVERIFY(text.contains(QStringLiteral("Week 45")));
+    }
+
+    void extraFieldValuesAreNeverMarkup()
+    {
+        QJsonObject issue = cloudIssue();
+        QJsonObject fields = issue.value(QStringLiteral("fields")).toObject();
+        fields.insert(QStringLiteral("customfield_10034"), QStringLiteral("<img src=\"https://evil.example/a.png\">"));
+        issue.insert(QStringLiteral("fields"), fields);
+
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Area")});
+        context.source.status = statusOf(issue);
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        bool seen = false;
+        const auto labels = view->findChildren<QLabel *>();
+        for (const QLabel *label : labels) {
+            if (label->text().contains(QStringLiteral("evil.example"))) {
+                seen = true;
+                QCOMPARE(label->textFormat(), Qt::PlainText);
+            }
+        }
+        QVERIFY(seen);
+    }
+
+    // The issues whose parent is this one.
+
+    void childrenShowWithPillsAndLinks()
+    {
+        BrowserGuard browser;
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        ItemStatus status = statusOf(cloudIssue());
+        const QJsonArray children = readJson(QFINDTESTDATA("data/search-children-cloud.json"))
+                                        .value(QStringLiteral("issues"))
+                                        .toArray();
+        // As the status gives them: without the sub-task OPS-9.
+        status.data.insert(QStringLiteral("children"), QJsonArray{children.at(1), children.at(2)});
+        status.data.insert(QStringLiteral("childrenTotal"), 2);
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        const QString text = shownText(view.get());
+        QVERIFY(text.contains(QStringLiteral("Renew the staging certificate")));
+        QVERIFY(text.contains(QStringLiteral("Renew the production certificate")));
+        QVERIFY(!view->findChild<QLabel *>(QStringLiteral("childrenMore")));
+
+        // After the two of the state row.
+        const QList<StatusPill *> pills = pillsOf(view.get());
+        QCOMPARE(pills.size(), 4);
+        QCOMPARE(pills.at(2)->text(), QStringLiteral("In Progress"));
+        QCOMPARE(pills.at(2)->role(), StatusRole::Waiting);
+        QCOMPARE(pills.at(3)->text(), QStringLiteral("Done"));
+        QCOMPARE(pills.at(3)->role(), StatusRole::Good);
+
+        view->findChild<QToolButton *>(QStringLiteral("issue:OPS-12"))->click();
+        QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/OPS-12"))});
+    }
+
+    void aLineCountsTheOtherChildren()
+    {
+        QJsonArray children;
+        for (int i = 0; i < 50; ++i)
+            children.append(QJsonObject{{QStringLiteral("key"), QStringLiteral("INFRA-%1").arg(2000 + i)}});
+
+        FakeContext context;
+        useDataCenter(context, QStringLiteral("INFRA-1203"));
+        ItemStatus status = statusOf(dcIssue());
+        status.data.insert(QStringLiteral("children"), children);
+        status.data.insert(QStringLiteral("childrenTotal"), 73);
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        QVERIFY(view->findChild<QToolButton *>(QStringLiteral("issue:INFRA-2049")));
+        QVERIFY(!shownText(view.get()).contains(QStringLiteral("No sub-tasks or links.")));
+        auto *more = view->findChild<QLabel *>(QStringLiteral("childrenMore"));
+        QVERIFY(more);
+        QCOMPARE(more->text(), QStringLiteral("23 more"));
+    }
+
+    // A failed search leaves children out of the data.
+    void withoutChildrenTheSectionStaysAsItWas()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.source.status = statusOf(cloudIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+        QVERIFY(view->findChild<QToolButton *>(QStringLiteral("issue:OPS-9")));
+        QVERIFY(!view->findChild<QLabel *>(QStringLiteral("childrenMore")));
+        QCOMPARE(pillsOf(view.get()).size(), 2);
+    }
+
+    // A new answer with the same issue but other children still draws.
+    void newChildrenDrawAgain()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.source.status = statusOf(cloudIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+        QVERIFY(!view->findChild<QToolButton *>(QStringLiteral("issue:OPS-40")));
+
+        ItemStatus next = statusOf(cloudIssue());
+        next.data.insert(QStringLiteral("children"),
+                         QJsonArray{QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-40")}}});
+        next.data.insert(QStringLiteral("childrenTotal"), 1);
+        context.source.push(next);
+        QVERIFY(view->findChild<QToolButton *>(QStringLiteral("issue:OPS-40")));
     }
 
     // The rendered HTML.
@@ -829,74 +797,6 @@ private slots:
             QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(opened)});
     }
 
-    // A preview.
-
-    void previewReadsTheIssueItself()
-    {
-        FakeContext context;
-        useCloud(context, QString());
-        QVERIFY(context.client.setJsonFile(issueRequest(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7")),
-                                           QFINDTESTDATA("data/issue-full-cloud.json")));
-        std::unique_ptr<QWidget> preview(jira::createIssuePreview(context, QStringLiteral("OPS-7"), nullptr));
-
-        QVERIFY(shownText(preview.get()).contains(QStringLiteral("Loading\u2026")));
-        QTRY_VERIFY(shownText(preview.get()).contains(QStringLiteral("OPS-7 Rotate")));
-        QVERIFY(shownText(preview.get()).contains(QStringLiteral("Sprint 12")));
-        QCOMPARE(context.client.requests().size(), 1);
-        QCOMPARE(actionsOf(preview.get())->webLink(), QUrl(kCloudBase + QStringLiteral("/browse/OPS-7")));
-        // A list's own status does not stand in for the issue.
-        QCOMPARE(context.source.refreshCount, 0);
-    }
-
-    void previewShowsAFailedRead()
-    {
-        FakeContext context;
-        useCloud(context, QString());
-        std::unique_ptr<QWidget> preview(jira::createIssuePreview(context, QStringLiteral("OPS-999"), nullptr));
-        QTRY_VERIFY(shownText(preview.get()).contains(QStringLiteral("Not found (404)")));
-    }
-
-    void previewKeepsItsDataWithAFailedRead()
-    {
-        FakeContext context;
-        useCloud(context, QString());
-        QVERIFY(context.client.setJsonFile(issueRequest(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7")),
-                                           QFINDTESTDATA("data/issue-full-cloud.json")));
-        std::unique_ptr<QWidget> preview(jira::createIssuePreview(context, QStringLiteral("OPS-7"), nullptr));
-        QTRY_VERIFY(shownText(preview.get()).contains(QStringLiteral("OPS-7 Rotate")));
-
-        context.client.failAll(ApiReply::Error::Network, QStringLiteral("No answer"));
-        jira::reloadIssuePreview(preview.get());
-        QTRY_COMPARE(actionsOf(preview.get())->error(), QStringLiteral("No answer"));
-        QVERIFY(shownText(preview.get()).contains(QStringLiteral("OPS-7 Rotate")));
-        QVERIFY(!preview->findChild<QPushButton *>(QStringLiteral("comment"))->isHidden());
-
-        // The next good read takes the message away.
-        context.client.failAll(ApiReply::Error::None);
-        jira::reloadIssuePreview(preview.get());
-        QTRY_VERIFY(actionsOf(preview.get())->error().isEmpty());
-    }
-
-    void previewReadsAgainAfterAnAction()
-    {
-        FakeContext context;
-        useCloud(context, QString());
-        const QString read = issueRequest(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7"));
-        QVERIFY(context.client.setJsonFile(read, QFINDTESTDATA("data/issue-full-cloud.json")));
-        context.client.setJson(FakeApiClient::key(QStringLiteral("POST"), QStringLiteral("rest/api/3/issue/OPS-7/comment")),
-                               QJsonDocument());
-        std::unique_ptr<QWidget> preview(jira::createIssuePreview(context, QStringLiteral("OPS-7"), nullptr));
-        QTRY_VERIFY(shownText(preview.get()).contains(QStringLiteral("OPS-7 Rotate")));
-
-        whenDialogOpens([](QDialog &dialog) { writeComment(dialog, QStringLiteral("Hello")); });
-        preview->findChild<QPushButton *>(QStringLiteral("comment"))->click();
-
-        QTRY_COMPARE(context.client.requests().size(), 3);
-        QCOMPARE(context.client.requestKeys().last(), read);
-        // The list's rows follow as well.
-        QCOMPARE(context.source.refreshCount, 1);
-    }
-
     // The list.
 
     void listDrawsFromStatus()
@@ -908,12 +808,13 @@ private slots:
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         const QAbstractItemModel *model = tableOf(view.get())->model();
-        QCOMPARE(model->columnCount(), 5);
+        QCOMPARE(model->columnCount(), 6);
         QCOMPARE(model->headerData(0, Qt::Horizontal).toString(), QStringLiteral("Key"));
         QCOMPARE(model->headerData(1, Qt::Horizontal).toString(), QStringLiteral("Summary"));
         QCOMPARE(model->headerData(2, Qt::Horizontal).toString(), QStringLiteral("Status"));
         QCOMPARE(model->headerData(3, Qt::Horizontal).toString(), QStringLiteral("Assignee"));
         QCOMPARE(model->headerData(4, Qt::Horizontal).toString(), QStringLiteral("Updated"));
+        QCOMPARE(model->headerData(5, Qt::Horizontal).toString(), QStringLiteral("Links"));
         QCOMPARE(model->rowCount(), 3);
 
         // Sorted on Updated, newest first.
@@ -991,51 +892,169 @@ private slots:
         QCOMPARE(browser.catcher.urls, QList<QUrl>{link});
     }
 
-    void clickingARowShowsItsPreview()
+    // There is no preview any more, so selecting a row asks for nothing.
+    void selectingARowShowsNoPreview()
     {
         FakeContext context;
         useCloud(context, QString());
         context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
-        QVERIFY(context.client.setJsonFile(issueRequest(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7")),
-                                           QFINDTESTDATA("data/issue-full-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
         auto *list = static_cast<ItemListView *>(view.get());
-        QVERIFY(!list->preview());
 
         tableOf(view.get())->selectRow(rowOf(view.get(), QStringLiteral("OPS-7")));
-        QVERIFY(list->preview());
-        QTRY_VERIFY(shownText(list->preview()).contains(QStringLiteral("OPS-7 Rotate")));
-        QPointer<QWidget> first = list->preview();
-
-        // New rows read the preview again, and keep it.
-        const qsizetype reads = context.client.requests().size();
-        context.source.push(context.source.status);
-        QCOMPARE(list->preview(), first.data());
-        QCOMPARE(context.client.requests().size(), reads + 1);
-
-        // Close clears the selection, so the same row brings the preview back.
-        view->findChild<QToolButton *>(QStringLiteral("closePreview"))->click();
+        QCOMPARE(list->selectedKey(), QStringLiteral("OPS-7"));
         QVERIFY(!list->preview());
-        tableOf(view.get())->selectRow(rowOf(view.get(), QStringLiteral("OPS-7")));
-        QVERIFY(list->preview());
+        QVERIFY(context.client.requests().isEmpty());
     }
 
-    void previewStaysWhenItsRowGoes()
+    void rowLinks_data()
+    {
+        QTest::addColumn<bool>("hasSite");
+        QTest::addColumn<QStringList>("ids");
+        QTest::newRow("with a site") << true
+                                     << QStringList{QStringLiteral("web"), QStringLiteral("open"), QStringLiteral("add")};
+        QTest::newRow("without a site") << false << QStringList{QStringLiteral("add")};
+    }
+
+    void rowLinks()
+    {
+        QFETCH(bool, hasSite);
+        QFETCH(QStringList, ids);
+        FakeContext context;
+        useCloud(context, QString());
+        if (!hasSite)
+            context.general.remove(QStringLiteral("baseUrl"));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        const QModelIndex cell = tableOf(view.get())->model()->index(0, kLinksColumn);
+        QCOMPARE(cell.data(kLinkIdsRole).toStringList(), ids);
+        QVERIFY(cell.data().toString().isEmpty());
+    }
+
+    void rowLinkActions()
+    {
+        BrowserGuard browser;
+        FakeContext context;
+        useCloud(context, QString());
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+        view->show();
+        QVERIFY(QTest::qWaitForWindowExposed(view.get()));
+        auto *list = static_cast<ItemListView *>(view.get());
+        const QUrl page(kCloudBase + QStringLiteral("/browse/OPS-9"));
+
+        emit list->rowLinkActivated(QStringLiteral("OPS-9"), QStringLiteral("web"));
+        QCOMPARE(browser.catcher.urls, QList<QUrl>{page});
+        QVERIFY(context.shownPages.isEmpty());
+
+        emit list->rowLinkActivated(QStringLiteral("OPS-9"), QStringLiteral("open"));
+        QCOMPARE(context.shownPages, QList<QUrl>{page});
+        QCOMPARE(browser.catcher.urls.size(), 1);
+
+        // Shift takes Open to the browser.
+        {
+            const ShiftHeld shift(view->windowHandle());
+            emit list->rowLinkActivated(QStringLiteral("OPS-9"), QStringLiteral("open"));
+        }
+        QCOMPARE(context.shownPages.size(), 1);
+        QCOMPARE(browser.catcher.urls.size(), 2);
+
+        emit list->rowLinkActivated(QStringLiteral("OPS-9"), QStringLiteral("add"));
+        QCOMPARE(context.added.size(), 1);
+        QCOMPARE(context.added.at(0).typeId, QStringLiteral("jira.issue.summary"));
+        QCOMPARE(context.added.at(0).name, QStringLiteral("OPS-9"));
+        QCOMPARE(context.added.at(0).config, (QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-9")}}));
+    }
+
+    // Links have no text, so the column sorts by key, as the Key column does.
+    void linksColumnSortsByKey()
     {
         FakeContext context;
         useCloud(context, QString());
-        const QJsonObject answer = readJson(QFINDTESTDATA("data/search-list-cloud.json"));
-        context.source.status = listStatusOf(answer);
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        tableOf(view.get())->sortByColumn(kLinksColumn, Qt::AscendingOrder);
+        const QAbstractItemModel *model = tableOf(view.get())->model();
+        QCOMPARE(model->index(0, 0).data().toString(), QStringLiteral("OPS-7"));
+        QCOMPARE(model->index(1, 0).data().toString(), QStringLiteral("OPS-9"));
+        QCOMPARE(model->index(2, 0).data().toString(), QStringLiteral("OPS-10"));
+    }
+
+    void compactDatesSortByTheRealDate()
+    {
+        const auto issue = [](const QString &key, const QString &updated) {
+            return QJsonObject{{QStringLiteral("key"), key},
+                               {QStringLiteral("fields"), QJsonObject{{QStringLiteral("updated"), updated}}}};
+        };
+        // By text, "2025-..." would come after "01-..." and "12-..." the other way.
+        const int thisYear = QDate::currentDate().year();
+        const QString early = QStringLiteral("%1-01-15T10:00:00.000+0000").arg(thisYear);
+        const QString late = QStringLiteral("%1-02-15T10:00:00.000+0000").arg(thisYear);
+        const QString older = QStringLiteral("%1-12-15T10:00:00.000+0000").arg(thisYear - 1);
+        const QJsonArray rows{issue(QStringLiteral("A-1"), early), issue(QStringLiteral("A-2"), older),
+                              issue(QStringLiteral("A-3"), late),
+                              issue(QStringLiteral("A-4"), QStringLiteral("not a date"))};
+
+        FakeContext context;
+        useCloud(context, QString());
+        context.source.status = listStatusOf(QJsonObject{{QStringLiteral("issues"), rows}});
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        const QAbstractItemModel *model = tableOf(view.get())->model();
+        QCOMPARE(model->index(0, 0).data().toString(), QStringLiteral("A-3"));
+        QCOMPARE(model->index(1, 0).data().toString(), QStringLiteral("A-1"));
+        QCOMPARE(model->index(2, 0).data().toString(), QStringLiteral("A-2"));
+        QCOMPARE(model->index(0, 4).data().toString(), mirante::widgets::compactDate(jira::readJiraDate(late)));
+        QCOMPARE(model->index(2, 4).data().toString(), mirante::widgets::compactDate(jira::readJiraDate(older)));
+        // A date it cannot read shows as it came.
+        QCOMPARE(model->index(rowOf(view.get(), QStringLiteral("A-4")), 4).data().toString(), QStringLiteral("not a date"));
+    }
+
+    void statusFilter()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.2"));
+        QVERIFY(filter);
+        QCOMPARE(filter->count(), 4);
+        QCOMPARE(filter->itemText(0), QStringLiteral("All"));
+        filter->setCurrentIndex(filter->findText(QStringLiteral("To Do")));
+
+        const QAbstractItemModel *model = tableOf(view.get())->model();
+        QCOMPARE(model->rowCount(), 1);
+        QCOMPARE(model->index(0, 0).data().toString(), QStringLiteral("OPS-10"));
+    }
+
+    void pageSizeFromTheField_data()
+    {
+        QTest::addColumn<QJsonValue>("value");
+        QTest::addColumn<int>("expected");
+        QTest::newRow("absent") << QJsonValue(QJsonValue::Undefined) << 50;
+        QTest::newRow("set") << QJsonValue(2) << 2;
+        QTest::newRow("zero") << QJsonValue(0) << 50;
+        QTest::newRow("negative") << QJsonValue(-3) << 50;
+        QTest::newRow("not a number") << QJsonValue(QStringLiteral("x")) << 50;
+    }
+
+    void pageSizeFromTheField()
+    {
+        QFETCH(QJsonValue, value);
+        QFETCH(int, expected);
+        FakeContext context;
+        useCloud(context, QString());
+        if (!value.isUndefined())
+            context.itemConfig.insert(QStringLiteral("pageSize"), value);
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
         auto *list = static_cast<ItemListView *>(view.get());
-
-        tableOf(view.get())->selectRow(rowOf(view.get(), QStringLiteral("OPS-7")));
-        QPointer<QWidget> preview = list->preview();
-        QVERIFY(preview);
-
-        context.source.push(listStatusOf(QJsonObject{{QStringLiteral("issues"), QJsonArray()}}));
-        QVERIFY(list->selectedKey().isEmpty());
-        QCOMPARE(list->preview(), preview.data());
+        QCOMPARE(list->pageSize(), expected);
+        QCOMPARE(list->visibleKeys().size(), qMin(expected, 3));
     }
 
     void addToTaskPassesTypeAndConfiguration()
@@ -1047,6 +1066,8 @@ private slots:
 
         QMenu *menu = openRowMenu(view.get(), QStringLiteral("OPS-9"));
         QVERIFY(menu);
+        QCOMPARE(menu->actions().size(), 4);
+        QCOMPARE(menu->actions().at(0)->text(), QStringLiteral("Web"));
         QAction *add = menuEntry(menu, QStringLiteral("Add to task as item"));
         QVERIFY(add);
         add->trigger();
@@ -1082,9 +1103,98 @@ private slots:
         QCOMPARE(context.shownPages.size(), 1);
         QCOMPARE(browser.catcher.urls, QList<QUrl>{page});
 
+        menuEntry(menu, QStringLiteral("Web"))->trigger();
+        QCOMPARE(context.shownPages.size(), 1);
+        QCOMPARE(browser.catcher.urls.size(), 2);
+
         menuEntry(menu, QStringLiteral("Copy link"))->trigger();
         QCOMPARE(QGuiApplication::clipboard()->text(), page.toString());
         menu->close();
+    }
+
+    // Extra fields in the list.
+
+    void extraFieldsShowAsColumns()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.general.insert(QStringLiteral("extraFields"),
+                               QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version"), QStringLiteral("Not on this site")});
+        const QJsonObject answer = readJson(QFINDTESTDATA("data/search-extra-cloud.json"));
+        ItemStatus status = listStatusOf(answer);
+        status.data.insert(QStringLiteral("names"), answer.value(QStringLiteral("names")));
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        QTableView *table = tableOf(view.get());
+        const QAbstractItemModel *model = table->model();
+        QCOMPARE(model->columnCount(), 9);
+        QCOMPARE(model->headerData(5, Qt::Horizontal).toString(), QStringLiteral("Team"));
+        QCOMPARE(model->headerData(6, Qt::Horizontal).toString(), QStringLiteral("Fix version"));
+        QCOMPARE(model->headerData(8, Qt::Horizontal).toString(), QStringLiteral("Links"));
+        QCOMPARE(model->index(0, 0).data().toString(), QStringLiteral("OPS-21"));
+        QCOMPARE(model->index(0, 5).data().toString(), QStringLiteral("Platform"));
+        QCOMPARE(model->index(0, 6).data().toString(), QStringLiteral("2026.11, 2026.12"));
+        QVERIFY(model->index(1, 5).data().toString().isEmpty());
+        QCOMPARE(model->index(0, 8).data(kLinkIdsRole).toStringList().size(), 3);
+
+        // A name the site lacks is left out quietly.
+        view->resize(4000, 400);
+        view->show();
+        QVERIFY(QTest::qWaitForWindowExposed(view.get()));
+        QTRY_VERIFY(!table->isColumnHidden(5));
+        QVERIFY(!table->isColumnHidden(6));
+        QVERIFY(table->isColumnHidden(7));
+    }
+
+    // In a narrower and narrower cell, every extra field goes before any other
+    // column, and the summary and the links never go.
+    void extraFieldsHideFirst()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version")});
+        const QJsonObject answer = readJson(QFINDTESTDATA("data/search-extra-cloud.json"));
+        ItemStatus status = listStatusOf(answer);
+        status.data.insert(QStringLiteral("names"), answer.value(QStringLiteral("names")));
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+        view->resize(4000, 400);
+        view->show();
+        QVERIFY(QTest::qWaitForWindowExposed(view.get()));
+        QTableView *table = tableOf(view.get());
+        QTRY_VERIFY(!table->isColumnHidden(5));
+
+        bool sawOnlyExtrasHidden = false;
+        for (int width = 1600; width >= 200; width -= 20) {
+            view->resize(width, 400);
+            QCoreApplication::processEvents();
+            bool otherHidden = false;
+            for (const int column : {0, 2, 3, 4})
+                otherHidden = otherHidden || table->isColumnHidden(column);
+            const bool extrasHidden = table->isColumnHidden(5) && table->isColumnHidden(6);
+            if (otherHidden)
+                QVERIFY2(extrasHidden, qPrintable(QString::number(width)));
+            sawOnlyExtrasHidden = sawOnlyExtrasHidden || (extrasHidden && !otherHidden);
+            QVERIFY(!table->isColumnHidden(1));
+            QVERIFY(!table->isColumnHidden(7));
+        }
+        QVERIFY(sawOnlyExtrasHidden);
+    }
+
+    // Before the status has names, or with none, the columns stay hidden and the
+    // links stay in their place.
+    void withoutNamesTheExtraColumnsStayHidden()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team")});
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        QTableView *table = tableOf(view.get());
+        QVERIFY(table->isColumnHidden(5));
+        QCOMPARE(table->model()->index(0, 6).data(kLinkIdsRole).toStringList().size(), 3);
     }
 
     void listWithoutSourceSaysLoading()
