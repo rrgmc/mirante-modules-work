@@ -115,6 +115,63 @@ private slots:
         QCOMPARE(f.answers, 5);
     }
 
+    void onePipeline()
+    {
+        Fixture f;
+        f.client().pipeline(QStringLiteral("acme/backend"), 9001, f.done());
+        QCOMPARE(f.fake.requestKeys(), QStringList{QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/9001")});
+        QVERIFY(!f.last().options.followLinks);
+        QCOMPARE(f.answers, 1);
+    }
+
+    // The latest notes first, as a list up to maxRows.
+    void issueNotes()
+    {
+        Fixture f;
+        f.client().issueNotes(QStringLiteral("acme/backend"), 7, 20, f.done());
+        QCOMPARE(f.fake.requestKeys(),
+                 QStringList{QStringLiteral(
+                     "GET api/v4/projects/acme%2Fbackend/issues/7/notes?sort=desc&order_by=created_at&per_page=20")});
+        QVERIFY(f.last().options.followLinks);
+        QCOMPARE(f.last().options.maxRows, 20);
+        QCOMPARE(f.answers, 1);
+    }
+
+    // Like the merge request lists.
+    void issueLists()
+    {
+        Fixture f;
+        QUrlQuery filter;
+        filter.addQueryItem(QStringLiteral("state"), QStringLiteral("opened"));
+
+        f.client().projectIssues(QStringLiteral("acme/backend"), filter, 250, f.done());
+        QCOMPARE(f.last().path, QStringLiteral("api/v4/projects/acme%2Fbackend/issues"));
+        QVERIFY(f.last().options.followLinks);
+        QCOMPARE(f.last().options.maxRows, 250);
+        QCOMPARE(f.last().query.queryItemValue(QStringLiteral("state")), QStringLiteral("opened"));
+        QCOMPARE(f.last().query.queryItemValue(QStringLiteral("per_page")), QStringLiteral("100"));
+
+        f.client().groupIssues(QStringLiteral("acme/platform"), filter, 20, f.done());
+        QCOMPARE(f.last().path, QStringLiteral("api/v4/groups/acme%2Fplatform/issues"));
+        QVERIFY(f.last().options.followLinks);
+        QCOMPARE(f.last().options.maxRows, 20);
+        QCOMPARE(f.last().query.queryItemValue(QStringLiteral("per_page")), QStringLiteral("20"));
+        QCOMPARE(f.answers, 2);
+    }
+
+    void issueStateIsPut()
+    {
+        Fixture f;
+        f.client().setIssueState(QStringLiteral("acme/backend"), 7, QStringLiteral("close"), f.done());
+        QCOMPARE(f.last().method, QStringLiteral("PUT"));
+        QCOMPARE(f.last().path, QStringLiteral("api/v4/projects/acme%2Fbackend/issues/7"));
+        QCOMPARE(f.last().body, QJsonDocument(QJsonObject{{QStringLiteral("state_event"), QStringLiteral("close")}}));
+
+        f.client().setIssueState(QStringLiteral("acme/backend"), 7, QStringLiteral("reopen"), f.done());
+        QCOMPARE(f.last().body, QJsonDocument(QJsonObject{{QStringLiteral("state_event"), QStringLiteral("reopen")}}));
+        QCOMPARE(f.answers, 2);
+    }
+
     void actionsPost()
     {
         Fixture f;
