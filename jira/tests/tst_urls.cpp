@@ -159,7 +159,9 @@ private slots:
         QCOMPARE(view->property("message").toString(), message);
     }
 
-    void nativeTypesHaveNoView()
+    // Native types make their views also where the core keeps no status or
+    // servers. tst_views covers what the views show.
+    void nativeTypesMakeAView()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
@@ -167,9 +169,13 @@ private slots:
         FakeContext context;
         context.general = site(QStringLiteral("https://jira.example.com"));
         context.itemConfig = keyConfig("PROJ-1");
+        QWidget parent;
         for (const mirante::ItemType *type : registry.types()) {
-            if (type->rendering() == mirante::Rendering::Native)
-                QVERIFY2(!type->createView(context, nullptr), qPrintable(type->id()));
+            if (type->rendering() != mirante::Rendering::Native)
+                continue;
+            std::unique_ptr<QWidget> view(type->createView(context, &parent));
+            QVERIFY2(view, qPrintable(type->id()));
+            QCOMPARE(view->parentWidget(), &parent);
         }
     }
 };

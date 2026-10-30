@@ -1,4 +1,4 @@
-// The native view of a Jira list. See docs/plans/m6-native-item-types.md.
+// The native view of a Jira list. See README.md#views.
 #pragma once
 
 class QWidget;

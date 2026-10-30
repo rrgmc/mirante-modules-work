@@ -1,0 +1,62 @@
+{
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "id": "220311",
+    "self": "https://jira.example.org/jira/rest/api/2/issue/220311",
+    "key": "INFRA-1203",
+    "renderedFields": {
+        "summary": null,
+        "updated": "27/Oct/26 9:41 AM",
+        "description": "<p>Take a backup <em>first</em>. Details in <a href=\"docs/upgrade.html\">the notes</a>.</p>",
+        "comment": {
+            "comments": [
+                {"id": "90211", "author": {"displayName": "Carla Sample"}, "body": "<p>Done on staging.</p>", "created": "27/Oct/26 9:40 AM"}
+            ],
+            "maxResults": 1,
+            "total": 1,
+            "startAt": 0
+        }
+    },
+    "names": {
+        "summary": "Summary",
+        "issuetype": "Issue Type",
+        "customfield_10105": "Sprint",
+        "priority": "Priority",
+        "assignee": "Assignee",
+        "reporter": "Reporter",
+        "updated": "Updated",
+        "status": "Status",
+        "description": "Description",
+        "comment": "Comment",
+        "subtasks": "Sub-Tasks",
+        "issuelinks": "Linked Issues"
+    },
+    "fields": {
+        "summary": "Upgrade the staging database",
+        "issuetype": {"self": "https://jira.example.org/jira/rest/api/2/issuetype/3", "id": "3", "name": "Story", "subtask": false},
+        "priority": {"self": "https://jira.example.org/jira/rest/api/2/priority/2", "name": "High", "id": "2"},
+        "assignee": null,
+        "reporter": {"name": "csample", "displayName": "Carla Sample", "active": true},
+        "updated": "2026-10-27T09:41:52.000+0000",
+        "status": {
+            "self": "https://jira.example.org/jira/rest/api/2/status/10001",
+            "description": "",
+            "name": "Done",
+            "id": "10001",
+            "statusCategory": {"id": 3, "key": "done", "colorName": "green", "name": "Done"}
+        },
+        "description": "Take a backup _first_. Details in [the notes|docs/upgrade.html].",
+        "customfield_10105": [
+            "com.atlassian.greenhopper.service.sprint.Sprint@1f3c7a2[id=211,rapidViewId=18,state=ACTIVE,name=Platform, week 44,startDate=2026-10-26T09:00:00.000Z,endDate=2026-11-06T17:00:00.000Z,completeDate=<null>,sequence=211,goal=]"
+        ],
+        "comment": {
+            "comments": [
+                {"id": "90211", "author": {"name": "csample", "displayName": "Carla Sample"}, "body": "Done on staging.", "created": "2026-10-27T09:40:12.000+0000"}
+            ],
+            "maxResults": 1,
+            "total": 1,
+            "startAt": 0
+        },
+        "subtasks": [],
+        "issuelinks": []
+    }
+}
