@@ -19,7 +19,6 @@
 #include <QVBoxLayout>
 
 #include <cmath>
-#include <utility>
 
 using mirante::widgets::StatusPill;
 using mirante::widgets::StatusRole;
@@ -34,40 +33,6 @@ QString translated(const char *source)
 {
     return QCoreApplication::translate("gitlab", source);
 }
-
-// A status job for a preview, with the preview's configuration. It belongs to
-// the view, so its requests are dropped with the view.
-class PreviewJob : public QObject, public StatusJob
-{
-public:
-    PreviewJob(QObject *view, ItemContext &context, ApiClient &server, const QJsonObject &config,
-               std::function<void(const ItemStatus &)> done)
-        : QObject(view)
-        , m_context(context)
-        , m_server(server)
-        , m_config(config)
-        , m_done(std::move(done))
-    {
-    }
-
-    QJsonObject config() const override { return m_config; }
-    QJsonValue projectSetting(const QString &key) const override { return m_context.projectSetting(key); }
-    QJsonObject moduleSettings(const QString &screenId) const override { return m_context.moduleSettings(screenId); }
-    ApiClient &server() override { return m_server; }
-    QObject *owner() override { return this; }
-
-    void finish(const ItemStatus &status) override
-    {
-        deleteLater();
-        m_done(status);
-    }
-
-private:
-    ItemContext &m_context;
-    ApiClient &m_server;
-    QJsonObject m_config;
-    std::function<void(const ItemStatus &)> m_done;
-};
 
 } // namespace
 
@@ -225,10 +190,9 @@ QWidget *labelChips(const QJsonArray &labels)
     return row;
 }
 
-GitLabSummary::GitLabSummary(ItemContext &context, const QJsonObject &ownConfig, QWidget *parent)
+GitLabSummary::GitLabSummary(ItemContext &context, QWidget *parent)
     : widgets::SummaryView(parent)
     , m_context(&context)
-    , m_ownConfig(ownConfig)
 {
 }
 
@@ -241,27 +205,6 @@ void GitLabSummary::follow(ItemStatusSource *source)
     m_refresh = [source] { source->refresh(); };
     showStatus(source->current());
     source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
-}
-
-void GitLabSummary::readItself(void (*fetch)(StatusJob &))
-{
-    m_refresh = [this, fetch] {
-        ApiClient *server = m_context->server();
-        if (!server) {
-            ItemStatus status;
-            status.message = tr("This item has no server.");
-            showStatus(status);
-            return;
-        }
-        const int read = ++m_reads;
-        auto *job = new PreviewJob(this, *m_context, *server, config(), [this, read](const ItemStatus &status) {
-            if (read == m_reads)
-                showStatus(status);
-        });
-        fetch(*job);
-    };
-    showStatus({});
-    m_refresh();
 }
 
 void GitLabSummary::showStatus(const ItemStatus &status)
@@ -279,7 +222,7 @@ void GitLabSummary::showStatus(const ItemStatus &status)
 
 QJsonObject GitLabSummary::config() const
 {
-    return m_ownConfig.isEmpty() ? m_context->config() : m_ownConfig;
+    return m_context->config();
 }
 
 QString GitLabSummary::project() const

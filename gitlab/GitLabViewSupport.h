@@ -71,11 +71,10 @@ QWidget *newColumn();
 // The labels as a wrapping row of pills, or a line that says there are none.
 QWidget *labelChips(const QJsonArray &labels);
 
-// The base of the three summaries. It draws from a status: the item's own from
-// the status cache, or, for a preview, one it asks the server for through the
-// same fetch. A subclass adds its actions in its constructor and implements
-// draw(). Requests use this view as their receiver, so an answer that comes
-// after the view is gone is dropped.
+// The base of the three summaries. It draws from the item's status in the status
+// cache. A subclass adds its actions in its constructor and implements draw().
+// Requests use this view as their receiver, so an answer that comes after the
+// view is gone is dropped.
 class GitLabSummary : public widgets::SummaryView
 {
     Q_DECLARE_TR_FUNCTIONS(gitlab)
@@ -84,9 +83,6 @@ public:
     // Draws the item's status now and at each change. Null, where the core
     // keeps no status, stays at "Loading…".
     void follow(ItemStatusSource *source);
-    // Draws what fetch reads through the context's server, and reads again
-    // after an action. See decision 0068.
-    void readItself(void (*fetch)(StatusJob &));
 
 protected:
     // Reads the status again.
@@ -95,9 +91,7 @@ protected:
     // Makes the request of an action, and passes done on to it.
     using Request = std::function<void(const GitLabClient &, GitLabClient::Done)>;
 
-    // ownConfig replaces the item's configuration in a preview. It holds no
-    // section fields, so a preview's sections are all on.
-    GitLabSummary(ItemContext &context, const QJsonObject &ownConfig, QWidget *parent);
+    GitLabSummary(ItemContext &context, QWidget *parent);
 
     // Only called with data. It replaces what was drawn before.
     virtual void draw(const ItemStatus &status) = 0;
@@ -130,12 +124,9 @@ private:
     void openPage();
 
     ItemContext *m_context;
-    QJsonObject m_ownConfig;
     QUrl m_pageAddress;
     std::function<void()> m_refresh;
     bool m_drawn = false;
-    // Only the answer to the latest read of a preview counts.
-    int m_reads = 0;
 };
 
 } // namespace mirante::modules::gitlab

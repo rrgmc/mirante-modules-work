@@ -48,7 +48,7 @@ public:
     void mergeRequestPipelines(const QString &project, qint64 iid, int maxRows, Done done) const;
     void pipelineJobs(const QString &project, qint64 pipelineId, int maxRows, Done done) const;
 
-    // One pipeline, for the preview of a run.
+    // One pipeline.
     void pipeline(const QString &project, qint64 pipelineId, Done done) const;
 
     void issue(const QString &project, qint64 iid, Done done) const;

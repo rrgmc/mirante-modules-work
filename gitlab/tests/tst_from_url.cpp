@@ -132,6 +132,26 @@ private slots:
         QVERIFY(!matchUrl(QStringLiteral("gitlab.pipeline"), url("https://gitlab.com/acme/backend/-/issues/1"), {}));
     }
 
+    // Only the page of all pipelines is a list.
+    void pipelineList()
+    {
+        const QString type = QStringLiteral("gitlab.pipeline.list");
+        const auto match = matchUrl(type, url("https://gitlab.com/acme/backend/-/pipelines"), {});
+        QVERIFY(match);
+        QCOMPARE(match->config, (QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                             {QStringLiteral("source"), QStringLiteral("all")}}));
+        QCOMPARE(match->name, QStringLiteral("acme/backend pipelines"));
+        QCOMPARE(match->baseUrl, url("https://gitlab.com"));
+
+        // Another query is ignored, as for other pages.
+        QVERIFY(matchUrl(type, url("https://gitlab.com/acme/backend/-/pipelines?page=2"), {}));
+
+        QVERIFY(!matchUrl(type, url("https://gitlab.com/acme/backend/-/pipelines?ref=main"), {}));
+        QVERIFY(!matchUrl(type, url("https://gitlab.com/acme/backend/-/pipelines/123456"), {}));
+        QVERIFY(!matchUrl(type, url("https://gitlab.com/acme/backend/-/merge_requests"), {}));
+        QVERIFY(!matchUrl(type, url("https://gitlab.com/acme/backend/-/merge_requests/42"), {}));
+    }
+
     // A self-hosted server at a path is read with the profile's base URL,
     // so the path is not taken for a group.
     void selfHostedAtPath()
@@ -182,6 +202,21 @@ private slots:
         taking.sort();
         QCOMPARE(taking, (QStringList{QStringLiteral("gitlab.mr.page"), QStringLiteral("gitlab.mr.summary"),
                                       QStringLiteral("gitlab.pipeline")}));
+
+        const auto typesTaking = [&registry](const QUrl &address) {
+            QStringList ids;
+            for (const mirante::ItemType *type : registry.types()) {
+                if (type->fromUrl(address, {}))
+                    ids << type->id();
+            }
+            ids.sort();
+            return ids;
+        };
+        // The item dialog offers both, with the pipeline first, by name.
+        QCOMPARE(typesTaking(url("https://gitlab.com/acme/backend/-/pipelines")),
+                 (QStringList{QStringLiteral("gitlab.pipeline"), QStringLiteral("gitlab.pipeline.list")}));
+        QCOMPARE(typesTaking(url("https://gitlab.com/acme/backend/-/pipelines?ref=main")),
+                 QStringList{QStringLiteral("gitlab.pipeline")});
     }
 };
 

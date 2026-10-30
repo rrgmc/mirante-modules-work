@@ -10,13 +10,14 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 | `gitlab.mr.page` | GitLab MR (page) | web | The web page of one merge request, on the GitLab server of the item's profile. |
 | `gitlab.mr.list` | GitLab MR List | native | A table of merge requests in a project, a group or everywhere, such as those that wait for your review. |
 | `gitlab.pipeline` | GitLab CI Pipeline | native | The latest pipeline of a branch and those started with it, with their stages and jobs. The branch is a fixed one, the main folder's current branch or a merge request's branch. |
+| `gitlab.pipeline.list` | GitLab CI Pipeline List | native | A table of a project's pipelines: all of them, those you started, or those of a branch or a merge request. |
 | `gitlab.issue.summary` | GitLab Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `gitlab.issue.page` | GitLab Issue (page) | web | The web page of one issue, on the GitLab server of the item's profile. |
 | `gitlab.issue.list` | GitLab Issue List | native | A table of issues in a project, a group or everywhere, such as those assigned to you. |
 
 The module calls itself "GitLab" and describes itself as: "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). Since M6 the merge request, pipeline and issue summaries have [native views](#summary-views), and the lists have [tables with a preview](#list-views).
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). Since M6 the merge request, pipeline and issue summaries have [native views](#summary-views), and the lists have [tables with links on each row](#list-views).
 
 ## Server
 
@@ -36,7 +37,7 @@ The module never reads the token itself. It makes every request through the `Api
 - Paths are relative to the base URL and start with `api/v4/`, so a server installed at a path works.
 - Project and group paths are percent-encoded into the path: `acme/backend` becomes `acme%2Fbackend`.
 - A branch is percent-encoded into its query, so a branch with `+` or `&` in its name reaches GitLab whole.
-- Lists (the three merge request lists, the three issue lists, the two pipeline lists, a pipeline's jobs and an issue's notes) set `followLinks` with a row limit, and ask for `per_page` of at most 100 unless the filter names its own.
+- Lists (the three merge request lists, the three issue lists, the two pipeline lists, a pipeline's jobs and an issue's notes) set `followLinks` with a row limit, and ask for `per_page` of at most 100, and of at most that limit, unless the filter names its own.
 - An issue's notes are asked for with `sort=desc&order_by=created_at`, so the latest come first. System notes are included.
 - The CI actions send an empty JSON body, `{}`. `createPipeline` names its branch in the path's query, because `ApiClient::post()` takes no query of its own.
 
@@ -49,7 +50,7 @@ The module never reads the token itself. It makes every request through the `Api
 | `projectMergeRequests` | `GET api/v4/projects/<project>/merge_requests` |
 | `groupMergeRequests` | `GET api/v4/groups/<group>/merge_requests` |
 | `latestPipeline` | `GET api/v4/projects/<project>/pipelines/latest?ref=<branch>` |
-| `pipelines` | `GET api/v4/projects/<project>/pipelines`, with a query such as `ref=<branch>` |
+| `pipelines` | `GET api/v4/projects/<project>/pipelines`, with a query such as `ref=<branch>` or `username=<me>` |
 | `mergeRequestPipelines` | `GET api/v4/projects/<project>/merge_requests/<iid>/pipelines` |
 | `pipelineJobs` | `GET api/v4/projects/<project>/pipelines/<id>/jobs` |
 | `pipeline` | `GET api/v4/projects/<project>/pipelines/<id>` |
@@ -96,8 +97,7 @@ The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded 
 `GitLabMergeRequestView.cpp`, `GitLabPipelineView.cpp` and `GitLabIssueView.cpp` each hold one class, a subclass of `GitLabSummary` in `GitLabViewSupport.h`, which is private to the module. The layouts, fields and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabSummary` holds what they share:
 
 - **Drawing.** `follow()` draws the item's status now and at each change. With no data it shows "Loading…" or the status's message. With old data it keeps drawing that data, because the cell header shows the problem.
-- **Previews.** `createMergeRequestPreview()` and `createIssuePreview()` take a project and a number, for a list's preview. `readItself()` runs the same status fetch through a small `StatusJob` of its own, on the context's server, and draws the result with the same code. It reads again after an action. A preview's configuration holds only `project` and `iid`, so its sections are all on. It has the same actions.
-- **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status, or reads again in a preview. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
+- **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
 - **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
 - **Dialogs.** The questions before cancelling and triggering run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
 
@@ -114,10 +114,11 @@ Text from a server is plain text in every label. The tests are in `tests/tst_sum
 
 ## Lists
 
-`gitlab.mr.list` and `gitlab.issue.list` report status too, from `GitLabLists.cpp`. See [decision 0067](../../../docs/decisions/0067-lists-report-status.md).
+`gitlab.mr.list`, `gitlab.issue.list` and `gitlab.pipeline.list` report status too, from `GitLabLists.cpp`. See decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md).
 
-- **Requests.** The client method of the scope (`mergeRequests`, `projectMergeRequests` or `groupMergeRequests`, or the issue equivalents), up to 100 rows. Only a merge request list with the `reviewRequested` preset asks for the current user first. If that request fails, the list is not asked for.
-- **Status.** The state is `Ok`, and the summary reads "12 merge requests" or "12 issues", with singular forms, and "100+ merge requests" at the row limit. A list reports no attention and leaves `closed` unset.
+- **Sizes.** `listLimit()` and `listPageSize()` read the fields `limit` (100 by default) and `pageSize` (50 by default). Items from before these fields lack them, and a value below 1 uses the default, so neither needs a migration.
+- **Requests.** The client method of the scope (`mergeRequests`, `projectMergeRequests` or `groupMergeRequests`, or the issue equivalents), up to `limit` rows. Only a merge request list with the `reviewRequested` preset asks for the current user first. If that request fails, the list is not asked for.
+- **Status.** The state is `Ok`, and the summary reads "12 merge requests", "12 issues" or "12 pipelines", with singular forms, and "100+ merge requests" when the rows reach `limit`. A list reports no attention and leaves `closed` unset.
 - **Data.** `rows` holds GitLab's answers, unchanged, and `total` their number.
 - **An incomplete scope,** such as `group` without a group path, reports `State::None` with a message, such as "Set the group in the item's settings.", without a request. An empty `project` uses the project's `gitlab.project` setting.
 - **Errors.** A failed reply becomes its state with `statusFromReply()`.
@@ -141,24 +142,39 @@ The parameters of `filter` come last and replace those of the same name. A name 
 | `group` | `<baseUrl>/groups/<group>/-/merge_requests` or `/issues` |
 | `all` | `<baseUrl>/dashboard/merge_requests` or `/issues` |
 
-The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json` and `issue_list.json`, written by hand in the shape of GitLab's API.
+`fetchPipelineListStatus()` serves `gitlab.pipeline.list`, whose `source` picks the request. An absent `source` is `all`.
+
+| Source | Request |
+|---|---|
+| `all` | `pipelines()` |
+| `mine` | `currentUser()`, then `pipelines()` with `username=<me>`. If the first fails, the list is not asked for. |
+| `branch` | `pipelines()` with `ref=<branch>`. An empty `branch` is `master`. |
+| `mergeRequest` | `mergeRequestPipelines()` with `iid` |
+
+Without a project, without a number for `mergeRequest`, or with an unknown `source`, it reports `State::None` with a message, without a request. `pipelinesUrl()`, in `GitLabUrls.cpp`, builds the list's page, `<baseUrl>/<project>/-/pipelines`.
+
+The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`, written by hand in the shape of GitLab's API.
 
 ## List views
 
-`GitLabMergeRequestListView.cpp` and `GitLabIssueListView.cpp` each hold one class, a subclass of `GitLabList` in `GitLabListSupport.h`, which is private to the module. It is an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit). The columns and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabList` holds what they share:
+`GitLabMergeRequestListView.cpp`, `GitLabIssueListView.cpp` and `GitLabPipelineListView.cpp` each hold one class, a subclass of `GitLabList` in `GitLabListSupport.h`, which is private to the module. It is an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit). The first two go through `NumberedList`, which reads a row's project and number. The columns and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabList` holds what they share:
 
 - **Drawing.** `follow()` draws the item's status now and at each change, as a summary does. An empty list shows the table and a line of its own, because `setMessage()` shows instead of the table.
-- **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests, a preview or "Add to task as item".
-- **Previews.** A click on a row makes `createMergeRequestPreview()` or `createIssuePreview()`. After a new status, if the preview's row is still there, it calls `readItself()` again on the same widget, so its scroll position and its action errors stay. A status that comes while the view is hidden waits until it shows.
-- **The row menu** is a `QMenu` that belongs to the view and uses `popup()`, so nothing waits on it if the view is made again.
+- **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests or "Add". A pipeline's key is its id, and its project is the item's, because the list has one project. See [decision 0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md): there is no preview, and a click on a row only selects it.
+- **Pages and dates.** The constructor calls `setPageSize()` with the `pageSize` field. `dateCell()` draws a date with `compactDate()` and sorts by the date itself. A missing date is a dash, and sorts as the oldest.
+- **Links.** `linksCell()` makes the last column, whose ids are `web`, `open` and `add`, in that order. A link goes when the row cannot do it: without an address "Web" and "Open", without a project or a ref "Add". The cell's `sortKey` is the row's, because a cell with links has no text, and without it the order of equal rows would depend on the sort before.
+- **The row menu** is a `QMenu` that belongs to the view and uses `popup()`, so nothing waits on it if the view is made again. It offers the same as the links, and "Copy link".
 
-`GitLabMergeRequestListView.cpp` also fills the Pipeline and Approvals columns, as decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0068](../../../docs/decisions/0068-views-read-what-the-user-asked-for.md) describe:
+`GitLabMergeRequestListView.cpp` also fills the Pipeline and Approvals columns, as decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md) describe:
 
-- **Requests.** `askForCells()` runs while the view is visible, after each new status and each time the view shows. It asks with `GitLabClient::mergeRequest()` for the Pipeline column and `approvals()` for the Approvals column, for the first 25 rows in the table's current order. It reads that order from the table's sort proxy, whose source rows are in the order given to `setRows()`. A column with its field off asks for nothing. A column hidden only because the cell is narrow still asks.
-- **Rounds.** The requests of one status use a child `QObject` of the view as their receiver. A new status, or hiding the view, deletes it, so the answers on the way are dropped. `ServerClient` still sends requests that were already queued.
+- **Requests.** `askForCells()` runs while the view is visible, after each new status and each time the view shows. It asks with `GitLabClient::mergeRequest()` for the Pipeline column and `approvals()` for the Approvals column, for the first 25 of `visibleKeys()`. A column with its field off asks for nothing. A column hidden only because the cell is narrow still asks.
+- **A new page, sort or filter.** `visibleKeysChanged()` runs `askForNewKeys()`. It asks only for rows that have not been asked for since the latest status, and a row that stays keeps what is on the way. An answer can move its row when the table is sorted on that column, and such a move does not ask again. Otherwise rows with an answer and rows without one could keep trading places, each asking the server again.
+- **Receivers.** Each row's requests use a child `QObject` of the view as their receiver. A row leaving the first 25 deletes its own. A new status, or hiding the view, deletes them all. The answers on the way are dropped. `ServerClient` still sends requests that were already queued.
 - **Answers.** The latest answers are kept by row, and new rows draw with them, so the cells do not flicker at each poll. A failed request puts the dash back, and so does a row leaving the first 25.
 
-The table's cells and the preview draw text from a server as plain text. The tests are in `tests/tst_list_views.cpp`, with a fake context and a fake status source, on `merge_request_list.json` and `issue_list.json`.
+`GitLabPipelineListView.cpp` makes no further requests, so Author and Started show what the list's answer holds. GitLab leaves `user` and `started_at` out of its list answers, so Author usually shows a dash, and Started falls back to `created_at`. "Add" reads `refs/merge-requests/<iid>/head`, `/merge` and `/train` as that merge request, and any other ref as a branch.
+
+The table's cells draw text from a server as plain text. The tests are in `tests/tst_list_views.cpp`, with a fake context and a fake status source, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`.
 
 ## Pages
 
@@ -186,8 +202,9 @@ Every type implements `fromUrl()`, through `matchUrl()` in `GitLabUrls.cpp`. It 
 | `merge_requests` | `gitlab.mr.list` | `scope` = `project`, `project`, `preset` = `allOpen` | `group/project MRs` |
 | `issues` | `gitlab.issue.list` | `scope` = `project`, `project`, `preset` = `allOpen` | `group/project issues` |
 | `pipelines[/<id>][?ref=<branch>]` | `gitlab.pipeline` | `project`, `branchSource` = `fixed`, `branch` from `ref`, or `master` without one | `group/project <branch> CI` |
+| `pipelines`, without `ref` or an id | `gitlab.pipeline.list` | `project`, `source` = `all` | `group/project pipelines` |
 
-The pipeline type follows a branch, so a pipeline's id is not kept. Other pages, such as a project's home page, `merge_requests/new` or `tree/main`, are refused. The tests are in `tests/tst_from_url.cpp`.
+The pipeline type follows a branch, so a pipeline's id is not kept. The item dialog lists types by name, so for the page of all pipelines it offers the pipeline first and the list after it. Other pages, such as a project's home page, `merge_requests/new` or `tree/main`, are refused. The tests are in `tests/tst_from_url.cpp`.
 
 ## Configuration
 
@@ -196,19 +213,23 @@ The keys each type stores in the item's configuration. "Required" means the item
 | Key | Type | Used by | Description |
 |---|---|---|---|
 | `project` | text | all | Project path, such as `group/project`. Empty uses the project's `gitlab.project` setting. The form offers the paths of [General Configuration](#settings-screens) in the item's profile. |
-| `iid` | integer | MR and issue summary and page; pipeline | The merge request or issue number in the project. Required, except for the pipeline, where it names the linked merge request. |
-| `scope` | choice | lists | `project` (one project, the default), `group` (one group) or `all` (all projects visible to you). |
-| `group` | text | lists | Group path, used when `scope` is `group`. |
-| `preset` | choice | lists | MR List: `createdByMe` (the default), `reviewRequested`, `assignedToMe` or `allOpen`. Issue List: `assignedToMe` (the default), `createdByMe` or `allOpen`. |
-| `filter` | text | lists | Optional custom filter parameters passed to the GitLab API, such as `labels=bug&target_branch=main`. |
+| `iid` | integer | MR and issue summary and page; pipeline; pipeline list | The merge request or issue number in the project. Required, except for the pipeline and the pipeline list, where it names the linked merge request. |
+| `scope` | choice | MR and issue lists | `project` (one project, the default), `group` (one group) or `all` (all projects visible to you). |
+| `group` | text | MR and issue lists | Group path, used when `scope` is `group`. |
+| `preset` | choice | MR and issue lists | MR List: `createdByMe` (the default), `reviewRequested`, `assignedToMe` or `allOpen`. Issue List: `assignedToMe` (the default), `createdByMe` or `allOpen`. |
+| `filter` | text | MR and issue lists | Optional custom filter parameters passed to the GitLab API, such as `labels=bug&target_branch=main`. |
 | `branchSource` | choice | pipeline | `fixed` (the `branch` field, the default), `mainFolder` (the current branch of the main folder) or `mergeRequest` (the source branch of the merge request `iid`). |
-| `branch` | text | pipeline | The branch, used when `branchSource` is `fixed`. `master` by default, also as its placeholder. |
+| `branch` | text | pipeline; pipeline list | The branch, used when `branchSource` or `source` says so. `master` by default, also as its placeholder, and an empty value means `master`. |
+| `source` | choice | pipeline list | `all` (the default), `mine` (started by the current user), `branch` (of the `branch` field) or `mergeRequest` (of the merge request `iid`). |
+| `limit` | integer | lists | How many rows it fetches. 100 by default, also when absent or below 1. |
+| `pageSize` | integer | lists | How many rows the view shows at a time. 50 by default, also when absent or below 1. |
 
 The keys of each type, in the order the form shows them:
 
 - `gitlab.mr.summary`, `gitlab.mr.page`, `gitlab.issue.summary`, `gitlab.issue.page`: `project`, `iid`.
-- `gitlab.mr.list`, `gitlab.issue.list`: `scope`, `project`, `group`, `preset`, `filter`.
+- `gitlab.mr.list`, `gitlab.issue.list`: `scope`, `project`, `group`, `preset`, `filter`, `limit`, `pageSize`.
 - `gitlab.pipeline`: `project`, `branchSource`, `branch`, `iid`.
+- `gitlab.pipeline.list`: `project`, `source`, `branch`, `iid`, `limit`, `pageSize`.
 
 ## Settings
 

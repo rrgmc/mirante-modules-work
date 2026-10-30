@@ -267,18 +267,6 @@ void answerQuestion(QPushButton *start, QMessageBox::StandardButton answer)
     });
 }
 
-// Sets up the fake server for a preview of acme/backend!42.
-void setUpMergeRequestPreview(FakeContext &context)
-{
-    QVERIFY(context.client.setJsonFile(QStringLiteral("GET ") + kMergeRequest,
-                                       QFINDTESTDATA("data/merge_request.json")));
-    QVERIFY(context.client.setJsonFile(QStringLiteral("GET ") + kMergeRequest + QStringLiteral("/approvals"),
-                                       QFINDTESTDATA("data/approvals.json")));
-    QVERIFY(context.client.setJsonFile(QStringLiteral("GET api/v4/user"), QFINDTESTDATA("data/user.json")));
-    QVERIFY(context.client.setJsonFile(QStringLiteral("GET ") + kPipeline + QStringLiteral("/jobs?per_page=100"),
-                                       QFINDTESTDATA("data/pipeline_jobs.json")));
-}
-
 } // namespace
 
 class TestSummaryViews : public QObject
@@ -1322,94 +1310,6 @@ private slots:
         context.source.change(empty);
         QVERIFY(shownText(view).contains(QStringLiteral("Add the retry button")));
         QVERIFY(!shownText(view).contains(QStringLiteral("Network error")));
-    }
-
-    // Previews.
-
-    void mergeRequestPreviewReadsItself()
-    {
-        FakeContext context;
-        setUpMergeRequestPreview(context);
-        // Its fields are all on, whatever the list item's configuration holds.
-        context.itemConfig = QJsonObject{{QStringLiteral("showPipeline"), false}};
-        View view(createMergeRequestPreview(context, QStringLiteral("acme/backend"), 42, nullptr));
-        view->show();
-        QCOMPARE(shownText(view), QStringLiteral("Loading…"));
-
-        QTRY_VERIFY(shownText(view).contains(QStringLiteral("Add the retry button")));
-        const QStringList keys = context.client.requestKeys();
-        QVERIFY(keys.contains(QStringLiteral("GET ") + kMergeRequest));
-        QVERIFY(keys.contains(QStringLiteral("GET ") + kMergeRequest + QStringLiteral("/approvals")));
-        QVERIFY(keys.contains(QStringLiteral("GET api/v4/user")));
-        QTRY_VERIFY(shownText(view).contains(QStringLiteral("test:unit")));
-
-        for (const char *section : {"pipeline", "approvals", "people", "labels"})
-            QVERIFY(summary(view)->isSectionVisible(QLatin1String(section)));
-        QCOMPARE(summary(view)->actions()->webLink(), QUrl(kMrAddress));
-        QCOMPARE(context.source.refreshes, 0);
-    }
-
-    void previewActionReadsAgain()
-    {
-        FakeContext context;
-        setUpMergeRequestPreview(context);
-        const QString key = QStringLiteral("POST ") + kPipeline + QStringLiteral("/retry");
-        succeed(context, key);
-        View view(createMergeRequestPreview(context, QStringLiteral("acme/backend"), 42, nullptr));
-        view->show();
-        QTRY_VERIFY(shownText(view).contains(QStringLiteral("test:unit")));
-
-        // The answer to the second read says that the pipeline runs again.
-        QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
-        QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
-        pipeline.insert(QStringLiteral("status"), QStringLiteral("running"));
-        mergeRequest.insert(QStringLiteral("head_pipeline"), pipeline);
-        context.client.setJson(QStringLiteral("GET ") + kMergeRequest, QJsonDocument(mergeRequest));
-
-        QVERIFY(showsAction(view, QStringLiteral("retry-pipeline")));
-        button(view, QStringLiteral("retry-pipeline"))->click();
-        QVERIFY(context.client.requestKeys().contains(key));
-        QTRY_VERIFY(!showsAction(view, QStringLiteral("retry-pipeline")));
-        QCOMPARE(context.source.refreshes, 0);
-    }
-
-    void previewShowsAFailedRead()
-    {
-        FakeContext context;
-        View view(createIssuePreview(context, QStringLiteral("acme/backend"), 7, nullptr));
-        view->show();
-        QTRY_COMPARE(shownText(view), QStringLiteral("Not found (404)"));
-    }
-
-    void issuePreviewReadsItself()
-    {
-        FakeContext context;
-        QVERIFY(context.client.setJsonFile(QStringLiteral("GET ") + kIssue, QFINDTESTDATA("data/issue.json")));
-        QVERIFY(context.client.setJsonFile(
-            QStringLiteral("GET ") + kIssue + QStringLiteral("/notes?sort=desc&order_by=created_at&per_page=20"),
-            QFINDTESTDATA("data/issue_notes.json")));
-        context.itemConfig = QJsonObject{{QStringLiteral("showComments"), false}};
-        View view(createIssuePreview(context, QStringLiteral("acme/backend"), 7, nullptr));
-        view->show();
-
-        QTRY_VERIFY(shownText(view).contains(QStringLiteral("Fixed on the branch.")));
-        // System notes are left out.
-        QVERIFY(!shownText(view).contains(QStringLiteral("added ~bug label")));
-        QVERIFY(summary(view)->isSectionVisible(QStringLiteral("comments")));
-        QCOMPARE(summary(view)->actions()->webLink(), QUrl(kIssueAddress));
-
-    }
-
-    void openPageOfAPreviewCallsShowPage()
-    {
-        FakeContext context;
-        QVERIFY(context.client.setJsonFile(QStringLiteral("GET ") + kIssue, QFINDTESTDATA("data/issue.json")));
-        View view(createIssuePreview(context, QStringLiteral("acme/backend"), 7, nullptr));
-        view->show();
-        QTRY_VERIFY(shownText(view).contains(QStringLiteral("The pipeline panel")));
-
-        QTest::mouseClick(button(view, QStringLiteral("open-page")), Qt::LeftButton);
-        QCOMPARE(context.pages, QList<QUrl>{QUrl(kIssueAddress)});
     }
 
 private:

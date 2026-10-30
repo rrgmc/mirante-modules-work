@@ -19,7 +19,22 @@ QString trimSlashes(QString text)
     return text;
 }
 
-// <baseUrl>/<project>/-/<kind>/<iid>, without doubling a slash at the end of baseUrl.
+// <baseUrl>/<project>/-/<rest>, without doubling a slash at the end of baseUrl.
+QUrl projectPageUrl(const QUrl &baseUrl, const QString &project, const QString &rest)
+{
+    QString path = baseUrl.path();
+    while (path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    path += QLatin1Char('/') + project + QStringLiteral("/-/") + rest;
+
+    QUrl url = baseUrl;
+    url.setPath(path);
+    url.setQuery(QString());
+    url.setFragment(QString());
+    return url;
+}
+
+// <baseUrl>/<project>/-/<kind>/<iid>.
 QUrl pageUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject,
              const QString &kind)
 {
@@ -27,17 +42,7 @@ QUrl pageUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &d
     const qint64 iid = itemNumber(config);
     if (project.isEmpty() || iid == 0)
         return {};
-
-    QString path = baseUrl.path();
-    while (path.endsWith(QLatin1Char('/')))
-        path.chop(1);
-    path += QLatin1Char('/') + project + QStringLiteral("/-/") + kind + QLatin1Char('/') + QString::number(iid);
-
-    QUrl url = baseUrl;
-    url.setPath(path);
-    url.setQuery(QString());
-    url.setFragment(QString());
-    return url;
+    return projectPageUrl(baseUrl, project, kind + QLatin1Char('/') + QString::number(iid));
 }
 
 } // namespace
@@ -48,6 +53,12 @@ QString projectPath(const QJsonObject &config, const QJsonValue &defaultProject)
     if (!project.isEmpty())
         return project;
     return trimSlashes(defaultProject.toString());
+}
+
+QString configuredBranch(const QJsonObject &config)
+{
+    const QString branch = config.value(QStringLiteral("branch")).toString().trimmed();
+    return branch.isEmpty() ? kDefaultBranch : branch;
 }
 
 qint64 itemNumber(const QJsonObject &config)
@@ -71,6 +82,12 @@ QUrl mergeRequestUrl(const QUrl &baseUrl, const QJsonObject &config, const QJson
 QUrl issueUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)
 {
     return pageUrl(baseUrl, config, defaultProject, QStringLiteral("issues"));
+}
+
+QUrl pipelinesUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)
+{
+    const QString project = projectPath(config, defaultProject);
+    return project.isEmpty() ? QUrl() : projectPageUrl(baseUrl, project, QStringLiteral("pipelines"));
 }
 
 std::optional<PageAddress> readPageAddress(const QUrl &url, const QList<QUrl> &baseUrls)
@@ -177,6 +194,12 @@ std::optional<UrlMatch> matchUrl(const QString &typeId, const QUrl &url, const Q
         } else {
             return std::nullopt;
         }
+    } else if (typeId == QLatin1String("gitlab.pipeline.list")) {
+        // A branch or one pipeline is what the pipeline type follows.
+        if (!pipelines || one || !address->ref.isEmpty())
+            return std::nullopt;
+        match.config.insert(QStringLiteral("source"), QStringLiteral("all"));
+        match.name = project + QStringLiteral(" pipelines");
     } else {
         return std::nullopt;
     }

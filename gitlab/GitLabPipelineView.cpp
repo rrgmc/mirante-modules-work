@@ -106,7 +106,7 @@ class PipelineView : public GitLabSummary
 {
 public:
     PipelineView(ItemContext &context, QWidget *parent)
-        : GitLabSummary(context, {}, parent)
+        : GitLabSummary(context, parent)
     {
         actions()->addAction(kRetryPipeline, tr("Retry pipeline"), tr("Retry"), [this] {
             runAction(kRetryPipeline, [project = project(), pipeline = m_pipelineId](const GitLabClient &client,

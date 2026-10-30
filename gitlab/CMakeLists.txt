@@ -2,7 +2,8 @@ mirante_add_module(gitlab
     SOURCES   GitLabClient.cpp GitLabClient.h GitLabIssueListView.cpp GitLabIssueListView.h
               GitLabIssueView.cpp GitLabIssueView.h GitLabLists.cpp GitLabLists.h GitLabListSupport.cpp
               GitLabListSupport.h GitLabMergeRequestListView.cpp GitLabMergeRequestListView.h GitLabMergeRequestView.cpp
-              GitLabMergeRequestView.h GitLabModule.cpp GitLabPipelineView.cpp GitLabPipelineView.h
+              GitLabMergeRequestView.h GitLabModule.cpp GitLabPipelineListView.cpp GitLabPipelineListView.h
+              GitLabPipelineView.cpp GitLabPipelineView.h
               GitLabSettings.cpp GitLabSettings.h GitLabStatus.cpp GitLabStatus.h GitLabUrls.cpp GitLabUrls.h
               GitLabViewSupport.cpp GitLabViewSupport.h
     RESOURCES icons/gitlab.svg

@@ -1,16 +1,20 @@
-// The two GitLab lists, drawn from the responses in tests/data/. A handler stands
+// The GitLab lists, drawn from the responses in tests/data/. A handler stands
 // in for the external browser, so nothing is opened.
 #include "../GitLabIssueListView.h"
 #include "../GitLabMergeRequestListView.h"
+#include "../GitLabPipelineListView.h"
 
 #include <mirante/ItemContext.h>
 #include <mirante/Status.h>
 #include <mirante/testing/FakeApiClient.h>
+#include <mirante/widgets/CompactDate.h>
 #include <mirante/widgets/ItemListView.h>
+#include <mirante/widgets/SummaryView.h>
 
 #include <QAbstractItemModel>
 #include <QAction>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QFile>
@@ -21,11 +25,12 @@
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPointer>
+#include <QPushButton>
 #include <QTableView>
 #include <QTest>
 #include <QTimeZone>
-#include <QToolButton>
 
 #include <functional>
 #include <memory>
@@ -39,8 +44,9 @@ using namespace mirante::modules::gitlab;
 
 namespace {
 
-enum MrColumn { MrRef, MrTitle, MrAuthor, MrPipeline, MrApprovals, MrUpdated };
-enum IssueColumn { IssueRef, IssueTitle, IssueAssignees, IssueLabels, IssueUpdated };
+enum MrColumn { MrRef, MrTitle, MrAuthor, MrPipeline, MrApprovals, MrUpdated, MrLinks };
+enum IssueColumn { IssueRef, IssueTitle, IssueAssignees, IssueLabels, IssueUpdated, IssueLinks };
+enum PipelineColumn { PipelineId, PipelineStatus, PipelineRef, PipelineAuthor, PipelineStarted, PipelineLinks };
 
 const QString kDash = QStringLiteral("–");
 const QString kBase = QStringLiteral("https://gitlab.example");
@@ -75,6 +81,17 @@ ItemStatus mergeRequests()
 ItemStatus issues()
 {
     return statusOfRows(readJson(QStringLiteral("issue_list.json")).array());
+}
+
+ItemStatus pipelines()
+{
+    return statusOfRows(readJson(QStringLiteral("pipeline_list.json")).array());
+}
+
+QJsonObject pipelineConfig()
+{
+    return QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                       {QStringLiteral("source"), QStringLiteral("all")}};
 }
 
 // count merge requests of acme/backend, numbered from 1, where a higher number
@@ -220,6 +237,35 @@ void clickRow(const View &view, const QString &ref)
     QTest::mouseClick(tableView->viewport(), Qt::LeftButton, {}, tableView->visualRect(index).center());
 }
 
+// Sends a move to the viewport without moving the real cursor.
+void moveMouse(QWidget *viewport, const QPoint &pos)
+{
+    QMouseEvent event(QEvent::MouseMove, pos, viewport->mapToGlobal(pos), Qt::NoButton, Qt::NoButton,
+                      Qt::NoModifier);
+    QCoreApplication::sendEvent(viewport, &event);
+}
+
+// The middle of each link in a cell, found from where the cursor changes.
+QList<QPoint> linkCentres(QTableView *table, int row, int column)
+{
+    const QRect cell = table->visualRect(table->model()->index(row, column));
+    QList<QPoint> centres;
+    int start = -1;
+    for (int x = cell.left(); x <= cell.right() + 1; ++x) {
+        const QPoint pos(x, cell.center().y());
+        moveMouse(table->viewport(), pos);
+        const bool onLink = table->viewport()->cursor().shape() == Qt::PointingHandCursor;
+        if (onLink && start < 0)
+            start = x;
+        if (!onLink && start >= 0) {
+            centres.append(QPoint((start + x) / 2, cell.center().y()));
+            start = -1;
+        }
+    }
+    moveMouse(table->viewport(), QPoint(cell.left(), cell.top()));
+    return centres;
+}
+
 // The texts of the labels that show, one per line.
 QString shownText(const View &view)
 {
@@ -316,7 +362,7 @@ private slots:
         QCOMPARE(cellText(view, 0, MrPipeline), kDash);
         QCOMPARE(cellText(view, 0, MrApprovals), kDash);
         const QDateTime updated = QDateTime::fromString(QStringLiteral("2026-10-28T16:03:10.118Z"), Qt::ISODateWithMs);
-        QCOMPARE(cellText(view, 0, MrUpdated), QLocale().toString(updated.toLocalTime(), QLocale::ShortFormat));
+        QCOMPARE(cellText(view, 0, MrUpdated), mirante::widgets::compactDate(updated));
         // A list can span projects.
         QCOMPARE(cellText(view, 2, MrRef), QStringLiteral("website!8"));
     }
@@ -389,7 +435,9 @@ private slots:
         QVERIFY(context.client.requests().isEmpty());
 
         clickRow(view, QStringLiteral("!42"));
-        QVERIFY(!list(view)->preview());
+        QVERIFY(context.client.requests().isEmpty());
+        QVERIFY(linkCentres(table(view), 0, MrLinks).isEmpty());
+        QVERIFY(!menuEntryEnabled(view, QStringLiteral("row-0"), QStringLiteral("Web")));
         QVERIFY(!menuEntryEnabled(view, QStringLiteral("row-0"), QStringLiteral("Add to task as item")));
         QVERIFY(!menuEntryEnabled(view, QStringLiteral("row-0"), QStringLiteral("Open page")));
     }
@@ -661,121 +709,496 @@ private slots:
         QCOMPARE(cellOf(view, QStringLiteral("backend!1"), MrPipeline), kDash);
     }
 
-    // The preview.
+    // No preview.
 
-    void rowClickShowsThePreview()
+    void rowClickAsksForNothing_data()
+    {
+        QTest::addColumn<bool>("isMergeRequest");
+        QTest::addColumn<QString>("ref");
+        QTest::newRow("merge request") << true << QStringLiteral("website!8");
+        QTest::newRow("issue") << false << QStringLiteral("backend#7");
+    }
+
+    void rowClickAsksForNothing()
+    {
+        QFETCH(bool, isMergeRequest);
+        QFETCH(QString, ref);
+
+        FakeContext context;
+        context.source.status = isMergeRequest ? mergeRequests() : issues();
+        View view(isMergeRequest ? createMergeRequestListView(context, nullptr)
+                                 : createIssueListView(context, nullptr));
+        show(view);
+        QCoreApplication::processEvents();
+        const int before = int(context.client.requests().size());
+
+        clickRow(view, ref);
+
+        QVERIFY(!list(view)->selectedKey().isEmpty());
+        QCOMPARE(int(context.client.requests().size()), before);
+        for (QWidget *child : view->findChildren<QWidget *>())
+            QVERIFY(!dynamic_cast<mirante::widgets::SummaryView *>(child));
+    }
+
+    // The links of a row.
+
+    void linksComeLastAndInOrder_data()
+    {
+        QTest::addColumn<bool>("isMergeRequest");
+        QTest::addColumn<int>("column");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<QUrl>("address");
+        QTest::addColumn<QString>("typeId");
+        QTest::addColumn<QString>("name");
+
+        QTest::newRow("merge request") << true << int(MrLinks) << 0
+                                       << QUrl(kBase + QStringLiteral("/acme/backend/-/merge_requests/42"))
+                                       << QStringLiteral("gitlab.mr.summary") << QStringLiteral("acme/backend!42");
+        QTest::newRow("issue") << false << int(IssueLinks) << 0 << QUrl(kBase + QStringLiteral("/acme/backend/-/issues/7"))
+                               << QStringLiteral("gitlab.issue.summary") << QStringLiteral("acme/backend#7");
+    }
+
+    // Web, Open and Add, each clicked with the mouse.
+    void linksComeLastAndInOrder()
+    {
+        QFETCH(bool, isMergeRequest);
+        QFETCH(int, column);
+        QFETCH(int, row);
+        QFETCH(QUrl, address);
+        QFETCH(QString, typeId);
+        QFETCH(QString, name);
+
+        FakeContext context;
+        context.source.status = isMergeRequest ? mergeRequests() : issues();
+        View view(isMergeRequest ? createMergeRequestListView(context, nullptr)
+                                 : createIssueListView(context, nullptr));
+        show(view);
+        QVERIFY(QTest::qWaitForWindowExposed(view.get()));
+        QCoreApplication::processEvents();
+        const int before = int(context.client.requests().size());
+
+        QCOMPARE(column, table(view)->model()->columnCount() - 1);
+        const QList<QPoint> links = linkCentres(table(view), row, column);
+        QCOMPARE(links.size(), 3);
+
+        QTest::mouseClick(table(view)->viewport(), Qt::LeftButton, {}, links.at(0));
+        QCOMPARE(m_opened, QList<QUrl>{address});
+        QVERIFY(context.pages.isEmpty());
+
+        QTest::mouseClick(table(view)->viewport(), Qt::LeftButton, {}, links.at(1));
+        QCOMPARE(context.pages, QList<QUrl>{address});
+        QCOMPARE(m_opened.size(), 1);
+
+        QTest::mouseClick(table(view)->viewport(), Qt::LeftButton, {}, links.at(2));
+        QCOMPARE(context.added.size(), 1);
+        QCOMPARE(context.added.first().typeId, typeId);
+        QCOMPARE(context.added.first().name, name);
+
+        // None of them asks the server for anything.
+        QCOMPARE(int(context.client.requests().size()), before);
+    }
+
+    void shiftOnOpenUsesTheBrowser()
     {
         FakeContext context;
-        context.source.status = mergeRequests();
+        context.source.status = issues();
+        View view(createIssueListView(context, nullptr));
+        show(view);
+        QVERIFY(QTest::qWaitForWindowExposed(view.get()));
+
+        const QList<QPoint> links = linkCentres(table(view), 0, IssueLinks);
+        QCOMPARE(links.size(), 3);
+        QTest::mouseClick(table(view)->viewport(), Qt::LeftButton, Qt::ShiftModifier, links.at(1));
+
+        QVERIFY(context.pages.isEmpty());
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kBase + QStringLiteral("/acme/backend/-/issues/7"))});
+    }
+
+    // The links have no text to sort by, so the rows fall in the order of their ref.
+    void sortingByLinksIsStable()
+    {
+        FakeContext context;
+        context.source.status = statusOfRows(manyMergeRequests(12));
+        View view(createMergeRequestListView(context, nullptr));
+        show(view);
+
+        table(view)->sortByColumn(MrLinks, Qt::AscendingOrder);
+        QCOMPARE(cellText(view, 0, MrRef), QStringLiteral("backend!1"));
+        QCOMPARE(cellText(view, 1, MrRef), QStringLiteral("backend!2"));
+        QCOMPARE(cellText(view, 11, MrRef), QStringLiteral("backend!12"));
+
+        table(view)->sortByColumn(MrLinks, Qt::DescendingOrder);
+        QCOMPARE(cellText(view, 0, MrRef), QStringLiteral("backend!12"));
+    }
+
+    // Sizes.
+
+    void pageSizeComesFromTheItem_data()
+    {
+        QTest::addColumn<QJsonValue>("value");
+        QTest::addColumn<int>("expected");
+
+        QTest::newRow("absent") << QJsonValue(QJsonValue::Undefined) << 50;
+        QTest::newRow("set") << QJsonValue(10) << 10;
+        QTest::newRow("zero") << QJsonValue(0) << 50;
+        QTest::newRow("below zero") << QJsonValue(-1) << 50;
+    }
+
+    void pageSizeComesFromTheItem()
+    {
+        QFETCH(QJsonValue, value);
+        QFETCH(int, expected);
+
+        const std::vector<QWidget *(*)(mirante::ItemContext &, QWidget *)> factories{
+            &createMergeRequestListView, &createIssueListView, &createPipelineListView};
+        for (const auto factory : factories) {
+            FakeContext context;
+            if (!value.isUndefined())
+                context.itemConfig.insert(QStringLiteral("pageSize"), value);
+            View view(factory(context, nullptr));
+            QCOMPARE(list(view)->pageSize(), expected);
+        }
+    }
+
+    // The further requests follow the page.
+
+    void fillFollowsThePage()
+    {
+        FakeContext context;
+        context.itemConfig.insert(QStringLiteral("pageSize"), 10);
+        context.source.status = statusOfRows(manyMergeRequests(30));
+        View view(createMergeRequestListView(context, nullptr));
+        show(view);
+
+        // The newest 10.
+        QStringList keys = context.client.requestKeys();
+        QCOMPARE(keys.size(), 20);
+        QVERIFY(keys.contains(backendKey(QStringLiteral("merge_requests/30"))));
+        QVERIFY(keys.contains(backendKey(QStringLiteral("merge_requests/21"))));
+        QVERIFY(!keys.contains(backendKey(QStringLiteral("merge_requests/20"))));
+        QCoreApplication::processEvents();
+
+        view->findChild<QPushButton *>(QStringLiteral("nextPage"))->click();
+        keys = context.client.requestKeys().mid(20);
+        QCOMPARE(keys.size(), 20);
+        QVERIFY(keys.contains(backendKey(QStringLiteral("merge_requests/20"))));
+        QVERIFY(keys.contains(backendKey(QStringLiteral("merge_requests/11"))));
+        QVERIFY(!keys.contains(backendKey(QStringLiteral("merge_requests/21"))));
+    }
+
+    // At most 25 of a longer page, and a new sort asks only for the rows it adds.
+    void fillStopsAt25OfThePage()
+    {
+        FakeContext context;
+        context.source.status = statusOfRows(manyMergeRequests(30));
+        View view(createMergeRequestListView(context, nullptr));
+        show(view);
+        QCOMPARE(int(context.client.requests().size()), 50);
+        QCoreApplication::processEvents();
+
+        table(view)->sortByColumn(MrUpdated, Qt::AscendingOrder);
+
+        // The oldest 25 are 1 to 25. Of these, 6 to 25 are there already.
+        const QStringList keys = context.client.requestKeys().mid(50);
+        QCOMPARE(keys.size(), 10);
+        QVERIFY(keys.contains(backendKey(QStringLiteral("merge_requests/1"))));
+        QVERIFY(keys.contains(backendKey(QStringLiteral("merge_requests/5/approvals"))));
+        QVERIFY(!keys.contains(backendKey(QStringLiteral("merge_requests/6"))));
+    }
+
+    // What is on the way for a row that leaves the page is dropped, and the row goes
+    // back to a dash. What is on the way for the new page arrives.
+    void leavingThePageCancelsItsRequests()
+    {
+        FakeContext context;
+        for (int iid = 1; iid <= 4; ++iid) {
+            context.client.setJson(backendKey(QStringLiteral("merge_requests/%1").arg(iid)),
+                                   QJsonDocument(QJsonObject{{QStringLiteral("head_pipeline"),
+                                                              QJsonObject{{QStringLiteral("status"),
+                                                                           QStringLiteral("success")}}}}));
+        }
+        context.itemConfig.insert(QStringLiteral("pageSize"), 2);
+        context.source.status = statusOfRows(manyMergeRequests(4));
+        View view(createMergeRequestListView(context, nullptr));
+        show(view);
+
+        view->findChild<QPushButton *>(QStringLiteral("nextPage"))->click();
+        QCoreApplication::processEvents();
+        QCOMPARE(cellOf(view, QStringLiteral("backend!4"), MrPipeline), kDash);
+        QCOMPARE(cellOf(view, QStringLiteral("backend!2"), MrPipeline), QStringLiteral("Passed"));
+
+        // Back on the first page, it asks again, and the other page loses its answers.
+        view->findChild<QPushButton *>(QStringLiteral("previousPage"))->click();
+        QCOMPARE(cellOf(view, QStringLiteral("backend!2"), MrPipeline), kDash);
+        QCoreApplication::processEvents();
+        QCOMPARE(cellOf(view, QStringLiteral("backend!4"), MrPipeline), QStringLiteral("Passed"));
+    }
+
+    // Sorted so that an answer moves its row off the first 25. That must not ask
+    // again, or the rows would keep trading places.
+    void answersThatMoveRowsAskForNothingMore()
+    {
+        FakeContext context;
+        for (int iid = 1; iid <= 30; ++iid) {
+            context.client.setJson(backendKey(QStringLiteral("merge_requests/%1/approvals").arg(iid)),
+                                   QJsonDocument(QJsonObject{{QStringLiteral("approved_by"), QJsonArray()}}));
+        }
+        context.itemConfig.insert(QStringLiteral("showPipeline"), false);
+        context.source.status = statusOfRows(manyMergeRequests(30));
         View view(createMergeRequestListView(context, nullptr));
         show(view);
         QCoreApplication::processEvents();
-        QVERIFY(!list(view)->preview());
+
+        table(view)->sortByColumn(MrApprovals, Qt::AscendingOrder);
         const int before = int(context.client.requests().size());
-
-        clickRow(view, QStringLiteral("website!8"));
-
-        QVERIFY(list(view)->preview());
-        QCOMPARE(list(view)->selectedKey(), QStringLiteral("acme/website!8"));
-        QVERIFY(context.client.requestKeys().mid(before).contains(
-            QStringLiteral("GET api/v4/projects/acme%2Fwebsite/merge_requests/8")));
+        for (int round = 0; round < 5; ++round)
+            QCoreApplication::processEvents();
+        QCOMPARE(int(context.client.requests().size()), before);
     }
 
-    void issueRowClickShowsThePreview()
+    // Dates.
+
+    void datesAreCompactAndSortByTheDate()
     {
+        const int year = QDate::currentDate().year();
+        const QDateTime thisYear(QDate(year, 1, 2), QTime(9, 30), QTimeZone::LocalTime);
+        const QDateTime lastYear(QDate(year - 1, 12, 30), QTime(9, 30), QTimeZone::LocalTime);
+        QJsonArray rows = manyMergeRequests(3);
+        const auto dated = [&rows](int index, const QDateTime &when) {
+            QJsonObject row = rows.at(index).toObject();
+            row.insert(QStringLiteral("updated_at"), when.toUTC().toString(Qt::ISODateWithMs));
+            rows.replace(index, row);
+        };
+        dated(0, lastYear);
+        dated(1, thisYear);
+        QJsonObject missing = rows.at(2).toObject();
+        missing.remove(QStringLiteral("updated_at"));
+        rows.replace(2, missing);
+
         FakeContext context;
-        context.source.status = issues();
-        View view(createIssueListView(context, nullptr));
-        show(view);
+        context.source.status = statusOfRows(rows);
+        View view(createMergeRequestListView(context, nullptr));
 
-        clickRow(view, QStringLiteral("backend#7"));
-
-        QVERIFY(list(view)->preview());
-        QCOMPARE(list(view)->selectedKey(), QStringLiteral("acme/backend#7"));
-        QVERIFY(context.client.requestKeys().contains(backendKey(QStringLiteral("issues/7"))));
+        // By their text, "2025-12-30" would come before "01-02 09:30".
+        QCOMPARE(cellText(view, 0, MrRef), QStringLiteral("backend!2"));
+        QCOMPARE(cellText(view, 0, MrUpdated), mirante::widgets::compactDate(thisYear));
+        QCOMPARE(cellText(view, 1, MrRef), QStringLiteral("backend!1"));
+        QCOMPARE(cellText(view, 1, MrUpdated), QStringLiteral("%1-12-30").arg(year - 1));
+        // A missing date is the oldest.
+        QCOMPARE(cellText(view, 2, MrRef), QStringLiteral("backend!3"));
+        QCOMPARE(cellText(view, 2, MrUpdated), kDash);
     }
 
-    void previewReadsAgainWhenTheStatusChanges()
+    // The pipeline list.
+
+    void pipelineRowsDrawFromData()
     {
-        const QString issueKey = backendKey(QStringLiteral("issues/7"));
         FakeContext context;
-        context.source.status = issues();
-        View view(createIssueListView(context, nullptr));
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
         show(view);
-        clickRow(view, QStringLiteral("backend#7"));
-        QCoreApplication::processEvents();
-        QPointer<QWidget> preview = list(view)->preview();
-        QCOMPARE(context.client.requestKeys().count(issueKey), 1);
 
-        context.source.change(issues());
-        QCoreApplication::processEvents();
+        // Sorted on the id, newest first.
+        QCOMPARE(rowCount(view), 4);
+        QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("9105"));
+        QCOMPARE(cellText(view, 0, PipelineStatus), QStringLiteral("Passed"));
+        QCOMPARE(cellText(view, 0, PipelineRef), QStringLiteral("main"));
+        QCOMPARE(cellText(view, 0, PipelineAuthor), QStringLiteral("Bruno Author"));
+        const QDateTime started = QDateTime::fromString(QStringLiteral("2026-10-28T15:50:30.000Z"), Qt::ISODateWithMs);
+        QCOMPARE(cellText(view, 0, PipelineStarted), mirante::widgets::compactDate(started));
 
-        QCOMPARE(context.client.requestKeys().count(issueKey), 2);
-        // The same widget, so its scroll position and any open dialog stay.
-        QCOMPARE(list(view)->preview(), preview.data());
+        // GitLab's list answers usually lack the author and the start, so
+        // Started shows when the pipeline was created.
+        QCOMPARE(cellText(view, 1, PipelineId), QStringLiteral("9104"));
+        QCOMPARE(cellText(view, 1, PipelineStatus), QStringLiteral("Failed"));
+        QCOMPARE(cellText(view, 1, PipelineAuthor), kDash);
+        const QDateTime created = QDateTime::fromString(QStringLiteral("2026-10-27T11:20:12.000Z"), Qt::ISODateWithMs);
+        QCOMPARE(cellText(view, 1, PipelineStarted), mirante::widgets::compactDate(created));
+
+        // A pipeline list asks for nothing more.
+        QVERIFY(context.client.requests().isEmpty());
     }
 
-    void previewOfAGoneRowStays()
+    void pipelineIdsSortAsNumbers()
     {
-        const QString issueKey = backendKey(QStringLiteral("issues/7"));
-        const QJsonArray all = readJson(QStringLiteral("issue_list.json")).array();
+        const auto row = [](int id) { return QJsonObject{{QStringLiteral("id"), id}}; };
         FakeContext context;
-        context.source.status = statusOfRows(all);
-        View view(createIssueListView(context, nullptr));
-        show(view);
-        clickRow(view, QStringLiteral("backend#7"));
-        QCoreApplication::processEvents();
-        QPointer<QWidget> preview = list(view)->preview();
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({row(99), row(1000), row(250)});
+        View view(createPipelineListView(context, nullptr));
 
-        context.source.change(statusOfRows({all.at(1)}));
-        QCoreApplication::processEvents();
-
-        QVERIFY(list(view)->selectedKey().isEmpty());
-        QCOMPARE(list(view)->preview(), preview.data());
-        QCOMPARE(context.client.requestKeys().count(issueKey), 1);
-
-        // Selecting another replaces it.
-        clickRow(view, QStringLiteral("website#3"));
-        QVERIFY(list(view)->preview() != preview.data());
+        QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("1000"));
+        QCOMPARE(cellText(view, 1, PipelineId), QStringLiteral("250"));
+        QCOMPARE(cellText(view, 2, PipelineId), QStringLiteral("99"));
     }
 
-    void closedPreviewDoesNotReadAndComesBack()
+    void pipelineFilterOnStatus()
     {
-        const QString issueKey = backendKey(QStringLiteral("issues/7"));
         FakeContext context;
-        context.source.status = issues();
-        View view(createIssueListView(context, nullptr));
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
         show(view);
-        clickRow(view, QStringLiteral("backend#7"));
-        QCoreApplication::processEvents();
 
-        view->findChild<QToolButton *>(QStringLiteral("closePreview"))->click();
-        QVERIFY(!list(view)->preview());
-        context.source.change(issues());
-        QCoreApplication::processEvents();
-        QCOMPARE(context.client.requestKeys().count(issueKey), 1);
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineStatus)));
+        QVERIFY(filter);
+        QCOMPARE(filter->count(), 4);
+        QCOMPARE(filter->itemText(0), QStringLiteral("All"));
 
-        clickRow(view, QStringLiteral("backend#7"));
-        QVERIFY(list(view)->preview());
-        QCOMPARE(context.client.requestKeys().count(issueKey), 2);
+        filter->setCurrentIndex(filter->findText(QStringLiteral("Failed")));
+        QCOMPARE(rowCount(view), 2);
+        QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("9104"));
+
+        // It survives new rows.
+        context.source.change(pipelines());
+        QCOMPARE(rowCount(view), 2);
+        QCOMPARE(filter->currentText(), QStringLiteral("Failed"));
     }
 
-    void previewWaitsWhileHidden()
+    void pipelineAdd_data()
     {
-        const QString issueKey = backendKey(QStringLiteral("issues/7"));
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QJsonObject>("config");
+
+        QTest::newRow("branch") << QStringLiteral("9104") << QStringLiteral("acme/backend feature/retry-button CI")
+                                << QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                               {QStringLiteral("branchSource"), QStringLiteral("fixed")},
+                                               {QStringLiteral("branch"), QStringLiteral("feature/retry-button")}};
+        QTest::newRow("merge request") << QStringLiteral("9103") << QStringLiteral("acme/backend!42 CI")
+                                       << QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                                      {QStringLiteral("branchSource"), QStringLiteral("mergeRequest")},
+                                                      {QStringLiteral("iid"), 42}};
+    }
+
+    void pipelineAdd()
+    {
+        QFETCH(QString, key);
+        QFETCH(QString, name);
+        QFETCH(QJsonObject, config);
+
         FakeContext context;
-        context.source.status = issues();
-        View view(createIssueListView(context, nullptr));
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
         show(view);
-        clickRow(view, QStringLiteral("backend#7"));
-        QCoreApplication::processEvents();
 
-        view->hide();
-        context.source.change(issues());
-        QCOMPARE(context.client.requestKeys().count(issueKey), 1);
+        emit list(view)->rowLinkActivated(key, QStringLiteral("add"));
 
-        view->show();
-        QCOMPARE(context.client.requestKeys().count(issueKey), 2);
+        QCOMPARE(context.added.size(), 1);
+        QCOMPARE(context.added.first().typeId, QStringLiteral("gitlab.pipeline"));
+        QCOMPARE(context.added.first().name, name);
+        QCOMPARE(context.added.first().config, config);
+
+        chooseFromMenu(view, key, QStringLiteral("Add to task as item"));
+        QCOMPARE(context.added.size(), 2);
+        QCOMPARE(context.added.last().config, config);
+    }
+
+    // A merge request's merged result and train refs name it too.
+    void pipelineMergeRequestRefs_data()
+    {
+        QTest::addColumn<QString>("ref");
+        QTest::newRow("head") << QStringLiteral("refs/merge-requests/42/head");
+        QTest::newRow("merge") << QStringLiteral("refs/merge-requests/42/merge");
+        QTest::newRow("train") << QStringLiteral("refs/merge-requests/42/train");
+    }
+
+    void pipelineMergeRequestRefs()
+    {
+        QFETCH(QString, ref);
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status =
+            statusOfRows({QJsonObject{{QStringLiteral("id"), 1}, {QStringLiteral("ref"), ref}}});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        chooseFromMenu(view, QStringLiteral("1"), QStringLiteral("Add to task as item"));
+        QCOMPARE(context.added.first().config.value(QStringLiteral("branchSource")).toString(),
+                 QStringLiteral("mergeRequest"));
+        QCOMPARE(context.added.first().config.value(QStringLiteral("iid")).toInteger(), 42);
+    }
+
+    // A ref that names no merge request is taken as a branch.
+    void pipelineOtherRefsAreBranches()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({QJsonObject{{QStringLiteral("id"), 1},
+                                                          {QStringLiteral("ref"), QStringLiteral("refs/merge-requests/x/head")}}});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        chooseFromMenu(view, QStringLiteral("1"), QStringLiteral("Add to task as item"));
+        QCOMPARE(context.added.first().config.value(QStringLiteral("branchSource")).toString(),
+                 QStringLiteral("fixed"));
+    }
+
+    void pipelineWebAndOpenUseTheRowsAddress()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        const QUrl address(kBase + QStringLiteral("/acme/backend/-/pipelines/9104"));
+        emit list(view)->rowLinkActivated(QStringLiteral("9104"), QStringLiteral("web"));
+        QCOMPARE(m_opened, QList<QUrl>{address});
+
+        emit list(view)->rowLinkActivated(QStringLiteral("9104"), QStringLiteral("open"));
+        QCOMPARE(context.pages, QList<QUrl>{address});
+    }
+
+    void pipelineAddressIsBuiltWithoutWebUrl()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({QJsonObject{{QStringLiteral("id"), 5}}});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        chooseFromMenu(view, QStringLiteral("5"), QStringLiteral("Web"));
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kBase + QStringLiteral("/acme/backend/-/pipelines/5"))});
+        // A row without a ref has no branch to add.
+        QVERIFY(!menuEntryEnabled(view, QStringLiteral("5"), QStringLiteral("Add to task as item")));
+    }
+
+    void pipelineWebLinkIsTheProjectsPage()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        View view(createPipelineListView(context, nullptr));
+        QCOMPARE(list(view)->webLink(), QUrl(kBase + QStringLiteral("/acme/backend/-/pipelines")));
+    }
+
+    // Without a project there is no link, and the status's message shows.
+    void pipelineIncompleteConfiguration()
+    {
+        FakeContext context;
+        context.itemConfig = QJsonObject{{QStringLiteral("source"), QStringLiteral("all")}};
+        context.source.status.message = QStringLiteral("Set the project in the item's settings.");
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        QVERIFY(list(view)->webLink().isEmpty());
+        QVERIFY(shownText(view).contains(context.source.status.message));
+        QVERIFY(!table(view)->isVisible());
+        QVERIFY(context.client.requests().isEmpty());
+    }
+
+    void pipelineEmptyListShowsALine()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.source.status = statusOfRows({});
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        QVERIFY(table(view)->isVisible());
+        QVERIFY(shownText(view).contains(QStringLiteral("No pipelines")));
     }
 
     // The row menu.
@@ -815,6 +1238,19 @@ private slots:
         QCOMPARE(context.added.first().name, key);
         const QJsonObject expected{{QStringLiteral("project"), project}, {QStringLiteral("iid"), iid}};
         QCOMPARE(context.added.first().config, expected);
+    }
+
+    void webOpensTheBrowser()
+    {
+        FakeContext context;
+        context.source.status = mergeRequests();
+        View view(createMergeRequestListView(context, nullptr));
+        show(view);
+
+        chooseFromMenu(view, QStringLiteral("acme/backend!42"), QStringLiteral("Web"));
+
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kBase + QStringLiteral("/acme/backend/-/merge_requests/42"))});
+        QVERIFY(context.pages.isEmpty());
     }
 
     void openPageShowsThePage()

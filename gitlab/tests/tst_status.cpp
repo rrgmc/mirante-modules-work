@@ -857,7 +857,7 @@ private slots:
         const QStringList withStatus{QStringLiteral("gitlab.mr.summary"), QStringLiteral("gitlab.mr.page"),
                                      QStringLiteral("gitlab.mr.list"),    QStringLiteral("gitlab.pipeline"),
                                      QStringLiteral("gitlab.issue.summary"), QStringLiteral("gitlab.issue.page"),
-                                     QStringLiteral("gitlab.issue.list")};
+                                     QStringLiteral("gitlab.issue.list"), QStringLiteral("gitlab.pipeline.list")};
         for (const mirante::ItemType *type : registry.types())
             QCOMPARE(type->hasStatus(), withStatus.contains(type->id()));
 
@@ -890,6 +890,15 @@ private slots:
         WAIT_FOR_FINISH(issues);
         QCOMPARE(issues.finished->state, ItemStatus::State::Ok);
         QCOMPARE(issues.finished->summary, QStringLiteral("2 issues"));
+
+        FakeStatusJob pipelines;
+        pipelines.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}};
+        QVERIFY(pipelines.client.setJsonFile(QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines?per_page=100"),
+                                             dataFile(QStringLiteral("pipeline_list.json"))));
+        registry.type(QStringLiteral("gitlab.pipeline.list")).fetchStatus(pipelines);
+        WAIT_FOR_FINISH(pipelines);
+        QCOMPARE(pipelines.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(pipelines.finished->summary, QStringLiteral("4 pipelines"));
     }
 };
 
