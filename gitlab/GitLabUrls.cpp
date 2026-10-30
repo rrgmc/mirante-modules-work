@@ -170,13 +170,10 @@ std::optional<UrlMatch> matchUrl(const QString &typeId, const QUrl &url, const Q
             match.config.insert(QStringLiteral("iid"), address->number);
             match.name = project + QLatin1Char('!') + number + QStringLiteral(" CI");
         } else if (pipelines) {
+            const QString branch = address->ref.isEmpty() ? kDefaultBranch : address->ref;
             match.config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
-            if (!address->ref.isEmpty())
-                match.config.insert(QStringLiteral("branch"), address->ref);
-            match.name = project;
-            if (!address->ref.isEmpty())
-                match.name += QLatin1Char(' ') + address->ref;
-            match.name += QStringLiteral(" CI");
+            match.config.insert(QStringLiteral("branch"), branch);
+            match.name = project + QLatin1Char(' ') + branch + QStringLiteral(" CI");
         } else {
             return std::nullopt;
         }

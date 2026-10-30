@@ -1,5 +1,5 @@
 // The three GitLab summaries, drawn from responses recorded from a GitLab
-// server, in tests/data/. "Me" is the user in data/user.json, id 1001. A handler
+// server or written in their shape, in tests/data/. "Me" is the user in data/user.json, id 1001. A handler
 // stands in for the external browser, so nothing is opened.
 #include "../GitLabIssueView.h"
 #include "../GitLabMergeRequestView.h"
@@ -9,12 +9,12 @@
 #include <mirante/ItemContext.h>
 #include <mirante/testing/FakeApiClient.h>
 #include <mirante/widgets/ActionRow.h>
+#include <mirante/widgets/StatusPill.h>
 #include <mirante/widgets/SummaryView.h>
 
 #include <QApplication>
 #include <QDesktopServices>
 #include <QDialog>
-#include <QDialogButtonBox>
 #include <QDateTime>
 #include <QFile>
 #include <QJsonArray>
@@ -23,7 +23,6 @@
 #include <QLabel>
 #include <QLocale>
 #include <QMessageBox>
-#include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
 #include <QTest>
@@ -37,6 +36,8 @@
 using mirante::ApiReply;
 using mirante::ItemStatus;
 using mirante::testing::FakeApiClient;
+using mirante::widgets::StatusPill;
+using mirante::widgets::StatusRole;
 using mirante::widgets::SummaryView;
 using namespace mirante::modules::gitlab;
 
@@ -146,6 +147,16 @@ QPushButton *button(const View &view, const QString &id)
     return view->findChild<QPushButton *>(id);
 }
 
+StatusPill *pipelinePill(const View &view, qint64 id)
+{
+    return dynamic_cast<StatusPill *>(view->findChild<QLabel *>(QStringLiteral("pipeline-pill-%1").arg(id)));
+}
+
+QTimer *refreshTimer(const View &view)
+{
+    return view->findChild<QTimer *>(QStringLiteral("pipeline-refresh"));
+}
+
 bool showsAction(const View &view, const QString &id)
 {
     return summary(view)->actions()->isActionVisible(id);
@@ -191,19 +202,28 @@ ItemStatus openIssue(const QJsonValue &notes = QJsonValue(QJsonValue::Undefined)
     return status;
 }
 
-ItemStatus issueInState(const QString &state)
-{
-    QJsonObject issue = readObject(QStringLiteral("issue.json"));
-    issue.insert(QStringLiteral("state"), state);
-    return issueStatus(issue);
-}
-
 ItemStatus pipelineWithStatus(const QString &state)
 {
     QJsonObject pipeline = readObject(QStringLiteral("pipeline_latest.json"));
     pipeline.insert(QStringLiteral("status"), state);
     return pipelineStatus(QStringLiteral("feature/retry-button"), pipeline,
                           readJson(QStringLiteral("pipeline_jobs.json")).array());
+}
+
+// 9001 failed, with 9000 failed and 8999 running in its group, and 8990 and
+// 8950 before it, as the status makes it from data/pipelines.json.
+ItemStatus groupStatus()
+{
+    const QJsonArray recent = readJson(QStringLiteral("pipelines.json")).array();
+    const PipelineGroup group = pipelineGroup(readObject(QStringLiteral("pipeline_latest.json")), recent);
+    QJsonArray siblings;
+    const QStringList files{QStringLiteral("pipeline_jobs_sibling.json"), QStringLiteral("pipeline_jobs_running.json")};
+    for (qsizetype i = 0; i < group.siblings.size(); ++i) {
+        siblings.append(QJsonObject{{QStringLiteral("pipeline"), group.siblings.at(i)},
+                                    {QStringLiteral("jobs"), readJson(files.at(i)).array()}});
+    }
+    return pipelineStatus(QStringLiteral("feature/retry-button"), group.latest,
+                          readJson(QStringLiteral("pipeline_jobs.json")).array(), siblings, group.older);
 }
 
 QJsonObject note(const QString &body)
@@ -236,14 +256,6 @@ void withDialog(QPushButton *start, const std::function<void(QDialog *)> &answer
         answer(dialog);
     });
     start->click();
-}
-
-void writeComment(QPushButton *start, const QString &text)
-{
-    withDialog(start, [text](QDialog *dialog) {
-        dialog->findChild<QPlainTextEdit *>()->setPlainText(text);
-        dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
-    });
 }
 
 void answerQuestion(QPushButton *start, QMessageBox::StandardButton answer)
@@ -308,7 +320,9 @@ private slots:
 
         QVERIFY(text.contains(QStringLiteral("Failed")));
         QVERIFY(text.contains(QStringLiteral("#9001")));
-        // The failed jobs only, with a duration and a log link for each.
+        // The failed jobs only, with a duration and a log link for each. The
+        // pipeline has a link of its own.
+        QVERIFY(button(view, QStringLiteral("pipeline-web")));
         QVERIFY(text.contains(QStringLiteral("test:unit")));
         QVERIFY(text.contains(QStringLiteral("5 min 2 s")));
         QVERIFY(text.contains(QStringLiteral("test:lint")));
@@ -356,21 +370,65 @@ private slots:
         QVERIFY(text.contains(QStringLiteral("feature/retry-button")));
         QVERIFY(text.contains(QStringLiteral("11 min 39 s")));
 
-        // One section per stage, in the order of the jobs.
-        for (const char *stage : {"build", "test", "deploy"})
-            QVERIFY(summary(view)->isSectionVisible(QStringLiteral("stage:") + QLatin1String(stage)));
+        // One table, with the stages in the order of the jobs.
+        QVERIFY(summary(view)->isSectionVisible(QStringLiteral("jobs")));
         QVERIFY(text.indexOf(QStringLiteral("build")) < text.indexOf(QStringLiteral("test:unit")));
         QVERIFY(text.indexOf(QStringLiteral("test:unit")) < text.indexOf(QStringLiteral("deploy:review")));
+        QVERIFY(text.indexOf(QStringLiteral("test\n")) < text.indexOf(QStringLiteral("test:unit")));
+        QVERIFY(text.contains(QStringLiteral("deploy\n")));
 
         QVERIFY(text.contains(QStringLiteral("Passed")));
         QVERIFY(text.contains(QStringLiteral("Skipped")));
+        QVERIFY(text.contains(QStringLiteral("Failed, allowed")));
         QVERIFY(text.contains(QStringLiteral("3 min 32 s")));
 
-        // Only failed jobs have a log link and a Retry button.
+        // A pill for each job, in its role's colours.
+        const QList<QLabel *> labels = view->findChildren<QLabel *>();
+        const auto roleOf = [&labels](const QString &wanted) {
+            for (const QLabel *label : labels) {
+                const auto *pill = dynamic_cast<const StatusPill *>(label);
+                if (pill && pill->text() == wanted)
+                    return pill->role();
+            }
+            return StatusRole::Neutral;
+        };
+        QCOMPARE(roleOf(QStringLiteral("Passed")), StatusRole::Good);
+        QCOMPARE(roleOf(QStringLiteral("Failed")), StatusRole::Bad);
+    }
+
+    // The links of a job follow what it can do now.
+    void jobLinksFollowTheRules()
+    {
+        FakeContext context;
+        context.source.status = pipelineWithStatus(QStringLiteral("failed"));
+        View view(createPipelineView(context, nullptr));
+
+        // Passed: it has run and is finished.
+        QVERIFY(button(view, QStringLiteral("log-70001")));
+        QVERIFY(button(view, QStringLiteral("retry-job-70001")));
+        QVERIFY(!button(view, QStringLiteral("play-job-70001")));
+        // Failed.
         QVERIFY(button(view, QStringLiteral("log-70002")));
         QVERIFY(button(view, QStringLiteral("retry-job-70002")));
-        QVERIFY(!button(view, QStringLiteral("log-70001")));
-        QVERIFY(!button(view, QStringLiteral("retry-job-70001")));
+        // Skipped: it never ran.
+        QVERIFY(!button(view, QStringLiteral("log-70004")));
+        QVERIFY(!button(view, QStringLiteral("retry-job-70004")));
+
+        // Running, and not yet started.
+        context.source.change(pipelineStatus(QStringLiteral("main"), readObject(QStringLiteral("pipeline_latest.json")),
+                                             readJson(QStringLiteral("pipeline_jobs_running.json")).array()));
+        QVERIFY(button(view, QStringLiteral("log-72001")));
+        QVERIFY(!button(view, QStringLiteral("retry-job-72001")));
+        QVERIFY(!button(view, QStringLiteral("log-72002")));
+        QVERIFY(!button(view, QStringLiteral("retry-job-72002")));
+
+        // Canceled can be retried, and manual can be played but has no log.
+        context.source.change(pipelineStatus(QStringLiteral("main"), readObject(QStringLiteral("pipeline_latest.json")),
+                                             readJson(QStringLiteral("pipeline_jobs_sibling.json")).array()));
+        QVERIFY(button(view, QStringLiteral("retry-job-71002")));
+        QVERIFY(button(view, QStringLiteral("play-job-71003")));
+        QVERIFY(!button(view, QStringLiteral("log-71003")));
+        QVERIFY(!button(view, QStringLiteral("retry-job-71003")));
     }
 
     // GitLab's order of the jobs does not decide the order of the stages.
@@ -390,7 +448,7 @@ private slots:
         QVERIFY(text.indexOf(QStringLiteral("test:unit")) < text.indexOf(QStringLiteral("deploy:review")));
     }
 
-    void pipelineStageThatGoesIsHidden()
+    void pipelineStageThatGoesIsGone()
     {
         FakeContext context;
         context.source.status = pipelineWithStatus(QStringLiteral("failed"));
@@ -400,8 +458,349 @@ private slots:
         const QJsonArray fewer{readJson(QStringLiteral("pipeline_jobs.json")).array().at(0)};
         context.source.change(pipelineStatus(QStringLiteral("main"), readObject(QStringLiteral("pipeline_latest.json")),
                                              fewer));
-        QVERIFY(summary(view)->isSectionVisible(QStringLiteral("stage:build")));
-        QVERIFY(!summary(view)->isSectionVisible(QStringLiteral("stage:test")));
+        QVERIFY(shownText(view).contains(QStringLiteral("build")));
+        QVERIFY(!shownText(view).contains(QStringLiteral("test:unit")));
+    }
+
+    void nothingOfAPipelineIsMarkup()
+    {
+        QJsonArray jobs = readJson(QStringLiteral("pipeline_jobs.json")).array();
+        QJsonObject job = jobs.at(0).toObject();
+        job.insert(QStringLiteral("name"), QStringLiteral("<b>name</b>"));
+        job.insert(QStringLiteral("stage"), QStringLiteral("<i>stage</i>"));
+        jobs.replace(0, job);
+        FakeContext context;
+        context.source.status =
+            pipelineStatus(QStringLiteral("<b>branch</b>"), readObject(QStringLiteral("pipeline_latest.json")), jobs);
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        for (const QLabel *label : view->findChildren<QLabel *>())
+            QCOMPARE(label->textFormat(), Qt::PlainText);
+        QVERIFY(shownText(view).contains(QStringLiteral("<b>name</b>")));
+    }
+
+    // The group, Previous and Next.
+
+    void pillsSwitchWithinTheGroup()
+    {
+        FakeContext context;
+        context.source.status = groupStatus();
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        // The latest shows, with a pill for each of the group only.
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #9001")));
+        QVERIFY(pipelinePill(view, 9001));
+        QVERIFY(pipelinePill(view, 9000));
+        QVERIFY(pipelinePill(view, 8999));
+        QVERIFY(!pipelinePill(view, 8990));
+        QVERIFY(pipelinePill(view, 9001)->font().bold());
+        QVERIFY(pipelinePill(view, 9001)->isVisibleTo(view.get()));
+        QCOMPARE(pipelinePill(view, 9000)->role(), StatusRole::Bad);
+        QCOMPARE(pipelinePill(view, 8999)->role(), StatusRole::Waiting);
+
+        QTest::mouseClick(pipelinePill(view, 9000), Qt::LeftButton);
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #9000")));
+        QVERIFY(shownText(view).contains(QStringLiteral("publish")));
+        QVERIFY(!shownText(view).contains(QStringLiteral("test:unit")));
+        QVERIFY(pipelinePill(view, 9000)->font().bold());
+        QVERIFY(!pipelinePill(view, 9001)->font().bold());
+        // The actions and links follow what is shown. No request was needed.
+        QCOMPARE(summary(view)->actions()->webLink(),
+                 QUrl(QStringLiteral("https://gitlab.example/acme/backend/-/pipelines/9000")));
+        QVERIFY(context.client.requests().isEmpty());
+        succeed(context, QStringLiteral("POST ") + kProject + QStringLiteral("/pipelines/9000/retry"));
+        button(view, QStringLiteral("retry-pipeline"))->click();
+        QCOMPARE(context.client.requestKeys().constLast(),
+                 QStringLiteral("POST ") + kProject + QStringLiteral("/pipelines/9000/retry"));
+    }
+
+    void aPipelineAloneHasNoPillsOrSteps()
+    {
+        FakeContext context;
+        context.source.status = pipelineWithStatus(QStringLiteral("failed"));
+        View view(createPipelineView(context, nullptr));
+        view->show();
+        QVERIFY(!pipelinePill(view, 9001)->isVisibleTo(view.get()));
+        QVERIFY(!button(view, QStringLiteral("previous-pipeline"))->isVisibleTo(view.get()));
+        QVERIFY(!button(view, QStringLiteral("next-pipeline"))->isVisibleTo(view.get()));
+    }
+
+    // Previous goes back in time, past the group, and an older pipeline's jobs
+    // are read when it shows.
+    void previousAndNextStepThroughAll()
+    {
+        FakeContext context;
+        context.source.status = groupStatus();
+        const QString olderJobs = QStringLiteral("GET ") + kProject + QStringLiteral("/pipelines/8990/jobs?per_page=100");
+        QVERIFY(context.client.setJsonFile(olderJobs, QFINDTESTDATA("data/pipeline_jobs_sibling.json")));
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        QPushButton *previous = button(view, QStringLiteral("previous-pipeline"));
+        QPushButton *next = button(view, QStringLiteral("next-pipeline"));
+        QVERIFY(previous->isEnabled());
+        QVERIFY(!next->isEnabled());
+
+        previous->click();
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #9000")));
+        previous->click();
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #8999")));
+        QVERIFY(context.client.requests().isEmpty());
+
+        previous->click();
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #8990")));
+        QVERIFY(shownText(view).contains(QStringLiteral("Loading…")));
+        QCOMPARE(context.client.requestKeys(), QStringList{olderJobs});
+        QTRY_VERIFY(shownText(view).contains(QStringLiteral("publish")));
+
+        // The last one has no jobs on the server: a 404 says so.
+        previous->click();
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #8950")));
+        QVERIFY(!previous->isEnabled());
+        QTRY_VERIFY(shownText(view).contains(QStringLiteral("The jobs could not be read.")));
+
+        next->click();
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #8990")));
+        // What was read shows at once, while it is read again.
+        QVERIFY(shownText(view).contains(QStringLiteral("publish")));
+        QVERIFY(next->isEnabled());
+    }
+
+    // A sibling's jobs that the status could not read are asked for, too.
+    void aSiblingWithoutJobsIsReadWhenShown()
+    {
+        ItemStatus status = groupStatus();
+        QJsonArray siblings = status.data.value(QStringLiteral("siblings")).toArray();
+        QJsonObject first = siblings.at(0).toObject();
+        first.remove(QStringLiteral("jobs"));
+        siblings.replace(0, first);
+        status.data.insert(QStringLiteral("siblings"), siblings);
+
+        FakeContext context;
+        context.source.status = status;
+        const QString key = QStringLiteral("GET ") + kProject + QStringLiteral("/pipelines/9000/jobs?per_page=100");
+        QVERIFY(context.client.setJsonFile(key, QFINDTESTDATA("data/pipeline_jobs_sibling.json")));
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        QTest::mouseClick(pipelinePill(view, 9000), Qt::LeftButton);
+        QCOMPARE(context.client.requestKeys(), QStringList{key});
+        QTRY_VERIFY(shownText(view).contains(QStringLiteral("publish")));
+    }
+
+    // An answer for what is no longer shown is dropped.
+    void aLateAnswerDoesNotDraw()
+    {
+        FakeContext context;
+        context.source.status = groupStatus();
+        QVERIFY(context.client.setJsonFile(QStringLiteral("GET ") + kProject
+                                               + QStringLiteral("/pipelines/8990/jobs?per_page=100"),
+                                           QFINDTESTDATA("data/pipeline_jobs_sibling.json")));
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        QPushButton *previous = button(view, QStringLiteral("previous-pipeline"));
+        QPushButton *next = button(view, QStringLiteral("next-pipeline"));
+        for (int i = 0; i < 3; ++i)
+            previous->click();
+        next->click();
+        QCoreApplication::processEvents();
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #8999")));
+        QVERIFY(!shownText(view).contains(QStringLiteral("publish")));
+    }
+
+    // A choice stays through a new status while it is still there. Otherwise,
+    // and when the latest is shown, the view follows the latest.
+    void aNewStatusKeepsTheChoice()
+    {
+        FakeContext context;
+        context.source.status = groupStatus();
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        QTest::mouseClick(pipelinePill(view, 9000), Qt::LeftButton);
+        context.source.change(groupStatus());
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #9000")));
+
+        context.source.change(pipelineWithStatus(QStringLiteral("success")));
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #9001")));
+        QVERIFY(!pipelinePill(view, 9000));
+
+        QJsonObject newer = readObject(QStringLiteral("pipeline_latest.json"));
+        newer.insert(QStringLiteral("id"), 9100);
+        context.source.change(pipelineStatus(QStringLiteral("main"), newer, {}));
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #9100")));
+    }
+
+    // The refresh.
+
+    void refreshRunsWhileTheShownPipelineIsUnfinished_data()
+    {
+        QTest::addColumn<QString>("status");
+        QTest::addColumn<bool>("refreshes");
+
+        QTest::newRow("running") << "running" << true;
+        QTest::newRow("pending") << "pending" << true;
+        QTest::newRow("created") << "created" << true;
+        QTest::newRow("success") << "success" << false;
+        QTest::newRow("failed") << "failed" << false;
+        QTest::newRow("canceled") << "canceled" << false;
+        QTest::newRow("skipped") << "skipped" << false;
+        QTest::newRow("manual") << "manual" << false;
+    }
+
+    void refreshRunsWhileTheShownPipelineIsUnfinished()
+    {
+        QFETCH(QString, status);
+        QFETCH(bool, refreshes);
+
+        FakeContext context;
+        context.source.status = pipelineWithStatus(status);
+        View view(createPipelineView(context, nullptr));
+        view->show();
+        QCOMPARE(refreshTimer(view)->isActive(), refreshes);
+        QCOMPARE(refreshTimer(view)->interval(), 15000);
+    }
+
+    void refreshStartsAndStopsWithTheStatus()
+    {
+        FakeContext context;
+        context.source.status = pipelineWithStatus(QStringLiteral("running"));
+        View view(createPipelineView(context, nullptr));
+        view->show();
+        QVERIFY(refreshTimer(view)->isActive());
+
+        // It asks at each interval.
+        refreshTimer(view)->setInterval(1);
+        QTRY_VERIFY(context.source.refreshes >= 2);
+
+        context.source.change(pipelineWithStatus(QStringLiteral("success")));
+        QVERIFY(!refreshTimer(view)->isActive());
+        const int asked = context.source.refreshes;
+        QTest::qWait(20);
+        QCOMPARE(context.source.refreshes, asked);
+
+        context.source.change(pipelineWithStatus(QStringLiteral("running")));
+        QVERIFY(refreshTimer(view)->isActive());
+
+        context.source.change(pipelineStatus(QStringLiteral("main"), {}, {}));
+        QVERIFY(!refreshTimer(view)->isActive());
+    }
+
+    void refreshStopsWhileHidden()
+    {
+        FakeContext context;
+        context.source.status = pipelineWithStatus(QStringLiteral("running"));
+        View view(createPipelineView(context, nullptr));
+
+        // Not shown yet.
+        QVERIFY(!refreshTimer(view)->isActive());
+        view->show();
+        QVERIFY(refreshTimer(view)->isActive());
+
+        view->hide();
+        QVERIFY(!refreshTimer(view)->isActive());
+        // A status that comes while hidden does not start it.
+        context.source.change(pipelineWithStatus(QStringLiteral("running")));
+        QVERIFY(!refreshTimer(view)->isActive());
+
+        view->show();
+        QVERIFY(refreshTimer(view)->isActive());
+
+        // The same when a parent hides, as a tab does.
+        QWidget parent;
+        view->setParent(&parent);
+        parent.show();
+        view->show();
+        QVERIFY(refreshTimer(view)->isActive());
+        parent.hide();
+        QVERIFY(!refreshTimer(view)->isActive());
+        view->setParent(nullptr);
+    }
+
+    // It follows the pipeline shown, not the latest.
+    void refreshFollowsTheShownPipeline()
+    {
+        FakeContext context;
+        context.source.status = groupStatus();
+        View view(createPipelineView(context, nullptr));
+        view->show();
+        QVERIFY(!refreshTimer(view)->isActive());
+
+        QTest::mouseClick(pipelinePill(view, 8999), Qt::LeftButton);
+        QVERIFY(refreshTimer(view)->isActive());
+
+        QTest::mouseClick(pipelinePill(view, 9000), Qt::LeftButton);
+        QVERIFY(!refreshTimer(view)->isActive());
+    }
+
+    // The merge request's link.
+
+    void mergeRequestLinkFromTheConfiguration()
+    {
+        FakeContext context;
+        context.itemConfig.insert(QStringLiteral("branchSource"), QStringLiteral("mergeRequest"));
+        context.source.status = pipelineWithStatus(QStringLiteral("failed"));
+        View view(createPipelineView(context, nullptr));
+        QVERIFY(showsAction(view, QStringLiteral("merge-request")));
+
+        button(view, QStringLiteral("merge-request"))->click();
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(QStringLiteral("https://built.example/acme/backend/-/merge_requests/42"))});
+        QVERIFY(context.pages.isEmpty());
+    }
+
+    void mergeRequestLinkOfTheBranch()
+    {
+        FakeContext context;
+        context.itemConfig.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
+        ItemStatus status = pipelineWithStatus(QStringLiteral("failed"));
+        View none(createPipelineView(context, nullptr));
+        QVERIFY(!showsAction(none, QStringLiteral("merge-request")));
+
+        context.source.status = status;
+        View without(createPipelineView(context, nullptr));
+        QVERIFY(!showsAction(without, QStringLiteral("merge-request")));
+
+        status.data.insert(QStringLiteral("mergeRequest"), readObject(QStringLiteral("merge_request.json")));
+        context.source.change(status);
+        QVERIFY(showsAction(without, QStringLiteral("merge-request")));
+        button(without, QStringLiteral("merge-request"))->click();
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kMrAddress)});
+
+        // An address of another kind is not used.
+        QJsonObject other = readObject(QStringLiteral("merge_request.json"));
+        other.insert(QStringLiteral("web_url"), QStringLiteral("file:///etc/passwd"));
+        status.data.insert(QStringLiteral("mergeRequest"), other);
+        context.source.change(status);
+        QVERIFY(!showsAction(without, QStringLiteral("merge-request")));
+    }
+
+    // The merge request summary links to its pipeline.
+
+    void mergeRequestPipelineHasAWebLink()
+    {
+        FakeContext context;
+        context.source.status = failedMergeRequest();
+        View view(createMergeRequestView(context, nullptr));
+
+        button(view, QStringLiteral("pipeline-web"))->click();
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kPipelineAddress)});
+        QVERIFY(context.pages.isEmpty());
+
+        QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
+        QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
+        pipeline.remove(QStringLiteral("web_url"));
+        mergeRequest.insert(QStringLiteral("head_pipeline"), pipeline);
+        context.source.status = mergeRequestWith(mergeRequest, QJsonObject(), QJsonObject());
+        View without(createMergeRequestView(context, nullptr));
+        QVERIFY(!button(without, QStringLiteral("pipeline-web")));
+
+        context.source.status = mergeRequestWith(readObject(QStringLiteral("merge_request_no_pipeline.json")),
+                                                 QJsonObject(), QJsonObject());
+        View noPipeline(createMergeRequestView(context, nullptr));
+        QVERIFY(!button(noPipeline, QStringLiteral("pipeline-web")));
     }
 
     void issueDrawsFromData()
@@ -529,33 +928,6 @@ private slots:
 
     // The buttons' rules.
 
-    void approveFollowsTheRules()
-    {
-        const QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
-        const QJsonObject user = readObject(QStringLiteral("user.json"));
-
-        FakeContext context;
-        context.source.status = mergeRequestWith(mergeRequest, readObject(QStringLiteral("approvals.json")), user);
-        View view(createMergeRequestView(context, nullptr));
-        QVERIFY(showsAction(view, QStringLiteral("approve")));
-
-        // Approved by me.
-        const QJsonObject carla{{QStringLiteral("id"), 3003}, {QStringLiteral("username"), QStringLiteral("carla")}};
-        context.source.change(
-            mergeRequestWith(mergeRequest, readObject(QStringLiteral("approvals_approved.json")), carla));
-        QVERIFY(!showsAction(view, QStringLiteral("approve")));
-
-        // Approved by someone else only.
-        context.source.change(
-            mergeRequestWith(mergeRequest, readObject(QStringLiteral("approvals_approved.json")), user));
-        QVERIFY(showsAction(view, QStringLiteral("approve")));
-
-        // Not open.
-        context.source.change(mergeRequestWith(readObject(QStringLiteral("merge_request_merged.json")),
-                                               readObject(QStringLiteral("approvals.json")), user));
-        QVERIFY(!showsAction(view, QStringLiteral("approve")));
-    }
-
     void retryPipelineFollowsTheRules_data()
     {
         QTest::addColumn<QString>("status");
@@ -597,37 +969,7 @@ private slots:
         QVERIFY(!showsAction(view, QStringLiteral("retry-pipeline")));
     }
 
-    void closeOrReopenFollowsTheState()
-    {
-        FakeContext context;
-        context.source.status = issueInState(QStringLiteral("opened"));
-        View view(createIssueView(context, nullptr));
-        QVERIFY(showsAction(view, QStringLiteral("close")));
-        QVERIFY(!showsAction(view, QStringLiteral("reopen")));
-
-        context.source.change(issueInState(QStringLiteral("closed")));
-        QVERIFY(!showsAction(view, QStringLiteral("close")));
-        QVERIFY(showsAction(view, QStringLiteral("reopen")));
-    }
-
     // The requests of the actions, and a success refreshing the status.
-
-    void approvePosts()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/approve");
-        succeed(context, key);
-        View view(createMergeRequestView(context, nullptr));
-
-        QPushButton *approve = button(view, QStringLiteral("approve"));
-        approve->click();
-        QVERIFY(!approve->isEnabled());
-        QCOMPARE(context.client.requestKeys(), QStringList{key});
-        QTRY_COMPARE(context.source.refreshes, 1);
-        QVERIFY(approve->isEnabled());
-        QVERIFY(errorOf(view).isEmpty());
-    }
 
     void retryPipelineOfAMergeRequestPosts()
     {
@@ -640,44 +982,6 @@ private slots:
         button(view, QStringLiteral("retry-pipeline"))->click();
         QCOMPARE(context.client.requestKeys(), QStringList{key});
         QTRY_COMPARE(context.source.refreshes, 1);
-    }
-
-    void commentOnAMergeRequestPosts()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/notes");
-        succeed(context, key);
-        View view(createMergeRequestView(context, nullptr));
-
-        writeComment(button(view, QStringLiteral("comment")), QStringLiteral("Looks good"));
-        QCOMPARE(context.client.requestKeys(), QStringList{key});
-        QCOMPARE(context.client.requests().first().body.object().value(QStringLiteral("body")).toString(),
-                 QStringLiteral("Looks good"));
-        QTRY_COMPARE(context.source.refreshes, 1);
-    }
-
-    void aCancelledCommentSendsNothing()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        View view(createMergeRequestView(context, nullptr));
-
-        withDialog(button(view, QStringLiteral("comment")), [](QDialog *dialog) { dialog->reject(); });
-        QVERIFY(context.client.requests().isEmpty());
-        QCOMPARE(context.source.refreshes, 0);
-    }
-
-    void aViewThatGoesWhileTheDialogIsOpenSendsNothing()
-    {
-        FakeContext context;
-        context.source.status = failedMergeRequest();
-        auto *view = createMergeRequestView(context, nullptr);
-
-        QPushButton *comment = view->findChild<QPushButton *>(QStringLiteral("comment"));
-        QTimer::singleShot(0, qApp, [view] { delete view; });
-        comment->click();
-        QVERIFY(context.client.requests().isEmpty());
     }
 
     void pipelineActionsPost()
@@ -699,7 +1003,66 @@ private slots:
         QTRY_COMPARE(context.source.refreshes, 2);
     }
 
-    void onlyCancellingAsksFirst()
+    void playAndTriggerPost()
+    {
+        FakeContext context;
+        context.source.status = pipelineStatus(QStringLiteral("feature/retry-button"),
+                                               readObject(QStringLiteral("pipeline_latest.json")),
+                                               readJson(QStringLiteral("pipeline_jobs_sibling.json")).array());
+        const QString playKey = QStringLiteral("POST ") + kProject + QStringLiteral("/jobs/71003/play");
+        const QString triggerKey = QStringLiteral("POST ") + kProject + QStringLiteral("/pipeline?ref=feature%2Fretry-button");
+        succeed(context, playKey);
+        succeed(context, triggerKey);
+        View view(createPipelineView(context, nullptr));
+
+        QPushButton *play = button(view, QStringLiteral("play-job-71003"));
+        play->click();
+        QVERIFY(!play->isEnabled());
+        QCOMPARE(context.client.requestKeys(), QStringList{playKey});
+        QCOMPARE(context.client.requests().first().body, QJsonDocument(QJsonObject()));
+        QTRY_COMPARE(context.source.refreshes, 1);
+
+        // It starts work on the branch, so it asks first.
+        QPushButton *trigger = button(view, QStringLiteral("trigger-pipeline"));
+        answerQuestion(trigger, QMessageBox::No);
+        QCOMPARE(context.client.requestKeys(), QStringList{playKey});
+
+        answerQuestion(trigger, QMessageBox::Yes);
+        QCOMPARE(context.client.requestKeys(), (QStringList{playKey, triggerKey}));
+        QVERIFY(!trigger->isEnabled());
+        QTRY_COMPARE(context.source.refreshes, 2);
+        QVERIFY(trigger->isEnabled());
+    }
+
+    void triggerShowsTheLatestAfterwards()
+    {
+        FakeContext context;
+        context.source.status = groupStatus();
+        succeed(context, QStringLiteral("POST ") + kProject + QStringLiteral("/pipeline?ref=feature%2Fretry-button"));
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        QTest::mouseClick(pipelinePill(view, 9000), Qt::LeftButton);
+        answerQuestion(button(view, QStringLiteral("trigger-pipeline")), QMessageBox::Yes);
+        context.source.change(groupStatus());
+        QVERIFY(shownText(view).contains(QStringLiteral("Pipeline #9001")));
+    }
+
+    void aViewThatGoesWhileTheQuestionIsOpenSendsNothing()
+    {
+        for (const char *id : {"trigger-pipeline", "cancel-pipeline"}) {
+            FakeContext context;
+            context.source.status = pipelineWithStatus(QStringLiteral("running"));
+            auto *view = createPipelineView(context, nullptr);
+
+            QPushButton *start = view->findChild<QPushButton *>(QLatin1String(id));
+            QTimer::singleShot(0, qApp, [view] { delete view; });
+            start->click();
+            QVERIFY(context.client.requests().isEmpty());
+        }
+    }
+
+    void cancellingAsksFirst()
     {
         FakeContext context;
         context.source.status = pipelineWithStatus(QStringLiteral("running"));
@@ -716,49 +1079,37 @@ private slots:
         QTRY_COMPARE(context.source.refreshes, 1);
     }
 
-    void issueActionsSend()
-    {
-        FakeContext context;
-        context.itemConfig.insert(QStringLiteral("iid"), 7);
-        context.source.status = issueInState(QStringLiteral("opened"));
-        const QString putKey = QStringLiteral("PUT ") + kIssue;
-        const QString noteKey = QStringLiteral("POST ") + kIssue + QStringLiteral("/notes");
-        succeed(context, putKey);
-        succeed(context, noteKey);
-        View view(createIssueView(context, nullptr));
-
-        button(view, QStringLiteral("close"))->click();
-        QCOMPARE(context.client.requests().last().body.object().value(QStringLiteral("state_event")).toString(),
-                 QStringLiteral("close"));
-        QCOMPARE(context.client.requestKeys().last(), putKey);
-        QTRY_COMPARE(context.source.refreshes, 1);
-
-        context.source.change(issueInState(QStringLiteral("closed")));
-        button(view, QStringLiteral("reopen"))->click();
-        QCOMPARE(context.client.requests().last().body.object().value(QStringLiteral("state_event")).toString(),
-                 QStringLiteral("reopen"));
-        QTRY_COMPARE(context.source.refreshes, 2);
-
-        writeComment(button(view, QStringLiteral("comment")), QStringLiteral("Done"));
-        QCOMPARE(context.client.requestKeys().last(), noteKey);
-        QTRY_COMPARE(context.source.refreshes, 3);
-    }
-
     // Failures.
 
     void failureShowsTheMessage()
     {
         FakeContext context;
         context.source.status = failedMergeRequest();
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/approve");
+        const QString key = QStringLiteral("POST ") + kPipeline + QStringLiteral("/retry");
         context.client.setReply(key, failure(ApiReply::Error::Http, 500, QStringLiteral("Server error (500)")));
         View view(createMergeRequestView(context, nullptr));
 
-        QPushButton *approve = button(view, QStringLiteral("approve"));
-        approve->click();
+        QPushButton *retry = button(view, QStringLiteral("retry-pipeline"));
+        retry->click();
         QTRY_COMPARE(errorOf(view), QStringLiteral("Server error (500)"));
-        QVERIFY(approve->isEnabled());
+        QVERIFY(retry->isEnabled());
         QCOMPARE(context.source.refreshes, 0);
+    }
+
+    // Decision 0070: these are done on the web page, so no view offers them.
+    void removedActionsAreGone()
+    {
+        FakeContext context;
+        context.source.status = failedMergeRequest();
+        View mergeRequest(createMergeRequestView(context, nullptr));
+        context.itemConfig.insert(QStringLiteral("iid"), 7);
+        context.source.status = openIssue(QJsonArray());
+        View issue(createIssueView(context, nullptr));
+
+        for (const char *id : {"approve", "comment", "close", "reopen"}) {
+            QVERIFY(!button(mergeRequest, QLatin1String(id)));
+            QVERIFY(!button(issue, QLatin1String(id)));
+        }
     }
 
     void forbiddenNamesTheScope()
@@ -903,6 +1254,10 @@ private slots:
         context.source.change(pipelineStatus(QStringLiteral("main"), {}, {}));
         QVERIFY(shownText(view).contains(QStringLiteral("No pipeline on main")));
         QVERIFY(!shownText(view).contains(QStringLiteral("Pipeline #9001")));
+        QVERIFY(!summary(view)->isSectionVisible(QStringLiteral("jobs")));
+        QVERIFY(!showsAction(view, QStringLiteral("retry-pipeline")));
+        // A new one can still be started there.
+        QVERIFY(showsAction(view, QStringLiteral("trigger-pipeline")));
         QVERIFY(summary(view)->actions()->webLink().isEmpty());
         QVERIFY(button(view, QStringLiteral("web"))->isHidden());
         QVERIFY(!showsAction(view, QStringLiteral("open-page")));
@@ -928,6 +1283,7 @@ private slots:
         View pipeline(createPipelineView(context, nullptr));
         pipeline->show();
         QCOMPARE(shownText(pipeline), QStringLiteral("Follows the main folder from M7"));
+        QVERIFY(!showsAction(pipeline, QStringLiteral("trigger-pipeline")));
 
         context.source.status = {};
         View issue(createIssueView(context, nullptr));
@@ -997,24 +1353,23 @@ private slots:
     {
         FakeContext context;
         setUpMergeRequestPreview(context);
-        const QString key = QStringLiteral("POST ") + kMergeRequest + QStringLiteral("/approve");
+        const QString key = QStringLiteral("POST ") + kPipeline + QStringLiteral("/retry");
         succeed(context, key);
         View view(createMergeRequestPreview(context, QStringLiteral("acme/backend"), 42, nullptr));
         view->show();
         QTRY_VERIFY(shownText(view).contains(QStringLiteral("test:unit")));
 
-        // The answer to the second read says that I approved.
-        QJsonObject approved = readObject(QStringLiteral("approvals.json"));
-        QJsonArray entries = approved.value(QStringLiteral("approved_by")).toArray();
-        entries.append(QJsonObject{{QStringLiteral("user"), readObject(QStringLiteral("user.json"))}});
-        approved.insert(QStringLiteral("approved_by"), entries);
-        context.client.setJson(QStringLiteral("GET ") + kMergeRequest + QStringLiteral("/approvals"),
-                               QJsonDocument(approved));
+        // The answer to the second read says that the pipeline runs again.
+        QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
+        QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
+        pipeline.insert(QStringLiteral("status"), QStringLiteral("running"));
+        mergeRequest.insert(QStringLiteral("head_pipeline"), pipeline);
+        context.client.setJson(QStringLiteral("GET ") + kMergeRequest, QJsonDocument(mergeRequest));
 
-        QVERIFY(showsAction(view, QStringLiteral("approve")));
-        button(view, QStringLiteral("approve"))->click();
+        QVERIFY(showsAction(view, QStringLiteral("retry-pipeline")));
+        button(view, QStringLiteral("retry-pipeline"))->click();
         QVERIFY(context.client.requestKeys().contains(key));
-        QTRY_VERIFY(!showsAction(view, QStringLiteral("approve")));
+        QTRY_VERIFY(!showsAction(view, QStringLiteral("retry-pipeline")));
         QCOMPARE(context.source.refreshes, 0);
     }
 
@@ -1043,12 +1398,6 @@ private slots:
         QVERIFY(summary(view)->isSectionVisible(QStringLiteral("comments")));
         QCOMPARE(summary(view)->actions()->webLink(), QUrl(kIssueAddress));
 
-        succeed(context, QStringLiteral("PUT ") + kIssue);
-        const qsizetype before = context.client.requests().size();
-        button(view, QStringLiteral("close"))->click();
-        QCOMPARE(context.client.requests().at(before).method, QStringLiteral("PUT"));
-        QTRY_VERIFY(context.client.requests().size() > before + 1);
-        QCOMPARE(context.client.requests().at(before + 1).path, kIssue);
     }
 
     void openPageOfAPreviewCallsShowPage()

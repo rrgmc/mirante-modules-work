@@ -210,6 +210,9 @@ std::vector<Field> listFields(const QStringList &presets, const QStringList &pre
 
 std::vector<Field> pipelineFields()
 {
+    Field branch = makeField(QStringLiteral("branch"), QCoreApplication::translate("gitlab", "Branch"),
+                             Field::Type::Text, false, kDefaultBranch);
+    branch.defaultValue = kDefaultBranch;
     return {
         projectField(),
         choiceField(QStringLiteral("branchSource"), QCoreApplication::translate("gitlab", "Branch from"),
@@ -217,8 +220,7 @@ std::vector<Field> pipelineFields()
                     {QCoreApplication::translate("gitlab", "A fixed branch"),
                      QCoreApplication::translate("gitlab", "Current branch of the main folder"),
                      QCoreApplication::translate("gitlab", "Branch of a linked merge request")}),
-        makeField(QStringLiteral("branch"), QCoreApplication::translate("gitlab", "Branch"), Field::Type::Text,
-                  false, QStringLiteral("main")),
+        branch,
         makeField(QStringLiteral("iid"), QCoreApplication::translate("gitlab", "Merge request number"),
                   Field::Type::Integer),
     };
@@ -280,9 +282,9 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.addItemType(std::make_unique<GitLabItemType>(
         QStringLiteral("gitlab.pipeline"), QCoreApplication::translate("gitlab", "GitLab CI Pipeline"),
         QCoreApplication::translate("gitlab", "CI"),
-        QCoreApplication::translate("gitlab", "The latest pipeline of a branch, with its stages and jobs. The branch "
-                                              "is a fixed one, the main folder's current branch or a merge "
-                                              "request's branch."),
+        QCoreApplication::translate("gitlab", "The latest pipeline of a branch and those started with it, with their "
+                                              "stages and jobs. The branch is a fixed one, the main folder's current "
+                                              "branch or a merge request's branch."),
         pipelineFields(), settings, &fetchPipelineStatus, &createPipelineView));
     registrar.addItemType(std::make_unique<GitLabItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),

@@ -1,0 +1,62 @@
+[
+  {
+    "id": 9001,
+    "iid": 512,
+    "project_id": 77,
+    "sha": "4f1c2d0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b0512",
+    "ref": "feature/retry-button",
+    "status": "failed",
+    "source": "push",
+    "created_at": "2026-10-28T15:50:02.000Z",
+    "updated_at": "2026-10-28T15:50:02.000Z",
+    "web_url": "https://gitlab.example/acme/backend/-/pipelines/9001"
+  },
+  {
+    "id": 9000,
+    "iid": 511,
+    "project_id": 77,
+    "sha": "4f1c2d0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b0511",
+    "ref": "feature/retry-button",
+    "status": "failed",
+    "source": "merge_request_event",
+    "created_at": "2026-10-28T15:49:58.000Z",
+    "updated_at": "2026-10-28T15:49:58.000Z",
+    "web_url": "https://gitlab.example/acme/backend/-/pipelines/9000"
+  },
+  {
+    "id": 8999,
+    "iid": 510,
+    "project_id": 77,
+    "sha": "4f1c2d0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b0510",
+    "ref": "feature/retry-button",
+    "status": "running",
+    "source": "push",
+    "created_at": "2026-10-28T15:41:00.000Z",
+    "updated_at": "2026-10-28T15:41:00.000Z",
+    "web_url": "https://gitlab.example/acme/backend/-/pipelines/8999"
+  },
+  {
+    "id": 8990,
+    "iid": 509,
+    "project_id": 77,
+    "sha": "4f1c2d0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b0509",
+    "ref": "feature/retry-button",
+    "status": "failed",
+    "source": "push",
+    "created_at": "2026-10-28T15:40:01.000Z",
+    "updated_at": "2026-10-28T15:40:01.000Z",
+    "web_url": "https://gitlab.example/acme/backend/-/pipelines/8990"
+  },
+  {
+    "id": 8950,
+    "iid": 508,
+    "project_id": 77,
+    "sha": "4f1c2d0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b0508",
+    "ref": "feature/retry-button",
+    "status": "success",
+    "source": "push",
+    "created_at": "2026-10-27T09:12:30.000Z",
+    "updated_at": "2026-10-27T09:12:30.000Z",
+    "web_url": "https://gitlab.example/acme/backend/-/pipelines/8950"
+  }
+]

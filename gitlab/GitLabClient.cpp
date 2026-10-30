@@ -40,11 +40,6 @@ QJsonDocument emptyBody()
     return QJsonDocument(QJsonObject());
 }
 
-QJsonDocument noteBody(const QString &text)
-{
-    return QJsonDocument(QJsonObject{{QStringLiteral("body"), text}});
-}
-
 } // namespace
 
 GitLabClient::GitLabClient(ApiClient &server, QObject *receiver)
@@ -94,8 +89,18 @@ void GitLabClient::latestPipeline(const QString &project, const QString &branch,
 {
     // Encoded here, so a branch with "+" or "&" in its name reaches GitLab whole.
     QUrlQuery query;
-    query.addQueryItem(QStringLiteral("ref"), QString::fromLatin1(QUrl::toPercentEncoding(branch)));
+    query.addQueryItem(QStringLiteral("ref"), encodePath(branch));
     get(projectPathOf(project) + QStringLiteral("/pipelines/latest"), query, std::move(done));
+}
+
+void GitLabClient::pipelines(const QString &project, const QUrlQuery &query, int maxRows, Done done) const
+{
+    list(projectPathOf(project) + QStringLiteral("/pipelines"), query, maxRows, std::move(done));
+}
+
+void GitLabClient::mergeRequestPipelines(const QString &project, qint64 iid, int maxRows, Done done) const
+{
+    list(mergeRequestPath(project, iid) + QStringLiteral("/pipelines"), {}, maxRows, std::move(done));
 }
 
 void GitLabClient::pipelineJobs(const QString &project, qint64 pipelineId, int maxRows, Done done) const
@@ -137,12 +142,6 @@ void GitLabClient::groupIssues(const QString &group, const QUrlQuery &filter, in
          std::move(done));
 }
 
-void GitLabClient::setIssueState(const QString &project, qint64 iid, const QString &stateEvent, Done done) const
-{
-    put(issuePath(project, iid), QJsonDocument(QJsonObject{{QStringLiteral("state_event"), stateEvent}}),
-        std::move(done));
-}
-
 void GitLabClient::retryPipeline(const QString &project, qint64 pipelineId, Done done) const
 {
     post(pipelinePath(project, pipelineId) + QStringLiteral("/retry"), emptyBody(), std::move(done));
@@ -159,19 +158,16 @@ void GitLabClient::retryJob(const QString &project, qint64 jobId, Done done) con
          emptyBody(), std::move(done));
 }
 
-void GitLabClient::approve(const QString &project, qint64 iid, Done done) const
+void GitLabClient::playJob(const QString &project, qint64 jobId, Done done) const
 {
-    post(mergeRequestPath(project, iid) + QStringLiteral("/approve"), emptyBody(), std::move(done));
+    post(projectPathOf(project) + QStringLiteral("/jobs/") + QString::number(jobId) + QStringLiteral("/play"),
+         emptyBody(), std::move(done));
 }
 
-void GitLabClient::commentOnMergeRequest(const QString &project, qint64 iid, const QString &text, Done done) const
+void GitLabClient::createPipeline(const QString &project, const QString &ref, Done done) const
 {
-    post(mergeRequestPath(project, iid) + QStringLiteral("/notes"), noteBody(text), std::move(done));
-}
-
-void GitLabClient::commentOnIssue(const QString &project, qint64 iid, const QString &text, Done done) const
-{
-    post(issuePath(project, iid) + QStringLiteral("/notes"), noteBody(text), std::move(done));
+    // ApiClient::post() has no query, and the path may carry one.
+    post(projectPathOf(project) + QStringLiteral("/pipeline?ref=") + encodePath(ref), emptyBody(), std::move(done));
 }
 
 void GitLabClient::get(const QString &path, const QUrlQuery &query, Done done) const
@@ -192,11 +188,6 @@ void GitLabClient::list(const QString &path, QUrlQuery query, int maxRows, Done 
 void GitLabClient::post(const QString &path, const QJsonDocument &body, Done done) const
 {
     m_server->post(path, body, m_receiver, std::move(done));
-}
-
-void GitLabClient::put(const QString &path, const QJsonDocument &body, Done done) const
-{
-    m_server->put(path, body, m_receiver, std::move(done));
 }
 
 } // namespace mirante::modules::gitlab
