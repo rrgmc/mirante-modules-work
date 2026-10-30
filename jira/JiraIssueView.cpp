@@ -225,7 +225,7 @@ private:
         }
         // An error keeps the old data, and the cell header shows the error.
         setMessage(QString());
-        draw(issue);
+        draw(status.data);
     }
 
     void applySectionFields()
@@ -237,14 +237,15 @@ private:
         setSectionVisible(kLinks, config.value(QStringLiteral("showLinks")).toBool(true));
     }
 
-    void draw(const QJsonObject &issue)
+    void draw(const QJsonObject &data)
     {
         // A poll usually brings the same answer, and drawing would lose a
         // selection in the text.
-        if (issue == m_drawn)
+        if (data == m_drawn)
             return;
-        m_drawn = issue;
+        m_drawn = data;
 
+        const QJsonObject issue = data.value(QStringLiteral("issue")).toObject();
         const QJsonObject fields = issue.value(QStringLiteral("fields")).toObject();
         const QString issueKey = issue.value(QStringLiteral("key")).toString();
         setTitle(issueKey + QLatin1Char(' ') + fields.value(QStringLiteral("summary")).toString());
@@ -252,7 +253,7 @@ private:
         setSection(kDetails, trJira("Details"), makeDetails(issue));
         drawDescription(issue);
         setSection(kComments, trJira("Comments"), makeComments(issue));
-        setSection(kLinks, trJira("Sub-tasks and links"), makeLinks(fields));
+        setSection(kLinks, trJira("Sub-tasks and links"), makeLinks(fields, data));
     }
 
     QWidget *makeStateRow(const QJsonObject &fields)
@@ -370,30 +371,54 @@ private:
         return section;
     }
 
-    QWidget *makeLinks(const QJsonObject &fields)
+    QWidget *makeLinks(const QJsonObject &fields, const QJsonObject &data)
     {
         auto *section = new QWidget;
         auto *layout = new QVBoxLayout(section);
         layout->setContentsMargins(0, 0, 0, 0);
         const QList<IssueRef> refs = readRefs(fields);
-        if (refs.isEmpty())
+        const QJsonArray children = data.value(QStringLiteral("children")).toArray();
+        if (refs.isEmpty() && children.isEmpty())
             layout->addWidget(plainLabel(trJira("No sub-tasks or links."), section));
         for (const IssueRef &ref : refs) {
             auto *row = new QHBoxLayout;
-            auto *button = new QToolButton(section);
-            button->setObjectName(QStringLiteral("issue:") + ref.key);
-            button->setText(withoutShortcuts(ref.key));
-            button->setAutoRaise(true);
-            const QUrl url = m_base.isEmpty()
-                                 ? QUrl()
-                                 : issueUrl(m_base, QJsonObject{{QStringLiteral("key"), ref.key}});
-            button->setEnabled(isWebAddress(url));
-            connect(button, &QToolButton::clicked, section, [url] { QDesktopServices::openUrl(url); });
-            row->addWidget(button);
+            row->addWidget(makeIssueButton(ref.key, section));
             row->addWidget(plainLabel(ref.text, section), 1);
             layout->addLayout(row);
         }
+        for (const QJsonValue &value : children) {
+            const QJsonObject child = value.toObject();
+            const QJsonObject childFields = child.value(QStringLiteral("fields")).toObject();
+            const QJsonObject status = childFields.value(QStringLiteral("status")).toObject();
+            const QString category =
+                status.value(QStringLiteral("statusCategory")).toObject().value(QStringLiteral("key")).toString();
+            auto *row = new QHBoxLayout;
+            row->addWidget(makeIssueButton(child.value(QStringLiteral("key")).toString(), section));
+            row->addWidget(plainLabel(childFields.value(QStringLiteral("summary")).toString(), section), 1);
+            row->addWidget(new widgets::StatusPill(status.value(QStringLiteral("name")).toString(),
+                                                   statusCategoryRole(category), section));
+            layout->addLayout(row);
+        }
+        const int more = data.value(QStringLiteral("childrenTotal")).toInt() - int(children.size());
+        if (more > 0) {
+            QLabel *line = plainLabel(trJira("%1 more").arg(more), section);
+            line->setObjectName(QStringLiteral("childrenMore"));
+            layout->addWidget(line);
+        }
         return section;
+    }
+
+    // An issue's key, as a button to its page in the external browser.
+    QToolButton *makeIssueButton(const QString &key, QWidget *parent)
+    {
+        auto *button = new QToolButton(parent);
+        button->setObjectName(QStringLiteral("issue:") + key);
+        button->setText(withoutShortcuts(key));
+        button->setAutoRaise(true);
+        const QUrl url = m_base.isEmpty() ? QUrl() : issueUrl(m_base, QJsonObject{{QStringLiteral("key"), key}});
+        button->setEnabled(isWebAddress(url));
+        connect(button, &QToolButton::clicked, parent, [url] { QDesktopServices::openUrl(url); });
+        return button;
     }
 
     ItemContext &m_context;

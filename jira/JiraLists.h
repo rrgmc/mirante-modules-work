@@ -1,6 +1,8 @@
 // The status of the Jira List type, and the query behind it. See decision 0067.
 #pragma once
 
+#include "JiraSettings.h"
+
 #include <mirante/Status.h>
 
 #include <QJsonObject>
@@ -16,6 +18,11 @@ namespace mirante::modules::jira {
 // the "jql" preset has no query. The key is quoted, so a value cannot change
 // the query.
 std::optional<QString> listJql(const QString &preset, const QString &jql, const QString &projectKey);
+
+// The JQL of the issues whose parent is this one: parent = "<key>", and on Jira
+// Data Center also through the Epic Link field, which is how an epic holds its
+// issues there. The key is quoted, as in listJql().
+QString childrenJql(Deployment deployment, const QString &key);
 
 // The search's page on the site, <baseUrl>/issues/?jql=<query>. Empty without
 // a base URL.

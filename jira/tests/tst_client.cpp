@@ -178,6 +178,36 @@ private slots:
         QCOMPARE(server.requests().size(), 2);
     }
 
+    // Data Center gives a total, and Cloud's search/jql does not.
+    void searchPassesTheTotal()
+    {
+        const auto issues = QJsonArray{QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-1")}}};
+        SearchOptions options;
+        options.maxRows = 1;
+
+        FakeApiClient server;
+        server.setSynchronous(true);
+        server.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/2/search"),
+                                          query({{QStringLiteral("jql"), QStringLiteral("a")},
+                                                 {QStringLiteral("maxResults"), QStringLiteral("1")},
+                                                 {QStringLiteral("startAt"), QStringLiteral("0")}})),
+                       QJsonDocument(QJsonObject{{QStringLiteral("issues"), issues}, {QStringLiteral("total"), 7}}));
+        server.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/search/jql"),
+                                          query({{QStringLiteral("jql"), QStringLiteral("a")},
+                                                 {QStringLiteral("maxResults"), QStringLiteral("1")}})),
+                       QJsonDocument(QJsonObject{{QStringLiteral("issues"), issues}, {QStringLiteral("isLast"), true}}));
+
+        std::optional<ApiReply> answer;
+        const auto keep = [&answer](const ApiReply &reply) { answer = reply; };
+        JiraClient(server, Deployment::DataCenter).search(QStringLiteral("a"), options, nullptr, keep);
+        QVERIFY(answer && answer->ok());
+        QCOMPARE(answer->json.object().value(QStringLiteral("total")).toInt(), 7);
+
+        JiraClient(server, Deployment::Cloud).search(QStringLiteral("a"), options, nullptr, keep);
+        QVERIFY(answer->ok());
+        QVERIFY(!answer->json.object().contains(QStringLiteral("total")));
+    }
+
     void searchStopsAtMaxRows()
     {
         FakeApiClient server;

@@ -35,6 +35,7 @@ struct Search
     QObject *receiver = nullptr;
     JiraDone done;
     QJsonArray issues;
+    QJsonValue total;
 };
 
 void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString &pageToken)
@@ -59,6 +60,8 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
         }
         const QJsonObject page = reply.json.object();
         const QJsonArray issues = page.value(QStringLiteral("issues")).toArray();
+        if (page.value(QStringLiteral("total")).isDouble())
+            search->total = page.value(QStringLiteral("total"));
         for (const QJsonValue &issue : issues) {
             if (search->issues.size() >= search->options.maxRows)
                 break;
@@ -83,7 +86,10 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
         }
 
         ApiReply joined = reply;
-        joined.json = QJsonDocument(QJsonObject{{QStringLiteral("issues"), search->issues}});
+        QJsonObject answer{{QStringLiteral("issues"), search->issues}};
+        if (search->total.isDouble())
+            answer.insert(QStringLiteral("total"), search->total);
+        joined.json = QJsonDocument(answer);
         joined.body = joined.json.toJson(QJsonDocument::Compact);
         search->done(joined);
     });

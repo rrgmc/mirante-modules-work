@@ -9,6 +9,11 @@
 
 namespace mirante::modules::jira {
 
+// The most children a summary's data holds, and so the most it shows.
+constexpr int kMaxChildren = 50;
+// How many children it counts on Jira Cloud, whose search gives no total.
+constexpr int kCountedChildren = 500;
+
 // The fields the status asks for.
 QStringList statusFields();
 
@@ -29,7 +34,11 @@ QString sprintOf(const QJsonObject &issue);
 void fetchIssueStatus(StatusJob &job);
 // The same for a summary, which asks for all fields, since it also shows the
 // description, comments, sprint and links. data also holds the answer, as
-// "issue". A page does not ask for them, so it stays cheap.
+// "issue". A further search asks for the issues whose parent is this one. data
+// holds them as "children", up to kMaxChildren and without those in the issue's
+// sub-tasks, and their number as "childrenTotal". If only that search fails, as
+// on a site without the Epic Link field, the status stands without them. A page
+// does not ask for any of this, so it stays cheap.
 void fetchIssueSummaryStatus(StatusJob &job);
 
 } // namespace mirante::modules::jira

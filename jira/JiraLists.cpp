@@ -1,7 +1,6 @@
 #include "JiraLists.h"
 
 #include "JiraClient.h"
-#include "JiraSettings.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -79,6 +78,15 @@ std::optional<QString> listJql(const QString &preset, const QString &jql, const 
 
     // An absent preset is the first choice of the form.
     return QStringLiteral("assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC");
+}
+
+QString childrenJql(Deployment deployment, const QString &key)
+{
+    const QString quoted = quotedJql(key);
+    const QString parent = QStringLiteral("parent = ") + quoted;
+    if (deployment == Deployment::Cloud)
+        return parent;
+    return QStringLiteral("\"Epic Link\" = ") + quoted + QStringLiteral(" OR ") + parent;
 }
 
 QUrl listWebUrl(const QUrl &baseUrl, const QString &jql)

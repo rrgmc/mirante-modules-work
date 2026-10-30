@@ -514,6 +514,90 @@ private slots:
         QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/SEC-3"))});
     }
 
+    // The issues whose parent is this one.
+
+    void childrenShowWithPillsAndLinks()
+    {
+        BrowserGuard browser;
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        ItemStatus status = statusOf(cloudIssue());
+        const QJsonArray children = readJson(QFINDTESTDATA("data/search-children-cloud.json"))
+                                        .value(QStringLiteral("issues"))
+                                        .toArray();
+        // As the status gives them: without the sub-task OPS-9.
+        status.data.insert(QStringLiteral("children"), QJsonArray{children.at(1), children.at(2)});
+        status.data.insert(QStringLiteral("childrenTotal"), 2);
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        const QString text = shownText(view.get());
+        QVERIFY(text.contains(QStringLiteral("Renew the staging certificate")));
+        QVERIFY(text.contains(QStringLiteral("Renew the production certificate")));
+        QVERIFY(!view->findChild<QLabel *>(QStringLiteral("childrenMore")));
+
+        // After the two of the state row.
+        const QList<StatusPill *> pills = pillsOf(view.get());
+        QCOMPARE(pills.size(), 4);
+        QCOMPARE(pills.at(2)->text(), QStringLiteral("In Progress"));
+        QCOMPARE(pills.at(2)->role(), StatusRole::Waiting);
+        QCOMPARE(pills.at(3)->text(), QStringLiteral("Done"));
+        QCOMPARE(pills.at(3)->role(), StatusRole::Good);
+
+        view->findChild<QToolButton *>(QStringLiteral("issue:OPS-12"))->click();
+        QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/OPS-12"))});
+    }
+
+    void aLineCountsTheOtherChildren()
+    {
+        QJsonArray children;
+        for (int i = 0; i < 50; ++i)
+            children.append(QJsonObject{{QStringLiteral("key"), QStringLiteral("INFRA-%1").arg(2000 + i)}});
+
+        FakeContext context;
+        useDataCenter(context, QStringLiteral("INFRA-1203"));
+        ItemStatus status = statusOf(dcIssue());
+        status.data.insert(QStringLiteral("children"), children);
+        status.data.insert(QStringLiteral("childrenTotal"), 73);
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        QVERIFY(view->findChild<QToolButton *>(QStringLiteral("issue:INFRA-2049")));
+        QVERIFY(!shownText(view.get()).contains(QStringLiteral("No sub-tasks or links.")));
+        auto *more = view->findChild<QLabel *>(QStringLiteral("childrenMore"));
+        QVERIFY(more);
+        QCOMPARE(more->text(), QStringLiteral("23 more"));
+    }
+
+    // A failed search leaves children out of the data.
+    void withoutChildrenTheSectionStaysAsItWas()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.source.status = statusOf(cloudIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+        QVERIFY(view->findChild<QToolButton *>(QStringLiteral("issue:OPS-9")));
+        QVERIFY(!view->findChild<QLabel *>(QStringLiteral("childrenMore")));
+        QCOMPARE(pillsOf(view.get()).size(), 2);
+    }
+
+    // A new answer with the same issue but other children still draws.
+    void newChildrenDrawAgain()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.source.status = statusOf(cloudIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+        QVERIFY(!view->findChild<QToolButton *>(QStringLiteral("issue:OPS-40")));
+
+        ItemStatus next = statusOf(cloudIssue());
+        next.data.insert(QStringLiteral("children"),
+                         QJsonArray{QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-40")}}});
+        next.data.insert(QStringLiteral("childrenTotal"), 1);
+        context.source.push(next);
+        QVERIFY(view->findChild<QToolButton *>(QStringLiteral("issue:OPS-40")));
+    }
+
     // The rendered HTML.
 
     void richTextOpensNothingByItself()

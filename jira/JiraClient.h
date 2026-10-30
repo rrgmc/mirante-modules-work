@@ -46,8 +46,9 @@ public:
 
     // The issues of a JQL query. Jira Cloud pages with nextPageToken on
     // search/jql, Jira Data Center with startAt on search. The pages are
-    // joined: the reply's JSON is {"issues": [...]}, up to maxRows issues.
-    // An error on any page answers with that page's reply.
+    // joined: the reply's JSON is {"issues": [...]}, up to maxRows issues, with
+    // Jira's "total" where it gives one, which Jira Cloud does not. An error on
+    // any page answers with that page's reply.
     void search(const QString &jql, const SearchOptions &options, QObject *receiver, JiraDone done) const;
 
     // GET myself: the user the token belongs to.

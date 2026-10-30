@@ -6,6 +6,8 @@
 #include <QTest>
 #include <QUrlQuery>
 
+using mirante::modules::jira::childrenJql;
+using mirante::modules::jira::Deployment;
 using mirante::modules::jira::listJql;
 using mirante::modules::jira::listLimit;
 using mirante::modules::jira::listPageSize;
@@ -82,6 +84,16 @@ private slots:
         QFETCH(QString, jql);
         QFETCH(QString, projectKey);
         QVERIFY(!listJql(preset, jql, projectKey));
+    }
+
+    void children()
+    {
+        QCOMPARE(childrenJql(Deployment::Cloud, QStringLiteral("OPS-7")), QStringLiteral("parent = \"OPS-7\""));
+        QCOMPARE(childrenJql(Deployment::DataCenter, QStringLiteral("OPS-7")),
+                 QStringLiteral("\"Epic Link\" = \"OPS-7\" OR parent = \"OPS-7\""));
+        // A key cannot end the string and change the query.
+        QCOMPARE(childrenJql(Deployment::Cloud, QStringLiteral("A\" OR 1=1")),
+                 QStringLiteral("parent = \"A\\\" OR 1=1\""));
     }
 
     void limitAndPageSize_data()

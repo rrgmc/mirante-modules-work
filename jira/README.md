@@ -84,7 +84,7 @@ Each profile has its own values, stored in its entry of `workspace.mirante` unde
 | Method | Request |
 |---|---|
 | `issue(key, fields, expand)` | `GET issue/<key>?fields=<fields>&expand=<expand>`. Without fields, all of them. `expand` is `renderedFields` unless given. |
-| `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues. |
+| `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues, with Jira's `total` where it gives one. Cloud's `search/jql` does not. |
 | `myself()` | `GET myself` |
 
 The key is encoded as one path segment. A `+` or `%` in a query value is encoded, so the server reads the JQL as typed. The tests are in `tests/tst_client.cpp`.
@@ -95,9 +95,10 @@ All three types report status, in `JiraStatus.cpp` and `JiraLists.cpp`. See deci
 
 **An issue:**
 
-- **Request.** `jira.issue.page` makes one `issue()` call with the fields `summary`, `status`, `assignee`, `priority`, `issuetype` and `updated`. `jira.issue.summary` makes one with all fields and `expand=renderedFields,names`.
+- **Request.** `jira.issue.page` makes one `issue()` call with the fields `summary`, `status`, `assignee`, `priority`, `issuetype` and `updated`. `jira.issue.summary` makes one with all fields and `expand=renderedFields,names`, then a search for its [children](#status).
 - **Summary.** The status and the assignee, such as "In Review · assigned to Ana", or "Done · unassigned".
-- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`. For `jira.issue.summary` also `issue`, the whole answer, which the view draws from.
+- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`. For `jira.issue.summary` also `issue`, the whole answer, which the view draws from, and `children` and `childrenTotal`.
+- **Children.** The issues whose parent is this one, from `search()` with the fields `summary` and `status`. The query is `parent = "<key>"` on Cloud, and `"Epic Link" = "<key>" OR parent = "<key>"` on Data Center, with the key quoted as in a list's query. `children` holds up to 50, without those in the issue's `subtasks`. `childrenTotal` counts all of them, also without those. Data Center gives a total, so one request is enough. Cloud gives none, so the rows are fetched and counted, up to 500. If only this search fails, as on a site that does not know `Epic Link`, the status stands and `children` is left out.
 - **Sprint.** `sprintOf()` reads the field whose entry in `names` is "Sprint", because its id differs per site. It takes the open sprint, else the last one. Jira Cloud gives objects, and older Data Center gives text such as `...Sprint@1f[id=4,state=ACTIVE,name=Week 44,...]`.
 - **Attention.** "Status changed to <name>", with the key `status:<status id>`, which clears when seen. It is reported on every fetch. The core records it as seen on the item's first status, so it counts only after the status changes.
 - **Closed.** When the status category is `done`.
@@ -134,7 +135,7 @@ The tests are in `tests/tst_status.cpp` and `tests/tst_list_jql.cpp`, on respons
 | Details | `details` | `showDetails` | Priority, assignee, reporter, sprint |
 | Description | `description` | `showDescription` | The HTML in `renderedFields`, else the raw text on Data Center |
 | Comments | `comments` | `showComments` | The latest five, newest first, each with its author and date |
-| Sub-tasks and links | `links` | `showLinks` | Each with its key, as a button to the external browser, then its relation, summary and status |
+| Sub-tasks and links | `links` | `showLinks` | Each with its key, as a button to the external browser, then its relation, summary and status. Then the children, each with that button, its summary and a status pill, and a line such as "23 more" if there are others. |
 
 Development information is left out in M6.
 
