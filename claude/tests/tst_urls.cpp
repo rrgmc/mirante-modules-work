@@ -95,7 +95,6 @@ private slots:
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         QVERIFY(registry.type(QStringLiteral("claude.session.web")).rendering() == mirante::Rendering::Web);
-        QVERIFY(registry.type(QStringLiteral("claude.session.local")).rendering() == mirante::Rendering::Native);
     }
 
     void viewShowsPageOrMessage_data()
@@ -130,21 +129,6 @@ private slots:
         QCOMPARE(view->parentWidget(), &parent);
         QCOMPARE(view->property("url").toUrl(), url);
         QCOMPARE(view->property("message").toString(), message);
-    }
-
-    // The view itself is tested in tst_views.cpp.
-    void localSessionHasAView()
-    {
-        mirante::ItemTypeRegistry registry;
-        registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
-
-        FakeContext context;
-        context.itemConfig = QJsonObject{{QStringLiteral("sessionId"), QStringLiteral("abc")}};
-        QWidget parent;
-        std::unique_ptr<QWidget> view(
-            registry.type(QStringLiteral("claude.session.local")).createView(context, &parent));
-        QVERIFY(view);
-        QCOMPARE(view->parentWidget(), &parent);
     }
 };
 

@@ -39,14 +39,13 @@ private slots:
         QVERIFY(!matchUrl(QUrl(QStringLiteral("ftp://claude.ai/chat/abc"))));
     }
 
-    // Only the web session takes a link; a local session has none.
+    // The registered web session type takes the link.
     void registeredTypes()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
         const QUrl address(QStringLiteral("https://claude.ai/chat/abc"));
         QVERIFY(registry.type(QStringLiteral("claude.session.web")).fromUrl(address, {}));
-        QVERIFY(!registry.type(QStringLiteral("claude.session.local")).fromUrl(address, {}));
     }
 };
 

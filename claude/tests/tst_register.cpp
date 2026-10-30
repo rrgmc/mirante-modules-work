@@ -24,7 +24,6 @@ private slots:
         // Expected id and name of each type. QMap keeps the ids sorted.
         QMap<QString, QString> expected;
         expected.insert(QStringLiteral("claude.session.web"), QStringLiteral("Claude session (web)"));
-        expected.insert(QStringLiteral("claude.session.local"), QStringLiteral("Claude session (local)"));
 
         QStringList ids;
         for (const mirante::ItemType *type : registry.types())
@@ -56,7 +55,6 @@ private slots:
 
         QMap<QString, QStringList> expected;
         expected.insert(QStringLiteral("claude.session.web"), {QStringLiteral("url")});
-        expected.insert(QStringLiteral("claude.session.local"), {QStringLiteral("sessionId"), QStringLiteral("folder"), QStringLiteral("device")});
 
         for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
             const mirante::ItemType &type = registry.type(it.key());
