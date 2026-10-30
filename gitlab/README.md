@@ -73,12 +73,12 @@ Every type reports status: `hasStatus()` is true and `fetchStatus()` runs a func
 |---|---|---|---|
 | `gitlab.mr.summary`, `gitlab.mr.page` | the merge request, its approvals and the current user, at once; for the summary, when `head_pipeline.status` is `failed`, then that pipeline's jobs | "Pipeline failed" (`pipeline-failed`, notify) when `head_pipeline.status` is `failed`; "Review requested" (`review`) when I am a reviewer and have not approved; "Approved" (`approved`, clears on view) when I am the author and `approved` is true; "Has conflicts" (`conflicts`) when I am the author and `has_conflicts` is true | `state` is `merged` or `closed` |
 | `gitlab.issue.summary`, `gitlab.issue.page` | the issue; for the summary, then its latest 20 notes | none | `state` is `closed` |
-| `gitlab.pipeline` | for `mergeRequest`, the merge request and then its `source_branch`; for `fixed`, `branch`; then the latest pipeline of the branch; then, at once, the latest 20 pipelines (`mergeRequestPipelines` or `pipelines?ref=<branch>`) and, for `fixed`, the open merge request of the branch (`projectMergeRequests`); then the jobs of each pipeline in the [group](#the-group), at once | "Pipeline failed" (`pipeline-failed:<pipeline id>`, notify) for each pipeline of the group whose `status` is `failed` | never |
+| `gitlab.pipeline` | for `mergeRequest`, the merge request and then its `source_branch`; for `fixed`, `branch`; for `mainFolder`, the main folder's branch; then the latest pipeline of the branch; then, at once, the latest 20 pipelines (`mergeRequestPipelines` or `pipelines?ref=<branch>`) and, for `fixed` and `mainFolder`, the open merge request of the branch (`projectMergeRequests`); then the jobs of each pipeline in the [group](#the-group), at once | "Pipeline failed" (`pipeline-failed:<pipeline id>`, notify) for each pipeline of the group whose `status` is `failed` | never |
 
 - **Only open merge requests need attention.** A merged or closed merge request reports no reasons, even with a failed pipeline.
 - **Summaries.** A merge request reads like "Open · 2 of 3 approvals · pipeline failed": the state, "draft" for an open draft, the approvals given of those required (or just the count when none are required), the head pipeline's status, and "has conflicts" while open. An issue reads like "Open · assigned to Ana". A pipeline reads like "Failed · main · 1 failed job"; failed jobs that are allowed to fail are not counted. `success` reads as "passed".
 - **A branch without pipelines.** GitLab answers `404` for the latest pipeline of such a branch. The status is then `Ok` with "No pipeline on <branch>", unless the list has pipelines, as for a merge request whose pipelines run on a ref of its own.
-- **The main folder's branch.** A pipeline with `branchSource` `mainFolder` reports `State::None` with "Follows the main folder from M7", without a request.
+- **The main folder's branch.** A pipeline with `branchSource` `mainFolder` reads the main folder's path with `job.folderPath("")` and its branch with `job.gitHead(path)`, at each fetch, and then works as a `fixed` branch. The status cache watches the head, so a switch of branch fetches again. Without a path it reports `State::None` with "Set the main folder's path on this device.", and without a branch, such as on a detached head, "The main folder is not on a branch.", both without a request. The job gives an empty path both for a project without a main folder and for one not mapped on this device, so the first message covers both.
 - **An incomplete configuration,** without a project, a number or a branch, reports `State::None` with a message, such as "Set the project and number in the item's settings.", without a request.
 - **Errors.** Any other failed reply becomes its state with `statusFromReply()`, such as `NoToken` or `NotFound`. A merge request's own reply wins over those of the user and the approvals. A failed request for a summary's jobs or notes is not an error: the status stands, and `data` leaves them out. The same holds for a pipeline's list, a sibling's jobs and the open merge request of a branch. A failed request for the latest pipeline's jobs is an error. An unknown issue asks for no notes.
 - **Data.** `data` holds what M6's summaries need: `mergeRequest`, `approvals` and `user` (`id` and `username`) for a merge request; `issue` for an issue; `branch`, `pipeline` and `jobs` for a pipeline, which also adds `siblings` and `older`, as [the group](#the-group) says, and `mergeRequest`, when it knows one. The objects are GitLab's answers, unchanged. A merge request summary adds `jobs` when its head pipeline failed. An issue summary adds `notes`, newest first, without the notes that have `system` set. The 20 are counted before system notes are left out, so `notes` can hold fewer. Page types add neither.
@@ -96,7 +96,7 @@ The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded 
 
 `GitLabMergeRequestView.cpp`, `GitLabPipelineView.cpp` and `GitLabIssueView.cpp` each hold one class, a subclass of `GitLabSummary` in `GitLabViewSupport.h`, which is private to the module. The layouts, fields and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabSummary` holds what they share:
 
-- **Drawing.** `follow()` draws the item's status now and at each change. With no data it shows "Loading…" or the status's message. With old data it keeps drawing that data, because the cell header shows the problem.
+- **Drawing.** `follow()` draws the item's status now and at each change. With no data it shows "Loading…" or the status's message. With old data it keeps drawing that data through an error, because the cell header shows the problem. A status without data, with `State::None` and a message, such as "The main folder is not on a branch.", replaces the old data, since the item has nothing to show.
 - **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
 - **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
 - **Dialogs.** The questions before cancelling and triggering run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
@@ -205,6 +205,24 @@ Every type implements `fromUrl()`, through `matchUrl()` in `GitLabUrls.cpp`. It 
 | `pipelines`, without `ref` or an id | `gitlab.pipeline.list` | `project`, `source` = `all` | `group/project pipelines` |
 
 The pipeline type follows a branch, so a pipeline's id is not kept. The item dialog lists types by name, so for the page of all pipelines it offers the pipeline first and the list after it. Other pages, such as a project's home page, `merge_requests/new` or `tree/main`, are refused. The tests are in `tests/tst_from_url.cpp`.
+
+## Quick add
+
+`GitLabQuickAdd.cpp` holds the module's [quick add](../../../docs/modules.md#quick-add) handler and finder. The tests are in `tests/tst_quick_add.cpp`, on `merge_request.json` and on `merge_requests_open.json` and `merge_requests_search_abc_*.json`, which were written by hand in the shape of GitLab's API.
+
+**`GitLabQuickAddHandler`** takes a merge request's address, read by `readPageAddress()` as [items from a link](#items-from-a-link) does, but only below the base URL of the General Configuration screen in the dialog's profile. Any other text, an address on another server, or no server finishes with nothing at once, without a request. Otherwise it asks for the merge request with `mergeRequest()`, and a failed reply finishes with nothing. It proposes:
+
+- **Title:** the merge request's `title`.
+- **Items:** `gitlab.mr.summary` named `!42`, with `project` and `iid`; `gitlab.pipeline` named `!42 CI`, with `project`, `branchSource` = `mergeRequest` and `iid`.
+- **Project:** the project whose setting `project` is the address's project path.
+- **Texts:** the title and the `source_branch`.
+
+**`GitLabRelatedItemFinder`** reads Jira-style keys in the texts, `[A-Za-z][A-Za-z0-9_]+-\d+`, in upper case, at most five distinct ones in the order they appear. Without keys it finishes at once, without a request.
+
+- **With the project setting `project`:** one request for the project's open merge requests, `projectMergeRequests()` with `state=opened&order_by=updated_at&sort=desc`, up to 100. A merge request matches a key when its `title` or `source_branch` holds it, without case.
+- **Without it:** for each key, `GET api/v4/merge_requests?scope=all&state=opened&search=<key>&in=title`, up to 100, which searches titles only. GitLab's search also matches the key's words apart, so the title is checked for the key again.
+
+Each match is a `gitlab.mr.summary` with `project`, from `references.full`, and `iid`. It is named `!42` in the project of the setting, else `group/project!42`. A failed request finds nothing for its keys. The finder finishes once, after every reply, with each merge request once, in the order of the keys.
 
 ## Configuration
 
