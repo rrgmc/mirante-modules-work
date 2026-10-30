@@ -129,12 +129,12 @@ void GitLabList::showStatus(const ItemStatus &status)
     setMessage({});
 
     const QUrl base = baseUrlOf(m_context->moduleSettings(kGeneralScreen));
-    const QJsonArray data = status.data.value(QStringLiteral("rows")).toArray();
+    const QJsonArray answers = status.data.value(QStringLiteral("rows")).toArray();
     QList<ListRow> rows;
     m_keys.clear();
     m_targets.clear();
-    for (int index = 0; index < data.size(); ++index) {
-        const QJsonObject row = data.at(index).toObject();
+    for (int index = 0; index < answers.size(); ++index) {
+        const QJsonObject row = answers.at(index).toObject();
         const ListRowTarget target = readTarget(row, index, base);
         m_keys << target.key;
         m_targets.insert(target.key, target);
