@@ -16,7 +16,7 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 
 The module calls itself "GitLab" and describes itself as: "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). The other views still show a placeholder; they arrive in M6.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). Since M6 the merge request, pipeline and issue summaries have [native views](#summary-views). The lists still show a placeholder; they arrive later in M6.
 
 ## Server
 
@@ -83,6 +83,20 @@ Every type reports status: `hasStatus()` is true and `fetchStatus()` runs a func
 - **Data.** `data` holds what M6's summaries need: `mergeRequest`, `approvals` and `user` (`id` and `username`) for a merge request; `issue` for an issue; `branch`, `pipeline` and `jobs` for a pipeline. The objects are GitLab's answers, unchanged. A merge request summary adds `jobs` when its head pipeline failed. An issue summary adds `notes`, newest first, without the notes that have `system` set. The 20 are counted before system notes are left out, so `notes` can hold fewer. Page types add neither.
 
 The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded from a GitLab server, trimmed by hand, with names and emails replaced. `issue_notes.json` was written by hand in the shape of GitLab's API.
+
+## Summary views
+
+`GitLabMergeRequestView.cpp`, `GitLabPipelineView.cpp` and `GitLabIssueView.cpp` each hold one class, a subclass of `GitLabSummary` in `GitLabViewSupport.h`, which is private to the module. The layouts, fields and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabSummary` holds what they share:
+
+- **Drawing.** `follow()` draws the item's status now and at each change. With no data it shows "Loading…" or the status's message. With old data it keeps drawing that data, because the cell header shows the problem.
+- **Previews.** `createMergeRequestPreview()` and `createIssuePreview()` take a project and a number, for a list's preview. `readItself()` runs the same status fetch through a small `StatusJob` of its own, on the context's server, and draws the result with the same code. It reads again after an action. A preview's configuration holds only `project` and `iid`, so its sections are all on. It has the same actions.
+- **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status, or reads again in a preview. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
+- **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
+- **Dialogs.** The comment dialog and the question before cancelling run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
+
+The action ids, which are also the buttons' object names, are `approve`, `retry-pipeline`, `cancel-pipeline`, `comment`, `close`, `reopen` and `open-page`. A job's buttons are `log-<job id>` and `retry-job-<job id>`. They are not in the action row, so a job's Retry clears the last error itself.
+
+Text from a server is plain text in every label. The tests are in `tests/tst_summary_views.cpp`, with a fake context and a fake status source, on the responses in `tests/data/`.
 
 ## Lists
 
