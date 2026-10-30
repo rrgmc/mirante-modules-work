@@ -17,12 +17,12 @@ namespace mirante::modules::claude {
 
 namespace {
 
-// A type with an id, a name, an icon and its configuration fields. Native
-// views arrive later.
-class StubItemType : public ItemType
+// A type with an id, a name, an icon and its configuration fields. The two
+// session types below add their views.
+class ClaudeItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
+    ClaudeItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
                  std::vector<Field> fields)
         : m_id(id)
         , m_name(name)
@@ -52,10 +52,10 @@ private:
 
 // A session on claude.ai: a web view of its address, or a message when the
 // address is missing or is not an http or https address.
-class WebSessionItemType : public StubItemType
+class WebSessionItemType : public ClaudeItemType
 {
 public:
-    using StubItemType::StubItemType;
+    using ClaudeItemType::ClaudeItemType;
 
     Rendering rendering() const override { return Rendering::Web; }
 
@@ -77,10 +77,10 @@ public:
 };
 
 // A session on one device, resumed in a terminal.
-class LocalSessionItemType : public StubItemType
+class LocalSessionItemType : public ClaudeItemType
 {
 public:
-    using StubItemType::StubItemType;
+    using ClaudeItemType::ClaudeItemType;
 
     QWidget *createView(ItemContext &context, QWidget *parent) const override
     {
