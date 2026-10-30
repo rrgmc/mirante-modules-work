@@ -281,7 +281,7 @@ void registerModule(ModuleRegistrar &registrar)
         sectionField(QStringLiteral("showLabels"), QCoreApplication::translate("gitlab", "Show the labels"));
     const ModuleSettings &settings = registrar.settings();
 
-    registrar.setModuleName(QStringLiteral("GitLab"));
+    registrar.setModuleName(QCoreApplication::translate("gitlab", "GitLab"));
     registrar.setModuleDescription(QCoreApplication::translate(
         "gitlab", "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and "
                   "token in the module's General Configuration."));

@@ -8,6 +8,7 @@
 #include <mirante/widgets/ActionRow.h>
 #include <mirante/widgets/FlowRow.h>
 
+#include <QCoreApplication>
 #include <QFont>
 #include <QLabel>
 #include <QLayout>
@@ -45,9 +46,11 @@ protected:
 
         setPageAddress(webAddress(issue, issueUrl(baseUrl(), config(), defaultProject())));
 
-        setSection(QStringLiteral("details"), tr("Details"), detailsSection(issue));
-        setSection(QStringLiteral("labels"), tr("Labels"), labelChips(issue.value(QStringLiteral("labels")).toArray()));
-        setSection(QStringLiteral("comments"), tr("Comments"), commentsSection(status.data));
+        setSection(QStringLiteral("details"), QCoreApplication::translate("gitlab", "Details"), detailsSection(issue));
+        setSection(QStringLiteral("labels"), QCoreApplication::translate("gitlab", "Labels"),
+                   labelChips(issue.value(QStringLiteral("labels")).toArray()));
+        setSection(QStringLiteral("comments"), QCoreApplication::translate("gitlab", "Comments"),
+                   commentsSection(status.data));
 
         applyField(QStringLiteral("details"), QStringLiteral("showDetails"));
         applyField(QStringLiteral("labels"), QStringLiteral("showLabels"));
@@ -59,14 +62,18 @@ private:
     {
         QWidget *column = newColumn();
         const QString assignees = userNames(issue.value(QStringLiteral("assignees")).toArray());
-        column->layout()->addWidget(plainLine(tr("Assignees: %1").arg(assignees.isEmpty() ? tr("none") : assignees)));
+        column->layout()->addWidget(
+            plainLine(QCoreApplication::translate("gitlab", "Assignees: %1")
+                          .arg(assignees.isEmpty() ? QCoreApplication::translate("gitlab", "none") : assignees)));
         const QString milestone =
             issue.value(QStringLiteral("milestone")).toObject().value(QStringLiteral("title")).toString();
         if (!milestone.isEmpty())
-            column->layout()->addWidget(plainLine(tr("Milestone: %1").arg(milestone)));
+            column->layout()->addWidget(
+                plainLine(QCoreApplication::translate("gitlab", "Milestone: %1").arg(milestone)));
         const QString due = issue.value(QStringLiteral("due_date")).toString();
         if (!due.isEmpty())
-            column->layout()->addWidget(plainLine(tr("Due: %1").arg(localDate(due))));
+            column->layout()->addWidget(
+                plainLine(QCoreApplication::translate("gitlab", "Due: %1").arg(localDate(due))));
         return column;
     }
 
@@ -75,10 +82,10 @@ private:
     {
         const QJsonValue notes = data.value(QStringLiteral("notes"));
         if (!notes.isArray())
-            return plainLine(tr("The comments could not be read."));
+            return plainLine(QCoreApplication::translate("gitlab", "The comments could not be read."));
         const QJsonArray list = notes.toArray();
         if (list.isEmpty())
-            return plainLine(tr("No comments"));
+            return plainLine(QCoreApplication::translate("gitlab", "No comments"));
 
         QWidget *column = newColumn();
         const qsizetype shown = std::min(list.size(), kShownComments);

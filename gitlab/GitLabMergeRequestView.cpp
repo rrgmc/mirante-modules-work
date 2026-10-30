@@ -8,6 +8,7 @@
 #include <mirante/widgets/ActionRow.h>
 #include <mirante/widgets/FlowRow.h>
 
+#include <QCoreApplication>
 #include <QLabel>
 #include <QLayout>
 #include <QPushButton>
@@ -30,7 +31,8 @@ public:
     MergeRequestView(ItemContext &context, QWidget *parent)
         : GitLabSummary(context, parent)
     {
-        actions()->addAction(kRetryPipeline, tr("Retry pipeline"), tr("Retry"), [this] {
+        actions()->addAction(kRetryPipeline, QCoreApplication::translate("gitlab", "Retry pipeline"),
+                             QCoreApplication::translate("gitlab", "Retry"), [this] {
             runAction(kRetryPipeline, [project = project(), pipeline = m_pipelineId](const GitLabClient &client,
                                                                                      GitLabClient::Done done) {
                 client.retryPipeline(project, pipeline, std::move(done));
@@ -55,11 +57,13 @@ protected:
                                     canRetryPipeline(pipeline.value(QStringLiteral("status")).toString()));
         setPageAddress(webAddress(mergeRequest, mergeRequestUrl(baseUrl(), config(), defaultProject())));
 
-        setSection(QStringLiteral("pipeline"), tr("Pipeline"),
+        setSection(QStringLiteral("pipeline"), QCoreApplication::translate("gitlab", "Pipeline"),
                    pipelineSection(pipeline, status.data.value(QStringLiteral("jobs")).toArray()));
-        setSection(QStringLiteral("approvals"), tr("Approvals"), approvalsSection(approvals));
-        setSection(QStringLiteral("people"), tr("People"), peopleSection(mergeRequest));
-        setSection(QStringLiteral("labels"), tr("Labels"),
+        setSection(QStringLiteral("approvals"), QCoreApplication::translate("gitlab", "Approvals"),
+                   approvalsSection(approvals));
+        setSection(QStringLiteral("people"), QCoreApplication::translate("gitlab", "People"),
+                   peopleSection(mergeRequest));
+        setSection(QStringLiteral("labels"), QCoreApplication::translate("gitlab", "Labels"),
                    labelChips(mergeRequest.value(QStringLiteral("labels")).toArray()));
 
         applyField(QStringLiteral("pipeline"), QStringLiteral("showPipeline"));
@@ -75,7 +79,7 @@ private:
         auto *flow = new widgets::FlowRow(row);
         flow->addWidget(statePill(mergeRequest.value(QStringLiteral("state")).toString()));
         if (open && mergeRequest.value(QStringLiteral("draft")).toBool())
-            flow->addWidget(new StatusPill(tr("Draft"), StatusRole::Waiting));
+            flow->addWidget(new StatusPill(QCoreApplication::translate("gitlab", "Draft"), StatusRole::Waiting));
         flow->addWidget(plainWord(QStringLiteral("%1 → %2").arg(
             mergeRequest.value(QStringLiteral("source_branch")).toString(),
             mergeRequest.value(QStringLiteral("target_branch")).toString())));
@@ -85,7 +89,7 @@ private:
     QWidget *pipelineSection(const QJsonObject &pipeline, const QJsonArray &jobs)
     {
         if (pipeline.isEmpty())
-            return plainLine(tr("No pipeline"));
+            return plainLine(QCoreApplication::translate("gitlab", "No pipeline"));
 
         QWidget *column = newColumn();
         auto *top = new QWidget;
@@ -93,7 +97,8 @@ private:
         const QString state = pipeline.value(QStringLiteral("status")).toString();
         flow->addWidget(new StatusPill(statusText(state), statusRole(state)));
         flow->addWidget(plainWord(QStringLiteral("#%1").arg(pipeline.value(QStringLiteral("id")).toInteger())));
-        if (QPushButton *web = webButton(tr("Web"), QStringLiteral("pipeline-web"), webAddress(pipeline, {})))
+        if (QPushButton *web = webButton(QCoreApplication::translate("gitlab", "Web"), QStringLiteral("pipeline-web"),
+                                         webAddress(pipeline, {})))
             flow->addWidget(web);
         column->layout()->addWidget(top);
 
@@ -116,7 +121,8 @@ private:
         if (!duration.isEmpty())
             flow->addWidget(plainWord(duration));
         const QString log = QStringLiteral("log-%1").arg(job.value(QStringLiteral("id")).toInteger());
-        if (QPushButton *button = webButton(tr("Log"), log, QUrl(job.value(QStringLiteral("web_url")).toString())))
+        if (QPushButton *button = webButton(QCoreApplication::translate("gitlab", "Log"), log,
+                                            QUrl(job.value(QStringLiteral("web_url")).toString())))
             flow->addWidget(button);
         return row;
     }
@@ -133,15 +139,17 @@ private:
 
         QWidget *column = newColumn();
         if (required > 0)
-            column->layout()->addWidget(plainLine(tr("%1 of %2 approvals").arg(given).arg(required)));
+            column->layout()->addWidget(
+                plainLine(QCoreApplication::translate("gitlab", "%1 of %2 approvals").arg(given).arg(required)));
         else if (given == 1)
-            column->layout()->addWidget(plainLine(tr("1 approval")));
+            column->layout()->addWidget(plainLine(QCoreApplication::translate("gitlab", "1 approval")));
         else if (given > 1)
-            column->layout()->addWidget(plainLine(tr("%1 approvals").arg(given)));
+            column->layout()->addWidget(plainLine(QCoreApplication::translate("gitlab", "%1 approvals").arg(given)));
         else
-            column->layout()->addWidget(plainLine(tr("No approvals")));
+            column->layout()->addWidget(plainLine(QCoreApplication::translate("gitlab", "No approvals")));
         if (given > 0)
-            column->layout()->addWidget(plainLine(tr("Approved by %1").arg(userNames(users))));
+            column->layout()->addWidget(
+                plainLine(QCoreApplication::translate("gitlab", "Approved by %1").arg(userNames(users))));
         return column;
     }
 
@@ -149,17 +157,17 @@ private:
     {
         const auto namesOrNone = [](const QJsonValue &users) {
             const QString names = userNames(users.toArray());
-            return names.isEmpty() ? tr("none") : names;
+            return names.isEmpty() ? QCoreApplication::translate("gitlab", "none") : names;
         };
         const QString author =
             mergeRequest.value(QStringLiteral("author")).toObject().value(QStringLiteral("name")).toString();
 
         QWidget *column = newColumn();
-        column->layout()->addWidget(plainLine(tr("Author: %1").arg(author)));
-        column->layout()->addWidget(
-            plainLine(tr("Assignees: %1").arg(namesOrNone(mergeRequest.value(QStringLiteral("assignees"))))));
-        column->layout()->addWidget(
-            plainLine(tr("Reviewers: %1").arg(namesOrNone(mergeRequest.value(QStringLiteral("reviewers"))))));
+        column->layout()->addWidget(plainLine(QCoreApplication::translate("gitlab", "Author: %1").arg(author)));
+        column->layout()->addWidget(plainLine(QCoreApplication::translate("gitlab", "Assignees: %1")
+                                                  .arg(namesOrNone(mergeRequest.value(QStringLiteral("assignees"))))));
+        column->layout()->addWidget(plainLine(QCoreApplication::translate("gitlab", "Reviewers: %1")
+                                                  .arg(namesOrNone(mergeRequest.value(QStringLiteral("reviewers"))))));
         return column;
     }
 

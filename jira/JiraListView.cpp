@@ -37,11 +37,6 @@ const QString kWebLink = QStringLiteral("web");
 const QString kOpenLink = QStringLiteral("open");
 const QString kAddLink = QStringLiteral("add");
 
-QString trJira(const char *text)
-{
-    return QCoreApplication::translate("jira", text);
-}
-
 // Sorts OPS-9 before OPS-10.
 QString keySortKey(const QString &key)
 {
@@ -58,8 +53,9 @@ QList<widgets::ListLink> rowLinks(bool hasSite)
 {
     QList<widgets::ListLink> links;
     if (hasSite)
-        links << widgets::ListLink{kWebLink, trJira("Web")} << widgets::ListLink{kOpenLink, trJira("Open")};
-    links << widgets::ListLink{kAddLink, trJira("Add")};
+        links << widgets::ListLink {kWebLink, QCoreApplication::translate("jira", "Web")}
+              << widgets::ListLink {kOpenLink, QCoreApplication::translate("jira", "Open")};
+    links << widgets::ListLink{kAddLink, QCoreApplication::translate("jira", "Add")};
     return links;
 }
 
@@ -83,7 +79,7 @@ widgets::ListRow readRow(const QJsonObject &issue, const QStringList &ids, const
         {key, keySortKey(key), std::nullopt},
         {fields.value(QStringLiteral("summary")).toString(), {}, std::nullopt},
         {status.value(QStringLiteral("name")).toString(), {}, statusCategoryRole(category)},
-        {assignee.isEmpty() ? trJira("Unassigned") : assignee, {}, std::nullopt},
+        {assignee.isEmpty() ? QCoreApplication::translate("jira", "Unassigned") : assignee, {}, std::nullopt},
         {updated.isValid() ? widgets::compactDate(updated) : updatedText, updated.toMSecsSinceEpoch(), std::nullopt},
     };
     for (const QString &id : ids) {
@@ -104,19 +100,19 @@ public:
         , m_context(context)
         , m_extraFields(extraFieldsOf(context.moduleSettings(kGeneralScreen)))
     {
-        QList<widgets::ListColumn> columns{{trJira("Key"), 1, false},
-                                           {trJira("Summary"), 0, true},
-                                           {trJira("Status"), 2, false},
-                                           {trJira("Assignee"), 4, false},
-                                           {trJira("Updated"), 3, false}};
+        QList<widgets::ListColumn> columns{{QCoreApplication::translate("jira", "Key"), 1, false},
+                                           {QCoreApplication::translate("jira", "Summary"), 0, true},
+                                           {QCoreApplication::translate("jira", "Status"), 2, false},
+                                           {QCoreApplication::translate("jira", "Assignee"), 4, false},
+                                           {QCoreApplication::translate("jira", "Updated"), 3, false}};
         for (int i = 0; i < m_extraFields.size(); ++i)
             columns.append({m_extraFields.at(i), kFirstExtraPriority + i, false});
-        columns.append({trJira("Links"), 0, false});
+        columns.append({QCoreApplication::translate("jira", "Links"), 0, false});
         setColumns(columns, UpdatedColumn);
         // They show once the status says the site has them.
         for (int i = 0; i < m_extraFields.size(); ++i)
             setColumnVisible(FirstExtraColumn + i, false);
-        addFilter(StatusColumn, trJira("Status"));
+        addFilter(StatusColumn, QCoreApplication::translate("jira", "Status"));
         setPageSize(listPageSize(context.config()));
         const QJsonObject config = context.config();
         setDescription(listDescription(config.value(QStringLiteral("preset")).toString(),
@@ -132,7 +128,7 @@ public:
             source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
             showStatus(source->current());
         } else {
-            setMessage(trJira("Loading…"));
+            setMessage(QCoreApplication::translate("jira", "Loading…"));
         }
     }
 
@@ -160,7 +156,7 @@ private:
 
         // An error keeps the old rows, and the cell header shows the error.
         if (!status.data.contains(QStringLiteral("rows"))) {
-            setMessage(status.message.isEmpty() ? trJira("Loading…") : status.message);
+            setMessage(status.message.isEmpty() ? QCoreApplication::translate("jira", "Loading…") : status.message);
             return;
         }
         setMessage(QString());
@@ -210,15 +206,15 @@ private:
         menu->setAttribute(Qt::WA_DeleteOnClose);
         const QUrl url = issuePageUrl(key);
 
-        QAction *web = menu->addAction(trJira("Web"));
+        QAction *web = menu->addAction(QCoreApplication::translate("jira", "Web"));
         web->setEnabled(!url.isEmpty());
         connect(web, &QAction::triggered, this, [this, key] { openWeb(key); });
-        QAction *open = menu->addAction(trJira("Open page"));
+        QAction *open = menu->addAction(QCoreApplication::translate("jira", "Open page"));
         open->setEnabled(!url.isEmpty());
         connect(open, &QAction::triggered, this, [this, url] { openPage(m_context, url); });
-        connect(menu->addAction(trJira("Add to task as item")), &QAction::triggered, this,
+        connect(menu->addAction(QCoreApplication::translate("jira", "Add to task as item")), &QAction::triggered, this,
                 [this, key] { addToTask(key); });
-        QAction *copy = menu->addAction(trJira("Copy link"));
+        QAction *copy = menu->addAction(QCoreApplication::translate("jira", "Copy link"));
         copy->setEnabled(!url.isEmpty());
         connect(copy, &QAction::triggered, this,
                 [url] { QGuiApplication::clipboard()->setText(url.toString()); });

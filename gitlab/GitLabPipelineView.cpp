@@ -7,6 +7,7 @@
 #include <mirante/widgets/ActionRow.h>
 #include <mirante/widgets/FlowRow.h>
 
+#include <QCoreApplication>
 #include <QDesktopServices>
 #include <QFont>
 #include <QGridLayout>
@@ -108,15 +109,19 @@ public:
     PipelineView(ItemContext &context, QWidget *parent)
         : GitLabSummary(context, parent)
     {
-        actions()->addAction(kRetryPipeline, tr("Retry pipeline"), tr("Retry"), [this] {
+        actions()->addAction(kRetryPipeline, QCoreApplication::translate("gitlab", "Retry pipeline"),
+                             QCoreApplication::translate("gitlab", "Retry"), [this] {
             runAction(kRetryPipeline, [project = project(), pipeline = m_pipelineId](const GitLabClient &client,
                                                                                      GitLabClient::Done done) {
                 client.retryPipeline(project, pipeline, std::move(done));
             });
         });
-        actions()->addAction(kCancelPipeline, tr("Cancel pipeline"), tr("Cancel"), [this] { cancelPipeline(); });
-        actions()->addAction(kTriggerPipeline, tr("Trigger pipeline"), tr("Trigger"), [this] { triggerPipeline(); });
-        actions()->addLinkAction(kMergeRequest, tr("Merge request"), tr("MR"),
+        actions()->addAction(kCancelPipeline, QCoreApplication::translate("gitlab", "Cancel pipeline"),
+                             QCoreApplication::translate("gitlab", "Cancel"), [this] { cancelPipeline(); });
+        actions()->addAction(kTriggerPipeline, QCoreApplication::translate("gitlab", "Trigger pipeline"),
+                             QCoreApplication::translate("gitlab", "Trigger"), [this] { triggerPipeline(); });
+        actions()->addLinkAction(kMergeRequest, QCoreApplication::translate("gitlab", "Merge request"),
+                                 QCoreApplication::translate("gitlab", "MR"),
                                  [this] { QDesktopServices::openUrl(m_mergeRequestAddress); });
         addOpenPage();
         actions()->setActionVisible(kTriggerPipeline, false);
@@ -132,11 +137,11 @@ public:
         m_steps = new QWidget;
         auto *steps = new QHBoxLayout(m_steps);
         steps->setContentsMargins(0, 0, 0, 0);
-        m_previous = new QPushButton(tr("Previous"));
+        m_previous = new QPushButton(QCoreApplication::translate("gitlab", "Previous"));
         m_previous->setObjectName(QStringLiteral("previous-pipeline"));
         connect(m_previous, &QPushButton::clicked, this, [this] { showAt(shownIndex() + 1); });
         steps->addWidget(m_previous);
-        m_next = new QPushButton(tr("Next"));
+        m_next = new QPushButton(QCoreApplication::translate("gitlab", "Next"));
         m_next->setObjectName(QStringLiteral("next-pipeline"));
         connect(m_next, &QPushButton::clicked, this, [this] { showAt(shownIndex() - 1); });
         steps->addWidget(m_next);
@@ -260,7 +265,7 @@ private:
         const QString state = shown.state();
         m_pipelineId = shown.id();
 
-        setTitle(tr("Pipeline #%1").arg(m_pipelineId));
+        setTitle(QCoreApplication::translate("gitlab", "Pipeline #%1").arg(m_pipelineId));
         replaceInHead(m_summaryRow, summaryRow(shown.pipeline));
         replaceInHead(m_pills, pillRow(shown.id()));
         m_pills->setVisible(std::count_if(m_pipelines.cbegin(), m_pipelines.cend(), [](const Pipeline &pipeline) {
@@ -341,10 +346,10 @@ private:
         if (m_readJobs.contains(id))
             drawJobs(m_readJobs.value(id));
         else
-            setJobsContent(plainLine(tr("Loading…")));
+            setJobsContent(plainLine(QCoreApplication::translate("gitlab", "Loading…")));
         ApiClient *client = server();
         if (!client) {
-            setJobsContent(plainLine(tr("The jobs could not be read.")));
+            setJobsContent(plainLine(QCoreApplication::translate("gitlab", "The jobs could not be read.")));
             return;
         }
         GitLabClient(*client, this).pipelineJobs(project(), id, GetOptions().maxRows, [this, read, id](const ApiReply &reply) {
@@ -354,14 +359,14 @@ private:
                 m_readJobs.insert(id, reply.json.array());
                 drawJobs(reply.json.array());
             } else if (!m_readJobs.contains(id)) {
-                setJobsContent(plainLine(tr("The jobs could not be read.")));
+                setJobsContent(plainLine(QCoreApplication::translate("gitlab", "The jobs could not be read.")));
             }
         });
     }
 
     void setJobsContent(QWidget *content)
     {
-        setSection(kJobsSection, tr("Jobs"), content);
+        setSection(kJobsSection, QCoreApplication::translate("gitlab", "Jobs"), content);
         setSectionVisible(kJobsSection, true);
     }
 
@@ -371,7 +376,7 @@ private:
     void drawJobs(const QJsonArray &jobs)
     {
         if (jobs.isEmpty()) {
-            setJobsContent(plainLine(tr("No jobs")));
+            setJobsContent(plainLine(QCoreApplication::translate("gitlab", "No jobs")));
             return;
         }
 
@@ -419,18 +424,21 @@ private:
         auto *layout = new QHBoxLayout(links);
         layout->setContentsMargins(0, 0, 0, 0);
         if (hasRun(job)) {
-            if (QPushButton *log = webButton(tr("Log"), QStringLiteral("log-%1").arg(id),
+            if (QPushButton *log = webButton(QCoreApplication::translate("gitlab", "Log"),
+                                             QStringLiteral("log-%1").arg(id),
                                              QUrl(job.value(QStringLiteral("web_url")).toString())))
                 layout->addWidget(log);
         }
         if (isFinishedJob(status)) {
-            layout->addWidget(jobAction(tr("Retry"), QStringLiteral("retry-job-%1").arg(id),
+            layout->addWidget(jobAction(QCoreApplication::translate("gitlab", "Retry"),
+                                        QStringLiteral("retry-job-%1").arg(id),
                                         [project = project(), id](const GitLabClient &client, GitLabClient::Done done) {
                                             client.retryJob(project, id, std::move(done));
                                         }));
         }
         if (status == QLatin1String("manual")) {
-            layout->addWidget(jobAction(tr("Play"), QStringLiteral("play-job-%1").arg(id),
+            layout->addWidget(jobAction(QCoreApplication::translate("gitlab", "Play"),
+                                        QStringLiteral("play-job-%1").arg(id),
                                         [project = project(), id](const GitLabClient &client, GitLabClient::Done done) {
                                             client.playJob(project, id, std::move(done));
                                         }));
@@ -475,7 +483,8 @@ private:
     void cancelPipeline()
     {
         const qint64 pipeline = m_pipelineId;
-        if (!confirm(tr("Cancel pipeline"), tr("Cancel pipeline #%1?").arg(pipeline)))
+        if (!confirm(QCoreApplication::translate("gitlab", "Cancel pipeline"),
+                     QCoreApplication::translate("gitlab", "Cancel pipeline #%1?").arg(pipeline)))
             return;
         runAction(kCancelPipeline, [project = project(), pipeline](const GitLabClient &client,
                                                                    GitLabClient::Done done) {
@@ -487,7 +496,8 @@ private:
     void triggerPipeline()
     {
         const QString branch = m_branch;
-        if (!confirm(tr("Trigger pipeline"), tr("Start a new pipeline on %1?").arg(branch)))
+        if (!confirm(QCoreApplication::translate("gitlab", "Trigger pipeline"),
+                     QCoreApplication::translate("gitlab", "Start a new pipeline on %1?").arg(branch)))
             return;
         // The new pipeline will be the latest, so show that when it comes.
         m_selectedId = 0;
