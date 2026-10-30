@@ -9,7 +9,7 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 | `gitlab.mr.summary` | GitLab MR (summary) | native | A summary of one merge request: its state, branches, people, pipeline and approvals. |
 | `gitlab.mr.page` | GitLab MR (page) | web | The web page of one merge request, on the GitLab server of the item's profile. |
 | `gitlab.mr.list` | GitLab MR List | native | A table of merge requests in a project, a group or everywhere, such as those that wait for your review. |
-| `gitlab.pipeline` | GitLab CI Pipeline | native | The latest pipeline of a branch, with its stages and jobs. The branch is a fixed one, the main folder's current branch or a merge request's branch. |
+| `gitlab.pipeline` | GitLab CI Pipeline | native | The latest pipeline of a branch and those started with it, with their stages and jobs. The branch is a fixed one, the main folder's current branch or a merge request's branch. |
 | `gitlab.issue.summary` | GitLab Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `gitlab.issue.page` | GitLab Issue (page) | web | The web page of one issue, on the GitLab server of the item's profile. |
 | `gitlab.issue.list` | GitLab Issue List | native | A table of issues in a project, a group or everywhere, such as those assigned to you. |
@@ -99,9 +99,16 @@ The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded 
 - **Previews.** `createMergeRequestPreview()` and `createIssuePreview()` take a project and a number, for a list's preview. `readItself()` runs the same status fetch through a small `StatusJob` of its own, on the context's server, and draws the result with the same code. It reads again after an action. A preview's configuration holds only `project` and `iid`, so its sections are all on. It has the same actions.
 - **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status, or reads again in a preview. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
 - **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
-- **Dialogs.** The question before cancelling runs an event loop of its own, and the view can be made again during it. So it is on the heap, and nothing runs afterwards if it or the view is gone.
+- **Dialogs.** The questions before cancelling and triggering run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
 
-The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline` and `open-page`. A job's buttons are `log-<job id>` and `retry-job-<job id>`. They are not in the action row, so a job's Retry clears the last error itself.
+The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline`, `trigger-pipeline`, `merge-request` and `open-page`. A job's buttons are `log-<job id>`, `retry-job-<job id>` and `play-job-<job id>`. They are not in the action row, so a job's Retry and Play clear the last error themselves. The merge request summary's link to its pipeline is `pipeline-web`.
+
+`GitLabPipelineView.cpp` keeps more state than the other two:
+
+- **What it shows.** `m_selectedId` is the pipeline the user chose, or 0 for the latest. It stays through a new status while that pipeline is still there. The latest is never held on to, so the view follows a newer one.
+- **The head.** The state row is one widget that stays, so Previous and Next (`previous-pipeline`, `next-pipeline`) keep the keyboard's focus. Only the line of state and the pills (`pipeline-pill-<id>`) inside it change.
+- **Jobs.** One section, `jobs`, holds one grid, so its columns line up across stages. A pipeline without `jobs` in the status, either older or a sibling whose request failed, asks for them with `pipelineJobs()` each time it shows. It shows what it last read meanwhile. Only the answer to the latest read counts.
+- **The refresh.** A `QTimer` named `pipeline-refresh` asks the status source for a refresh every 15 seconds. It runs between the view's show and hide events, while the shown pipeline is unfinished, which is every status but `success`, `failed`, `canceled`, `skipped` and `manual`. A manual pipeline waits for a person, so it does not ask.
 
 Text from a server is plain text in every label. The tests are in `tests/tst_summary_views.cpp`, with a fake context and a fake status source, on the responses in `tests/data/`.
 

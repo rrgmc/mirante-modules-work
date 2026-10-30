@@ -10,6 +10,7 @@
 
 #include <QLabel>
 #include <QLayout>
+#include <QPushButton>
 #include <QString>
 
 #include <utility>
@@ -92,14 +93,32 @@ private:
         const QString state = pipeline.value(QStringLiteral("status")).toString();
         flow->addWidget(new StatusPill(statusText(state), statusRole(state)));
         flow->addWidget(plainWord(QStringLiteral("#%1").arg(pipeline.value(QStringLiteral("id")).toInteger())));
+        if (QPushButton *web = webButton(tr("Web"), QStringLiteral("pipeline-web"), webAddress(pipeline, {})))
+            flow->addWidget(web);
         column->layout()->addWidget(top);
 
         for (const QJsonValue &value : jobs) {
             const QJsonObject job = value.toObject();
             if (job.value(QStringLiteral("status")).toString() == QLatin1String("failed"))
-                column->layout()->addWidget(jobRow(job, false));
+                column->layout()->addWidget(failedJobRow(job));
         }
         return column;
+    }
+
+    // Its name, status, duration and a link to its log.
+    static QWidget *failedJobRow(const QJsonObject &job)
+    {
+        auto *row = new QWidget;
+        auto *flow = new widgets::FlowRow(row);
+        flow->addWidget(plainWord(job.value(QStringLiteral("name")).toString()));
+        flow->addWidget(jobPill(job));
+        const QString duration = durationText(job.value(QStringLiteral("duration")));
+        if (!duration.isEmpty())
+            flow->addWidget(plainWord(duration));
+        const QString log = QStringLiteral("log-%1").arg(job.value(QStringLiteral("id")).toInteger());
+        if (QPushButton *button = webButton(tr("Log"), log, QUrl(job.value(QStringLiteral("web_url")).toString())))
+            flow->addWidget(button);
+        return row;
     }
 
     static QWidget *approvalsSection(const QJsonObject &approvals)

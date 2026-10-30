@@ -282,9 +282,9 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.addItemType(std::make_unique<GitLabItemType>(
         QStringLiteral("gitlab.pipeline"), QCoreApplication::translate("gitlab", "GitLab CI Pipeline"),
         QCoreApplication::translate("gitlab", "CI"),
-        QCoreApplication::translate("gitlab", "The latest pipeline of a branch, with its stages and jobs. The branch "
-                                              "is a fixed one, the main folder's current branch or a merge "
-                                              "request's branch."),
+        QCoreApplication::translate("gitlab", "The latest pipeline of a branch and those started with it, with their "
+                                              "stages and jobs. The branch is a fixed one, the main folder's current "
+                                              "branch or a merge request's branch."),
         pipelineFields(), settings, &fetchPipelineStatus, &createPipelineView));
     registrar.addItemType(std::make_unique<GitLabItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),

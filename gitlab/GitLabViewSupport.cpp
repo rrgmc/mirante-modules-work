@@ -14,7 +14,6 @@
 #include <QLabel>
 #include <QLocale>
 #include <QObject>
-#include <QPointer>
 #include <QPushButton>
 #include <QStringList>
 #include <QVBoxLayout>
@@ -181,6 +180,32 @@ StatusPill *statePill(const QString &state)
     return new StatusPill(statusText(state), StatusRole::Neutral);
 }
 
+StatusPill *jobPill(const QJsonObject &job)
+{
+    const QString status = job.value(QStringLiteral("status")).toString();
+    if (status == QLatin1String("failed") && job.value(QStringLiteral("allow_failure")).toBool())
+        return new StatusPill(translated("Failed, allowed"), StatusRole::Waiting);
+    return new StatusPill(statusText(status), statusRole(status));
+}
+
+QPushButton *linkButton(const QString &text, const QString &name)
+{
+    auto *button = new QPushButton(text);
+    button->setObjectName(name);
+    button->setFlat(true);
+    button->setCursor(Qt::PointingHandCursor);
+    return button;
+}
+
+QPushButton *webButton(const QString &text, const QString &name, const QUrl &url)
+{
+    if (!isWebAddress(url))
+        return nullptr;
+    QPushButton *button = linkButton(text, name);
+    QObject::connect(button, &QPushButton::clicked, button, [url] { QDesktopServices::openUrl(url); });
+    return button;
+}
+
 QWidget *newColumn()
 {
     auto *column = new QWidget;
@@ -262,6 +287,11 @@ QString GitLabSummary::project() const
     return projectPath(config(), defaultProject());
 }
 
+ApiClient *GitLabSummary::server() const
+{
+    return m_context->server();
+}
+
 QUrl GitLabSummary::baseUrl() const
 {
     return baseUrlOf(m_context->moduleSettings(kGeneralScreen));
@@ -297,6 +327,12 @@ void GitLabSummary::openPage()
         m_context->showPage(m_pageAddress);
 }
 
+void GitLabSummary::refreshStatus()
+{
+    if (m_refresh)
+        m_refresh();
+}
+
 void GitLabSummary::runAction(const QString &id, const Request &request)
 {
     actions()->setBusy(id, true);
@@ -315,57 +351,9 @@ void GitLabSummary::run(const Request &request, const std::function<void()> &fin
         finished();
         if (!reply.ok())
             actions()->showError(actionError(reply));
-        else if (m_refresh)
-            m_refresh();
+        else
+            refreshStatus();
     });
-}
-
-QWidget *GitLabSummary::jobRow(const QJsonObject &job, bool canRetry)
-{
-    const QString status = job.value(QStringLiteral("status")).toString();
-    const bool failed = status == QLatin1String("failed");
-    const bool allowed = failed && job.value(QStringLiteral("allow_failure")).toBool();
-    const qint64 jobId = job.value(QStringLiteral("id")).toInteger();
-
-    auto *row = new QWidget;
-    auto *flow = new widgets::FlowRow(row);
-    flow->addWidget(plainWord(job.value(QStringLiteral("name")).toString()));
-    flow->addWidget(allowed ? new StatusPill(tr("Failed, allowed"), StatusRole::Waiting)
-                            : new StatusPill(statusText(status), statusRole(status)));
-    const QString duration = durationText(job.value(QStringLiteral("duration")));
-    if (!duration.isEmpty())
-        flow->addWidget(plainWord(duration));
-    if (!failed)
-        return row;
-
-    const QUrl log(job.value(QStringLiteral("web_url")).toString());
-    if (isWebAddress(log)) {
-        auto *button = new QPushButton(tr("Log"));
-        button->setObjectName(QStringLiteral("log-%1").arg(jobId));
-        QObject::connect(button, &QPushButton::clicked, button, [log] { QDesktopServices::openUrl(log); });
-        flow->addWidget(button);
-    }
-    if (canRetry) {
-        auto *button = new QPushButton(tr("Retry"));
-        button->setObjectName(QStringLiteral("retry-job-%1").arg(jobId));
-        QObject::connect(button, &QPushButton::clicked, this, [this, button, jobId] {
-            // Not in the action row, so it clears the last error itself.
-            actions()->clearError();
-            button->setEnabled(false);
-            const QPointer<QPushButton> guard(button);
-            run(
-                [project = project(), jobId](const GitLabClient &client, GitLabClient::Done done) {
-                    client.retryJob(project, jobId, std::move(done));
-                },
-                [guard] {
-                    // A new status may have replaced the button by now.
-                    if (guard)
-                        guard->setEnabled(true);
-                });
-        });
-        flow->addWidget(button);
-    }
-    return row;
 }
 
 } // namespace mirante::modules::gitlab
