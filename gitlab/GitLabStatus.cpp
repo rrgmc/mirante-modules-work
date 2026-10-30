@@ -589,7 +589,20 @@ void fetchPipelineStatus(StatusJob &job)
 
     const QString source = config.value(QStringLiteral("branchSource")).toString();
     if (source == QLatin1String("mainFolder")) {
-        job.finish(incomplete(tr("Follows the main folder from M7")));
+        // The branch checked out in the main folder on this device, read
+        // again at each fetch, then as a fixed branch. The job cannot tell a
+        // project without a main folder from one not mapped here.
+        const QString path = job.folderPath(QString());
+        if (path.isEmpty()) {
+            job.finish(incomplete(tr("Set the main folder's path on this device.")));
+            return;
+        }
+        const QString branch = job.gitHead(path);
+        if (branch.isEmpty()) {
+            job.finish(incomplete(tr("The main folder is not on a branch.")));
+            return;
+        }
+        fetchPipelines(&job, {project, branch, 0, {}});
         return;
     }
 

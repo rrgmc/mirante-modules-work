@@ -8,5 +8,6 @@ mirante_add_module(gitlab
               GitLabViewSupport.cpp GitLabViewSupport.h
     RESOURCES icons/gitlab.svg
     TESTS     tests/tst_client.cpp tests/tst_from_url.cpp tests/tst_list_query.cpp tests/tst_list_views.cpp
-              tests/tst_register.cpp tests/tst_settings.cpp tests/tst_status.cpp tests/tst_summary_views.cpp tests/tst_urls.cpp
+              tests/tst_quick_add.cpp tests/tst_register.cpp tests/tst_settings.cpp tests/tst_status.cpp
+              tests/tst_summary_views.cpp tests/tst_urls.cpp
     DEFAULT   ON)

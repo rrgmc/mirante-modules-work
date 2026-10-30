@@ -41,7 +41,8 @@ public:
     QString apiRoot() const;
 
     // GET issue/<key>?expand=renderedFields, with only the given fields if
-    // any, and otherwise all of them. expand replaces the values of expand.
+    // any, and otherwise all of them. expand replaces the values of expand; an
+    // empty list sends none.
     void issue(const QString &key, const QStringList &fields, QObject *receiver, JiraDone done,
                const QStringList &expand = {QStringLiteral("renderedFields")}) const;
 

@@ -12,7 +12,7 @@ Jira issues and issue lists as items. See [item types](../../../docs/item-types.
 
 The module calls itself "Jira" and describes itself as: "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. Since M5 the issue types report [status](#status). Since M6 the summary and the list have native [views](#views), and the list reports status.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. Since M5 the issue types report [status](#status). Since M6 the summary and the list have native [views](#views), and the list reports status. Since M7 the module takes part in [quick add](#quick-add).
 
 ## Pages
 
@@ -30,6 +30,28 @@ Every type implements `fromUrl()`, through `matchUrl()` in `JiraUrls.cpp`. See [
 - **A search**, an address with a `jql` query, fills `jira.list` with `preset` = `jql` and the query, named "Jira search".
 
 Other addresses, such as a key without a number, are refused. The tests are in `tests/tst_from_url.cpp`.
+
+## Quick add
+
+`JiraQuickAdd.cpp` has a [quick add](../../../docs/modules.md#quick-add) handler and a related-item finder. Both use the server and the General Configuration of the profile the quick add dialog shows. Without a base URL there, both finish with nothing and send nothing. See [decision 0078](../../../docs/decisions/0078-quick-add-dialog.md).
+
+**The handler** takes a bare key or an issue's address:
+
+- **A key** is the whole text, trimmed, matching `^[A-Za-z][A-Za-z0-9_]+-\d+$`, such as `ops-7`. It is read in upper case.
+- **An address** is read with `matchUrl()`, as `fromUrl()` reads it, against the profile's base URL. It must be below that URL: an address on another site belongs to another profile, so its key is not sent to this one.
+- **Anything else**, such as a search address or a sentence holding a key, finishes with nothing at once.
+- **Request.** `issue()` with the field `summary` and no `expand`, with the request's `owner()` as the receiver.
+- **Proposal.** The title is the summary, or the key if it is empty. The one item is a `jira.issue.summary` named by the key, with `{"key": <key>}`, as `fromUrl()` makes it. The project match is `projectKey` = the key's prefix, such as `OPS`. The texts are the key.
+- **A `404`**, or any other failure, finishes with nothing, so text that only looks like a key, such as `UTF-8`, is not offered.
+
+**The finder** looks for keys in the texts, such as `ABC-123` in `feature/abc-123-login`:
+
+- **Keys.** Any case, not starting or ending inside a word, read in upper case. A key seen twice counts once.
+- **Project.** When the chosen project has a `projectKey`, only keys with that prefix count, without case. Otherwise all keys do.
+- **Requests.** The first five keys that count, each asked for as the handler asks. A `200` offers a `jira.issue.summary` item as above, in the order of the keys. The finder finishes once, after the last answer.
+- **No keys** finish at once, without a request.
+
+The tests are in `tests/tst_quick_add.cpp`, on recorded responses of both deployments in `tests/data/issue-summary-*.json`.
 
 ## Configuration
 
@@ -84,7 +106,7 @@ Each profile has its own values, stored in its entry of `workspace.mirante` unde
 
 | Method | Request |
 |---|---|
-| `issue(key, fields, expand)` | `GET issue/<key>?fields=<fields>&expand=<expand>`. Without fields, all of them. `expand` is `renderedFields` unless given. |
+| `issue(key, fields, expand)` | `GET issue/<key>?fields=<fields>&expand=<expand>`. Without fields, all of them. `expand` is `renderedFields` unless given; an empty list sends no `expand`. |
 | `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues, with Jira's `total` where it gives one, which Cloud's `search/jql` does not, and its `names` if `options.expand` asks for them. |
 | `allFields()` | `GET field`: the id and name of each of the site's fields |
 | `myself()` | `GET myself` |
