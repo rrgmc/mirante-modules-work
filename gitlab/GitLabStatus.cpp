@@ -9,8 +9,10 @@
 #include <QJsonValue>
 #include <QStringList>
 
+#include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace mirante::modules::gitlab {
 
@@ -229,16 +231,26 @@ ItemStatus pipelineStatus(const QString &branch, const QJsonObject &pipeline, co
     return status;
 }
 
-void fetchMergeRequestStatus(StatusJob &job)
-{
-    const QString project = projectPath(job.config(), job.projectSetting(kProjectSettingKey));
-    const qint64 iid = itemNumber(job.config());
-    if (project.isEmpty() || iid == 0) {
-        job.finish(incomplete(tr("Set the project and number in the item's settings.")));
-        return;
-    }
+namespace {
 
-    // The three requests run at once; the job ends when all have answered.
+// The latest notes a summary keeps, before system notes are left out.
+constexpr int kSummaryNotes = 20;
+
+// Finishes the job with a message if the configuration names no object.
+bool namesAnObject(StatusJob &job, const QString &project, qint64 iid)
+{
+    if (!project.isEmpty() && iid != 0)
+        return true;
+    job.finish(incomplete(tr("Set the project and number in the item's settings.")));
+    return false;
+}
+
+// Asks for the merge request, its approvals and the current user, and gives
+// done the status from their answers, a failed one included.
+void fetchMergeRequestAnswers(StatusJob &job, const QString &project, qint64 iid,
+                              std::function<void(const ItemStatus &)> done)
+{
+    // The three requests run at once; done runs when all have answered.
     struct Replies
     {
         std::optional<ApiReply> mergeRequest;
@@ -246,18 +258,17 @@ void fetchMergeRequestStatus(StatusJob &job)
         std::optional<ApiReply> user;
     };
     auto replies = std::make_shared<Replies>();
-    StatusJob *target = &job;
-    const auto finishWhenDone = [target, replies] {
+    const auto finishWhenDone = [done = std::move(done), replies] {
         if (!replies->mergeRequest || !replies->approvals || !replies->user)
             return;
         for (const ApiReply *reply : {&*replies->mergeRequest, &*replies->user, &*replies->approvals}) {
             if (!reply->ok()) {
-                target->finish(statusFromReply(*reply));
+                done(statusFromReply(*reply));
                 return;
             }
         }
-        target->finish(mergeRequestStatus(replies->mergeRequest->json.object(), replies->approvals->json.object(),
-                                          replies->user->json.object()));
+        done(mergeRequestStatus(replies->mergeRequest->json.object(), replies->approvals->json.object(),
+                                replies->user->json.object()));
     };
 
     const GitLabClient client(job.server(), job.owner());
@@ -275,14 +286,35 @@ void fetchMergeRequestStatus(StatusJob &job)
     });
 }
 
+QJsonArray withoutSystemNotes(const QJsonArray &notes)
+{
+    QJsonArray kept;
+    for (const QJsonValue &note : notes) {
+        if (!note.toObject().value(QStringLiteral("system")).toBool())
+            kept.append(note);
+    }
+    return kept;
+}
+
+} // namespace
+
+void fetchMergeRequestStatus(StatusJob &job)
+{
+    const QString project = projectPath(job.config(), job.projectSetting(kProjectSettingKey));
+    const qint64 iid = itemNumber(job.config());
+    if (!namesAnObject(job, project, iid))
+        return;
+
+    StatusJob *target = &job;
+    fetchMergeRequestAnswers(job, project, iid, [target](const ItemStatus &status) { target->finish(status); });
+}
+
 void fetchIssueStatus(StatusJob &job)
 {
     const QString project = projectPath(job.config(), job.projectSetting(kProjectSettingKey));
     const qint64 iid = itemNumber(job.config());
-    if (project.isEmpty() || iid == 0) {
-        job.finish(incomplete(tr("Set the project and number in the item's settings.")));
+    if (!namesAnObject(job, project, iid))
         return;
-    }
 
     StatusJob *target = &job;
     GitLabClient(job.server(), job.owner()).issue(project, iid, [target](const ApiReply &reply) {
@@ -292,12 +324,56 @@ void fetchIssueStatus(StatusJob &job)
 
 void fetchMergeRequestSummaryStatus(StatusJob &job)
 {
-    fetchMergeRequestStatus(job);
+    const QString project = projectPath(job.config(), job.projectSetting(kProjectSettingKey));
+    const qint64 iid = itemNumber(job.config());
+    if (!namesAnObject(job, project, iid))
+        return;
+
+    StatusJob *target = &job;
+    const GitLabClient client(job.server(), job.owner());
+    fetchMergeRequestAnswers(job, project, iid, [target, client, project](const ItemStatus &status) {
+        const QJsonObject pipeline = status.data.value(QStringLiteral("mergeRequest"))
+                                         .toObject()
+                                         .value(QStringLiteral("head_pipeline"))
+                                         .toObject();
+        if (pipeline.value(QStringLiteral("status")).toString() != QLatin1String("failed")) {
+            target->finish(status);
+            return;
+        }
+        // Failed jobs only add detail, so without them the status still stands.
+        const qint64 id = pipeline.value(QStringLiteral("id")).toInteger();
+        client.pipelineJobs(project, id, GetOptions().maxRows, [target, status](const ApiReply &jobs) {
+            ItemStatus result = status;
+            if (jobs.ok())
+                result.data.insert(QStringLiteral("jobs"), jobs.json.array());
+            target->finish(result);
+        });
+    });
 }
 
 void fetchIssueSummaryStatus(StatusJob &job)
 {
-    fetchIssueStatus(job);
+    const QString project = projectPath(job.config(), job.projectSetting(kProjectSettingKey));
+    const qint64 iid = itemNumber(job.config());
+    if (!namesAnObject(job, project, iid))
+        return;
+
+    StatusJob *target = &job;
+    const GitLabClient client(job.server(), job.owner());
+    client.issue(project, iid, [target, client, project, iid](const ApiReply &reply) {
+        if (!reply.ok()) {
+            target->finish(statusFromReply(reply));
+            return;
+        }
+        // Notes only add detail, so without them the status still stands.
+        const ItemStatus status = issueStatus(reply.json.object());
+        client.issueNotes(project, iid, kSummaryNotes, [target, status](const ApiReply &notes) {
+            ItemStatus result = status;
+            if (notes.ok())
+                result.data.insert(QStringLiteral("notes"), withoutSystemNotes(notes.json.array()));
+            target->finish(result);
+        });
+    });
 }
 
 namespace {
