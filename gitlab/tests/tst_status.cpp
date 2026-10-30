@@ -729,7 +729,9 @@ private slots:
                                              "&state=opened&per_page=1")}));
     }
 
-    void mainFolderWaitsForM7()
+    // The main folder's path and head come from the job; without either,
+    // nothing is asked.
+    void mainFolderNotMapped()
     {
         FakeStatusJob job;
         job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
@@ -737,8 +739,45 @@ private slots:
         fetchPipelineStatus(job);
         QCOMPARE(job.finishCount, 1);
         QCOMPARE(job.finished->state, ItemStatus::State::None);
-        QCOMPARE(job.finished->message, QStringLiteral("Follows the main folder from M7"));
+        QCOMPARE(job.finished->message, QStringLiteral("Set the main folder's path on this device."));
+        QVERIFY(job.headsRead.isEmpty());
         QVERIFY(job.client.requests().isEmpty());
+    }
+
+    void mainFolderNotOnABranch()
+    {
+        FakeStatusJob job;
+        job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                       {QStringLiteral("branchSource"), QStringLiteral("mainFolder")}};
+        job.folderPaths.insert(QString(), QStringLiteral("C:/work/backend"));
+        fetchPipelineStatus(job);
+        QCOMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->state, ItemStatus::State::None);
+        QCOMPARE(job.finished->message, QStringLiteral("The main folder is not on a branch."));
+        QCOMPARE(job.headsRead, QStringList{QStringLiteral("C:/work/backend")});
+        QVERIFY(job.client.requests().isEmpty());
+    }
+
+    // The branch read from the head is then followed as a fixed one.
+    void mainFolderBranchFromItsHead()
+    {
+        FakeStatusJob job;
+        job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                       {QStringLiteral("branchSource"), QStringLiteral("mainFolder")},
+                                       {QStringLiteral("branch"), QStringLiteral("ignored")}};
+        job.folderPaths.insert(QString(), QStringLiteral("C:/work/backend"));
+        job.heads.insert(QStringLiteral("C:/work/backend"), QStringLiteral("main"));
+        fetchPipelineStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.headsRead, QStringList{QStringLiteral("C:/work/backend")});
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->summary, QStringLiteral("No pipeline on main"));
+        QCOMPARE(job.client.requestKeys(),
+                 (QStringList{QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/latest?ref=main"),
+                              QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines?ref=main&per_page=20"),
+                              QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests?source_branch=main"
+                                             "&state=opened&per_page=1")}));
     }
 
     // Without a project or a number nothing is asked.

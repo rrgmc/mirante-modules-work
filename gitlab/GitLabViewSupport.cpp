@@ -209,9 +209,11 @@ void GitLabSummary::follow(ItemStatusSource *source)
 
 void GitLabSummary::showStatus(const ItemStatus &status)
 {
-    // Old data stays through an error. Problems show in the cell header.
+    // Old data stays through an error. Problems show in the cell header. A
+    // message without an error, such as a main folder that left its branch,
+    // says the item has nothing to show now, so it replaces the old data.
     if (status.data.isEmpty()) {
-        if (!m_drawn)
+        if (!m_drawn || (status.state == ItemStatus::State::None && !status.message.isEmpty()))
             setMessage(status.message.isEmpty() ? tr("Loading…") : status.message);
         return;
     }
