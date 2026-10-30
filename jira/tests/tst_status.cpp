@@ -129,10 +129,10 @@ private slots:
         QTest::addColumn<QString>("file");
         QTest::newRow("summary") << QStringLiteral("jira.issue.summary")
                                  << summaryKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7"))
-                                 << QFINDTESTDATA("data/issue-full-cloud.json");
+                                 << QFINDTESTDATA("tests/data/issue-full-cloud.json");
         QTest::newRow("page") << QStringLiteral("jira.issue.page")
                               << issueKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7"))
-                              << QFINDTESTDATA("data/issue-cloud.json");
+                              << QFINDTESTDATA("tests/data/issue-cloud.json");
     }
 
     void openIssueOnCloud()
@@ -171,7 +171,7 @@ private slots:
         FakeStatusJob job;
         setDataCenter(job, QStringLiteral("INFRA-1203"));
         QVERIFY(job.client.setJsonFile(issueKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
-                                       QFINDTESTDATA("data/issue-dc-done.json")));
+                                       QFINDTESTDATA("tests/data/issue-dc-done.json")));
 
         type(QStringLiteral("jira.issue.page")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
@@ -192,10 +192,10 @@ private slots:
         QTest::addColumn<QString>("file");
         QTest::addColumn<QString>("sprint");
         QTest::addColumn<QString>("sprintField");
-        QTest::newRow("cloud") << true << QStringLiteral("OPS-7") << QFINDTESTDATA("data/issue-full-cloud.json")
+        QTest::newRow("cloud") << true << QStringLiteral("OPS-7") << QFINDTESTDATA("tests/data/issue-full-cloud.json")
                                << QStringLiteral("Sprint 12") << QStringLiteral("customfield_10020");
         QTest::newRow("data center") << false << QStringLiteral("INFRA-1203")
-                                     << QFINDTESTDATA("data/issue-full-dc.json")
+                                     << QFINDTESTDATA("tests/data/issue-full-dc.json")
                                      << QStringLiteral("Platform, week 44") << QStringLiteral("customfield_10105");
     }
 
@@ -236,9 +236,9 @@ private slots:
         FakeStatusJob job;
         setCloud(job, QStringLiteral("OPS-7"));
         QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7")),
-                                       QFINDTESTDATA("data/issue-full-cloud.json")));
+                                       QFINDTESTDATA("tests/data/issue-full-cloud.json")));
         const QString request = childrenKey(kCloudChildrenPath, kCloudChildrenJql, QStringLiteral("100"), false);
-        QVERIFY(job.client.setJsonFile(request, QFINDTESTDATA("data/search-children-cloud.json")));
+        QVERIFY(job.client.setJsonFile(request, QFINDTESTDATA("tests/data/search-children-cloud.json")));
 
         type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
@@ -256,9 +256,9 @@ private slots:
         FakeStatusJob job;
         setDataCenter(job, QStringLiteral("INFRA-1203"));
         QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
-                                       QFINDTESTDATA("data/issue-full-dc.json")));
+                                       QFINDTESTDATA("tests/data/issue-full-dc.json")));
         const QString request = childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true);
-        QVERIFY(job.client.setJsonFile(request, QFINDTESTDATA("data/search-children-dc.json")));
+        QVERIFY(job.client.setJsonFile(request, QFINDTESTDATA("tests/data/search-children-dc.json")));
 
         type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
@@ -276,7 +276,7 @@ private slots:
         FakeStatusJob job;
         setDataCenter(job, QStringLiteral("INFRA-1203"));
         QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
-                                       QFINDTESTDATA("data/issue-full-dc.json")));
+                                       QFINDTESTDATA("tests/data/issue-full-dc.json")));
         job.client.setJson(childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true),
                            QJsonDocument(QJsonObject{{QStringLiteral("issues"), numberedIssues(QStringLiteral("INFRA"), 50)},
                                                      {QStringLiteral("total"), 73}}));
@@ -294,7 +294,7 @@ private slots:
         FakeStatusJob job;
         setCloud(job, QStringLiteral("OPS-7"));
         QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7")),
-                                       QFINDTESTDATA("data/issue-full-cloud.json")));
+                                       QFINDTESTDATA("tests/data/issue-full-cloud.json")));
         QJsonArray issues = numberedIssues(QStringLiteral("OPS"), 59);
         issues.prepend(QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-9")}});
         job.client.setJson(childrenKey(kCloudChildrenPath, kCloudChildrenJql, QStringLiteral("100"), false),
@@ -320,11 +320,11 @@ private slots:
         QTest::addColumn<QString>("childrenRequest");
         QTest::newRow("cloud") << true << QStringLiteral("OPS-7")
                                << summaryKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7"))
-                               << QFINDTESTDATA("data/issue-full-cloud.json")
+                               << QFINDTESTDATA("tests/data/issue-full-cloud.json")
                                << childrenKey(kCloudChildrenPath, kCloudChildrenJql, QStringLiteral("100"), false);
         QTest::newRow("data center") << false << QStringLiteral("INFRA-1203")
                                      << summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203"))
-                                     << QFINDTESTDATA("data/issue-full-dc.json")
+                                     << QFINDTESTDATA("tests/data/issue-full-dc.json")
                                      << childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true);
     }
 
@@ -366,14 +366,14 @@ private slots:
         FakeStatusJob job;
         setDataCenter(job, QStringLiteral("INFRA-1203"));
         QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
-                                       QFINDTESTDATA("data/issue-full-dc.json")));
+                                       QFINDTESTDATA("tests/data/issue-full-dc.json")));
         ApiReply refused;
         refused.error = ApiReply::Error::Http;
         refused.httpStatus = 400;
         job.client.setReply(childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true), refused);
         const QString parentOnly = childrenKey(kDcChildrenPath, QStringLiteral("parent = \"INFRA-1203\""),
                                                QStringLiteral("50"), true);
-        QVERIFY(job.client.setJsonFile(parentOnly, QFINDTESTDATA("data/search-children-dc.json")));
+        QVERIFY(job.client.setJsonFile(parentOnly, QFINDTESTDATA("tests/data/search-children-dc.json")));
 
         type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
@@ -387,7 +387,7 @@ private slots:
         FakeStatusJob job;
         setDataCenter(job, QStringLiteral("INFRA-1203"));
         QVERIFY(job.client.setJsonFile(issueKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
-                                       QFINDTESTDATA("data/issue-dc-done.json")));
+                                       QFINDTESTDATA("tests/data/issue-dc-done.json")));
 
         type(QStringLiteral("jira.issue.page")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
@@ -441,9 +441,9 @@ private slots:
         const QString jql =
             QStringLiteral("assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC");
         QTest::newRow("cloud") << true << searchKey(QStringLiteral("rest/api/3/search/jql"), jql, false)
-                               << QFINDTESTDATA("data/search-list-cloud.json");
+                               << QFINDTESTDATA("tests/data/search-list-cloud.json");
         QTest::newRow("data center") << false << searchKey(QStringLiteral("rest/api/2/search"), jql, true)
-                                     << QFINDTESTDATA("data/search-list-dc.json");
+                                     << QFINDTESTDATA("tests/data/search-list-dc.json");
     }
 
     void listReportsItsRows()
@@ -640,11 +640,11 @@ private slots:
         QTest::addColumn<QStringList>("ids");
         QTest::newRow("cloud") << true << QStringLiteral("rest/api/3") << QStringLiteral("rest/api/3/search/jql")
                                << QStringLiteral("summary,status,assignee,updated,customfield_10030,fixVersions")
-                               << QFINDTESTDATA("data/fields-cloud.json") << QFINDTESTDATA("data/search-extra-cloud.json")
+                               << QFINDTESTDATA("tests/data/fields-cloud.json") << QFINDTESTDATA("tests/data/search-extra-cloud.json")
                                << QStringList{QStringLiteral("customfield_10030"), QStringLiteral("fixVersions")};
         QTest::newRow("data center") << false << QStringLiteral("rest/api/2") << QStringLiteral("rest/api/2/search")
                                      << QStringLiteral("summary,status,assignee,updated,customfield_10130,fixVersions")
-                                     << QFINDTESTDATA("data/fields-dc.json") << QFINDTESTDATA("data/search-extra-dc.json")
+                                     << QFINDTESTDATA("tests/data/fields-dc.json") << QFINDTESTDATA("tests/data/search-extra-dc.json")
                                      << QStringList{QStringLiteral("customfield_10130"), QStringLiteral("fixVersions")};
     }
 
@@ -700,7 +700,7 @@ private slots:
         general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team")});
         job.screens.insert(QStringLiteral("general"), general);
         QVERIFY(job.client.setJsonFile(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/field")),
-                                       QFINDTESTDATA("data/fields-cloud.json")));
+                                       QFINDTESTDATA("tests/data/fields-cloud.json")));
         QUrlQuery query;
         query.addQueryItem(QStringLiteral("jql"), QStringLiteral("project = OPS"));
         query.addQueryItem(QStringLiteral("fields"), QStringLiteral("summary,status,assignee,updated,customfield_10030"));
@@ -736,12 +736,12 @@ private slots:
         job.screens.insert(QStringLiteral("general"), general);
         if (!fieldsFail) {
             QVERIFY(job.client.setJsonFile(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/field")),
-                                           QFINDTESTDATA("data/fields-cloud.json")));
+                                           QFINDTESTDATA("tests/data/fields-cloud.json")));
         }
         const QString jql =
             QStringLiteral("assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC");
         QVERIFY(job.client.setJsonFile(searchKey(QStringLiteral("rest/api/3/search/jql"), jql, false),
-                                       QFINDTESTDATA("data/search-list-cloud.json")));
+                                       QFINDTESTDATA("tests/data/search-list-cloud.json")));
 
         type(QStringLiteral("jira.list")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);

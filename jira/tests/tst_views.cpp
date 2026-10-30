@@ -180,8 +180,8 @@ QJsonObject readJson(const QString &file)
     return QJsonDocument::fromJson(input.readAll()).object();
 }
 
-QJsonObject cloudIssue() { return readJson(QFINDTESTDATA("data/issue-full-cloud.json")); }
-QJsonObject dcIssue() { return readJson(QFINDTESTDATA("data/issue-full-dc.json")); }
+QJsonObject cloudIssue() { return readJson(QFINDTESTDATA("tests/data/issue-full-cloud.json")); }
+QJsonObject dcIssue() { return readJson(QFINDTESTDATA("tests/data/issue-full-dc.json")); }
 
 ItemStatus statusOf(const QJsonObject &issue)
 {
@@ -581,7 +581,7 @@ private slots:
         FakeContext context;
         useCloud(context, QStringLiteral("OPS-7"));
         ItemStatus status = statusOf(cloudIssue());
-        const QJsonArray children = readJson(QFINDTESTDATA("data/search-children-cloud.json"))
+        const QJsonArray children = readJson(QFINDTESTDATA("tests/data/search-children-cloud.json"))
                                         .value(QStringLiteral("issues"))
                                         .toArray();
         // As the status gives them: without the sub-task OPS-9.
@@ -805,7 +805,7 @@ private slots:
         FakeContext context;
         useCloud(context, QString());
         context.itemConfig = {{QStringLiteral("preset"), QStringLiteral("myOpen")}};
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         const QAbstractItemModel *model = tableOf(view.get())->model();
@@ -863,7 +863,7 @@ private slots:
     {
         FakeContext context;
         useCloud(context, QString());
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         ItemStatus failed = context.source.status;
@@ -881,7 +881,7 @@ private slots:
         useDataCenter(context, QString());
         context.itemConfig = {{QStringLiteral("preset"), QStringLiteral("recentlyUpdated")}};
         context.projectSettings = {{QStringLiteral("projectKey"), QStringLiteral("OPS")}};
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-dc.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-dc.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         const QUrl link = static_cast<ItemListView *>(view.get())->webLink();
@@ -898,7 +898,7 @@ private slots:
     {
         FakeContext context;
         useCloud(context, QString());
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         tableOf(view.get())->selectRow(rowOf(view.get(), QStringLiteral("OPS-7")));
@@ -924,7 +924,7 @@ private slots:
         useCloud(context, QString());
         if (!hasSite)
             context.general.remove(QStringLiteral("baseUrl"));
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         const QModelIndex cell = tableOf(view.get())->model()->index(0, kLinksColumn);
@@ -937,7 +937,7 @@ private slots:
         BrowserGuard browser;
         FakeContext context;
         useCloud(context, QString());
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
         view->show();
         QVERIFY(QTest::qWaitForWindowExposed(view.get()));
@@ -972,7 +972,7 @@ private slots:
     {
         FakeContext context;
         useCloud(context, QString());
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         tableOf(view.get())->sortByColumn(kLinksColumn, Qt::AscendingOrder);
@@ -1016,7 +1016,7 @@ private slots:
     {
         FakeContext context;
         useCloud(context, QString());
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.2"));
@@ -1049,7 +1049,7 @@ private slots:
         useCloud(context, QString());
         if (!value.isUndefined())
             context.itemConfig.insert(QStringLiteral("pageSize"), value);
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         auto *list = static_cast<ItemListView *>(view.get());
@@ -1061,7 +1061,7 @@ private slots:
     {
         FakeContext context;
         useCloud(context, QString());
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         QMenu *menu = openRowMenu(view.get(), QStringLiteral("OPS-9"));
@@ -1084,7 +1084,7 @@ private slots:
         BrowserGuard browser;
         FakeContext context;
         useDataCenter(context, QString());
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-dc.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-dc.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
         view->show();
         QVERIFY(QTest::qWaitForWindowExposed(view.get()));
@@ -1120,7 +1120,7 @@ private slots:
         useCloud(context, QString());
         context.general.insert(QStringLiteral("extraFields"),
                                QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version"), QStringLiteral("Not on this site")});
-        const QJsonObject answer = readJson(QFINDTESTDATA("data/search-extra-cloud.json"));
+        const QJsonObject answer = readJson(QFINDTESTDATA("tests/data/search-extra-cloud.json"));
         ItemStatus status = listStatusOf(answer);
         status.data.insert(QStringLiteral("names"), answer.value(QStringLiteral("names")));
         context.source.status = status;
@@ -1154,7 +1154,7 @@ private slots:
         FakeContext context;
         useCloud(context, QString());
         context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version")});
-        const QJsonObject answer = readJson(QFINDTESTDATA("data/search-extra-cloud.json"));
+        const QJsonObject answer = readJson(QFINDTESTDATA("tests/data/search-extra-cloud.json"));
         ItemStatus status = listStatusOf(answer);
         status.data.insert(QStringLiteral("names"), answer.value(QStringLiteral("names")));
         context.source.status = status;
@@ -1189,7 +1189,7 @@ private slots:
         FakeContext context;
         useCloud(context, QString());
         context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team")});
-        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
         QTableView *table = tableOf(view.get());

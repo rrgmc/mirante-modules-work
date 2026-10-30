@@ -43,7 +43,7 @@ const QString kNotes =
 
 QString dataFile(const QString &name)
 {
-    return QFINDTESTDATA(QStringLiteral("data/") + name);
+    return QFINDTESTDATA(QStringLiteral("tests/data/") + name);
 }
 
 QJsonDocument readJson(const QString &name)

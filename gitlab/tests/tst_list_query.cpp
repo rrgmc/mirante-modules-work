@@ -24,7 +24,7 @@ const QString kPipelines = QStringLiteral("GET api/v4/projects/acme%2Fbackend/pi
 
 QString dataFile(const QString &name)
 {
-    return QFINDTESTDATA(QStringLiteral("data/") + name);
+    return QFINDTESTDATA(QStringLiteral("tests/data/") + name);
 }
 
 QJsonArray readRows(const QString &name)

@@ -21,7 +21,7 @@ namespace {
 
 QString dataFile(const QString &name)
 {
-    return QFINDTESTDATA(QStringLiteral("data/") + name);
+    return QFINDTESTDATA(QStringLiteral("tests/data/") + name);
 }
 
 // A query built in the order JiraClient adds its items.
