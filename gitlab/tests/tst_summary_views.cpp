@@ -373,6 +373,23 @@ private slots:
         QVERIFY(!button(view, QStringLiteral("retry-job-70001")));
     }
 
+    // GitLab's order of the jobs does not decide the order of the stages.
+    void pipelineStagesFollowTheJobIds()
+    {
+        const QJsonArray jobs = readJson(QStringLiteral("pipeline_jobs.json")).array();
+        QJsonArray newestFirst;
+        for (const QJsonValue &job : jobs)
+            newestFirst.prepend(job);
+        FakeContext context;
+        context.source.status =
+            pipelineStatus(QStringLiteral("main"), readObject(QStringLiteral("pipeline_latest.json")), newestFirst);
+        View view(createPipelineView(context, nullptr));
+        view->show();
+
+        const QString text = shownText(view);
+        QVERIFY(text.indexOf(QStringLiteral("test:unit")) < text.indexOf(QStringLiteral("deploy:review")));
+    }
+
     void pipelineStageThatGoesIsHidden()
     {
         FakeContext context;

@@ -15,6 +15,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <algorithm>
 #include <utility>
 
 using mirante::widgets::StatusPill;
@@ -88,14 +89,21 @@ private:
         return row;
     }
 
-    // One section per stage, in the order of the jobs. A stage the pipeline no
-    // longer has stays hidden, because a section cannot be removed.
+    // One section per stage, in the order the jobs were created, so the
+    // order does not depend on how GitLab sorts its answer. A stage the
+    // pipeline no longer has stays hidden, because a section cannot be removed.
     void drawStages(const QJsonArray &jobs)
     {
+        QList<QJsonObject> sorted;
+        for (const QJsonValue &value : jobs)
+            sorted << value.toObject();
+        std::stable_sort(sorted.begin(), sorted.end(), [](const QJsonObject &a, const QJsonObject &b) {
+            return a.value(QStringLiteral("id")).toInteger() < b.value(QStringLiteral("id")).toInteger();
+        });
+
         QStringList stages;
         QList<QWidget *> columns;
-        for (const QJsonValue &value : jobs) {
-            const QJsonObject job = value.toObject();
+        for (const QJsonObject &job : std::as_const(sorted)) {
             const QString stage = job.value(QStringLiteral("stage")).toString();
             qsizetype index = stages.indexOf(stage);
             if (index < 0) {

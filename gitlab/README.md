@@ -66,7 +66,7 @@ The list and action methods are tested in `tests/tst_client.cpp`.
 
 ## Status
 
-The types that name one object report status: `hasStatus()` is true and `fetchStatus()` runs a function of `GitLabStatus.cpp`. The lists report none in M5. The rules are in pure functions, `mergeRequestStatus()`, `issueStatus()` and `pipelineStatus()`, so they are tested without a job. "Me" is the user of `GET api/v4/user`, asked once per status job; the client's ETag memory makes it cheap.
+Every type reports status: `hasStatus()` is true and `fetchStatus()` runs a function of `GitLabStatus.cpp`, or of `GitLabLists.cpp` for the [lists](#lists). The rules for the types that name one object are in pure functions, `mergeRequestStatus()`, `issueStatus()` and `pipelineStatus()`, so they are tested without a job. "Me" is the user of `GET api/v4/user`, asked once per status job; the client's ETag memory makes it cheap.
 
 | Types | Requests | Attention | Closed |
 |---|---|---|---|
@@ -97,6 +97,37 @@ The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded 
 The action ids, which are also the buttons' object names, are `approve`, `retry-pipeline`, `cancel-pipeline`, `comment`, `close`, `reopen` and `open-page`. A job's buttons are `log-<job id>` and `retry-job-<job id>`. They are not in the action row, so a job's Retry clears the last error itself.
 
 Text from a server is plain text in every label. The tests are in `tests/tst_summary_views.cpp`, with a fake context and a fake status source, on the responses in `tests/data/`.
+
+## Lists
+
+`gitlab.mr.list` and `gitlab.issue.list` report status too, from `GitLabLists.cpp`. See [decision 0067](../../../docs/decisions/0067-lists-report-status.md).
+
+- **Requests.** The client method of the scope (`mergeRequests`, `projectMergeRequests` or `groupMergeRequests`, or the issue equivalents), up to 100 rows. Only a merge request list with the `reviewRequested` preset asks for the current user first. If that request fails, the list is not asked for.
+- **Status.** The state is `Ok`, and the summary reads "12 merge requests" or "12 issues", with singular forms, and "100+ merge requests" at the row limit. A list reports no attention and leaves `closed` unset.
+- **Data.** `rows` holds GitLab's answers, unchanged, and `total` their number.
+- **An incomplete scope,** such as `group` without a group path, reports `State::None` with a message, such as "Set the group in the item's settings.", without a request. An empty `project` uses the project's `gitlab.project` setting.
+- **Errors.** A failed reply becomes its state with `statusFromReply()`.
+
+`listQuery()` builds the query from the preset. Each adds `order_by=updated_at`. A preset the type does not have, such as `reviewRequested` for issues, counts as the type's first one.
+
+| Preset | Query |
+|---|---|
+| `createdByMe` | `state=opened&scope=created_by_me` |
+| `assignedToMe` | `state=opened&scope=assigned_to_me` |
+| `reviewRequested` | `state=opened&scope=all&reviewer_id=<me>` |
+| `allOpen` | `state=opened&scope=all` |
+
+The parameters of `filter` come last and replace those of the same name. A name the filter repeats, as in `labels[]=a&labels[]=b`, keeps all its values.
+
+`listWebUrl()` builds the list's page on the site, without doubling a slash at the end of the base URL. It is empty when the scope is incomplete or there is no base URL.
+
+| Scope | Address |
+|---|---|
+| `project` | `<baseUrl>/<project>/-/merge_requests` or `/issues` |
+| `group` | `<baseUrl>/groups/<group>/-/merge_requests` or `/issues` |
+| `all` | `<baseUrl>/dashboard/merge_requests` or `/issues` |
+
+The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json` and `issue_list.json`, written by hand in the shape of GitLab's API.
 
 ## Pages
 

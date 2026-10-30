@@ -6,6 +6,6 @@ mirante_add_module(gitlab
               GitLabSettings.cpp GitLabSettings.h GitLabStatus.cpp GitLabStatus.h GitLabUrls.cpp GitLabUrls.h
               GitLabViewSupport.cpp GitLabViewSupport.h
     RESOURCES icons/gitlab.svg
-    TESTS     tests/tst_client.cpp tests/tst_from_url.cpp tests/tst_register.cpp tests/tst_settings.cpp
-              tests/tst_status.cpp tests/tst_summary_views.cpp tests/tst_urls.cpp
+    TESTS     tests/tst_client.cpp tests/tst_from_url.cpp tests/tst_list_query.cpp tests/tst_register.cpp
+              tests/tst_settings.cpp tests/tst_status.cpp tests/tst_summary_views.cpp tests/tst_urls.cpp
     DEFAULT   ON)
