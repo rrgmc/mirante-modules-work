@@ -16,7 +16,7 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 
 The module calls itself "GitLab" and describes itself as: "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). Since M6 the merge request, pipeline and issue summaries have [native views](#summary-views). The lists still show a placeholder; they arrive later in M6.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). Since M6 the merge request, pipeline and issue summaries have [native views](#summary-views), and the lists have [tables with a preview](#list-views).
 
 ## Server
 
@@ -128,6 +128,23 @@ The parameters of `filter` come last and replace those of the same name. A name 
 | `all` | `<baseUrl>/dashboard/merge_requests` or `/issues` |
 
 The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json` and `issue_list.json`, written by hand in the shape of GitLab's API.
+
+## List views
+
+`GitLabMergeRequestListView.cpp` and `GitLabIssueListView.cpp` each hold one class, a subclass of `GitLabList` in `GitLabListSupport.h`, which is private to the module. It is an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit). The columns and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabList` holds what they share:
+
+- **Drawing.** `follow()` draws the item's status now and at each change, as a summary does. An empty list shows the table and a line of its own, because `setMessage()` shows instead of the table.
+- **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests, a preview or "Add to task as item".
+- **Previews.** A click on a row makes `createMergeRequestPreview()` or `createIssuePreview()`. After a new status, if the preview's row is still there, it calls `readItself()` again on the same widget, so its scroll position, its action errors and an open comment dialog stay. A status that comes while the view is hidden waits until it shows.
+- **The row menu** is a `QMenu` that belongs to the view and uses `popup()`, so nothing waits on it if the view is made again.
+
+`GitLabMergeRequestListView.cpp` also fills the Pipeline and Approvals columns, as decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0068](../../../docs/decisions/0068-views-read-what-the-user-asked-for.md) describe:
+
+- **Requests.** `askForCells()` runs while the view is visible, after each new status and each time the view shows. It asks with `GitLabClient::mergeRequest()` for the Pipeline column and `approvals()` for the Approvals column, for the first 25 rows in the table's current order. It reads that order from the table's sort proxy, whose source rows are in the order given to `setRows()`. A column with its field off asks for nothing. A column hidden only because the cell is narrow still asks.
+- **Rounds.** The requests of one status use a child `QObject` of the view as their receiver. A new status, or hiding the view, deletes it, so the answers on the way are dropped. `ServerClient` still sends requests that were already queued.
+- **Answers.** The latest answers are kept by row, and new rows draw with them, so the cells do not flicker at each poll. A failed request puts the dash back, and so does a row leaving the first 25.
+
+The table's cells and the preview draw text from a server as plain text. The tests are in `tests/tst_list_views.cpp`, with a fake context and a fake status source, on `merge_request_list.json` and `issue_list.json`.
 
 ## Pages
 
