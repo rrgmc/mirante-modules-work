@@ -1,5 +1,7 @@
 // The jira module: Jira issues and issue lists as items. See README.md.
+#include "JiraServerType.h"
 #include "JiraSettings.h"
+#include "JiraStatus.h"
 #include "JiraUrls.h"
 
 #include <mirante/Fields.h>
@@ -20,12 +22,12 @@ namespace {
 
 // A type with an id, a name, an icon and its configuration fields. All Jira
 // types talk to the site in the General Configuration of the item's profile.
-// Native views arrive later.
+// The issue types report the issue's status. Native views arrive later.
 class StubItemType : public ItemType
 {
 public:
     StubItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
-                 std::vector<Field> fields, const ModuleSettings &settings)
+                 std::vector<Field> fields, const ModuleSettings &settings, bool issueStatus = false)
         : m_id(id)
         , m_name(name)
         , m_shortName(shortName)
@@ -33,6 +35,7 @@ public:
         , m_icon(QStringLiteral(":/modules/jira/icons/jira.svg"))
         , m_fields(std::move(fields))
         , m_settings(settings)
+        , m_issueStatus(issueStatus)
     {
     }
 
@@ -43,6 +46,15 @@ public:
     QString description() const override { return m_description; }
     std::vector<Field> fields() const override { return m_fields; }
     Rendering rendering() const override { return Rendering::Native; }
+
+    bool hasStatus() const override { return m_issueStatus; }
+    void fetchStatus(StatusJob &job) const override
+    {
+        if (m_issueStatus)
+            fetchIssueStatus(job);
+        else
+            job.finish(ItemStatus());
+    }
 
     // An address on the profile's site, or on any site whose addresses look
     // like Jira's.
@@ -63,6 +75,7 @@ private:
     QIcon m_icon;
     std::vector<Field> m_fields;
     const ModuleSettings &m_settings;
+    bool m_issueStatus;
 };
 
 // The issue page: a web view of the issue on the Jira site of the item's
@@ -125,6 +138,16 @@ std::vector<Field> listFields()
     return {preset, jql};
 }
 
+// The project's Jira project key, which the list presets of the project use.
+Field projectKeyField()
+{
+    Field field;
+    field.key = QStringLiteral("projectKey");
+    field.label = QCoreApplication::translate("jira", "Jira project key");
+    field.placeholder = QStringLiteral("PROJ");
+    return field;
+}
+
 } // namespace
 
 void registerModule(ModuleRegistrar &registrar)
@@ -135,18 +158,20 @@ void registerModule(ModuleRegistrar &registrar)
         "jira", "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's "
                 "General Configuration."));
     registrar.addSettingsScreen(makeGeneralScreen());
+    registrar.setServerType(std::make_unique<JiraServerType>());
+    registrar.addProjectSetting(projectKeyField());
 
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.issue.summary"), QCoreApplication::translate("jira", "Jira Issue (summary)"),
         QCoreApplication::translate("jira", "Jira"),
         QCoreApplication::translate("jira", "A summary of one issue: its status, people, sprint, description and "
                                             "latest comments."),
-        issueFields(), settings));
+        issueFields(), settings, true));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("jira.issue.page"), QCoreApplication::translate("jira", "Jira Issue (page)"),
         QCoreApplication::translate("jira", "Jira"),
         QCoreApplication::translate("jira", "The web page of one issue, on the Jira site of the item's profile."),
-        issueFields(), settings));
+        issueFields(), settings, true));
     registrar.addItemType(std::make_unique<StubItemType>(
         QStringLiteral("jira.list"), QCoreApplication::translate("jira", "Jira List"),
         QCoreApplication::translate("jira", "Jira"),

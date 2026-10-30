@@ -1,0 +1,8 @@
+{
+    "issues": [
+        {"id": "10042", "key": "OPS-7", "fields": {"summary": "Rotate the build server's certificates"}},
+        {"id": "10043", "key": "OPS-8", "fields": {"summary": "Move the backups to the new bucket"}}
+    ],
+    "nextPageToken": "Ch0jU3RyaW5nJlQxQlRMVUM9JUludCZNVEF3TkRNPRAC+GA",
+    "isLast": false
+}
