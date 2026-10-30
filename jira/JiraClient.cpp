@@ -127,7 +127,8 @@ void JiraClient::issue(const QString &key, const QStringList &fields, QObject *r
     QUrlQuery query;
     if (!fields.isEmpty())
         query.addQueryItem(QStringLiteral("fields"), fields.join(QLatin1Char(',')));
-    query.addQueryItem(QStringLiteral("expand"), expand.join(QLatin1Char(',')));
+    if (!expand.isEmpty())
+        query.addQueryItem(QStringLiteral("expand"), expand.join(QLatin1Char(',')));
     m_server.get(issuePath(key), query, GetOptions(), receiver, std::move(done));
 }
 

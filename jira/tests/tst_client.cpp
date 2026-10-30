@@ -98,6 +98,18 @@ private slots:
         QVERIFY(!server.requests().at(0).options.followLinks);
     }
 
+    // An empty expand sends no expand at all.
+    void issueWithoutExpand()
+    {
+        FakeApiClient server;
+        server.setSynchronous(true);
+        JiraClient(server, Deployment::Cloud)
+            .issue(QStringLiteral("OPS-7"), {QStringLiteral("summary")}, nullptr, [](const ApiReply &) {}, {});
+        QCOMPARE(server.requestKeys(),
+                 QStringList{FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/issue/OPS-7"),
+                                                query({{QStringLiteral("fields"), QStringLiteral("summary")}}))});
+    }
+
     // A key is one path segment, even if it holds a slash.
     void keyIsEncoded()
     {
