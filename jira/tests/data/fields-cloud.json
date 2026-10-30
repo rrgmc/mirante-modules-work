@@ -1,0 +1,26 @@
+[
+    {
+        "id": "summary",
+        "key": "summary",
+        "name": "Summary",
+        "custom": false
+    },
+    {
+        "id": "fixVersions",
+        "key": "fixVersions",
+        "name": "Fix versions",
+        "custom": false
+    },
+    {
+        "id": "customfield_10030",
+        "key": "customfield_10030",
+        "name": "Team",
+        "custom": true
+    },
+    {
+        "id": "customfield_10033",
+        "key": "customfield_10033",
+        "name": "Points",
+        "custom": true
+    }
+]

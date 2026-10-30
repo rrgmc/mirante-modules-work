@@ -1,5 +1,6 @@
 #include "JiraIssueView.h"
 
+#include "JiraFields.h"
 #include "JiraSettings.h"
 #include "JiraStatus.h"
 #include "JiraUrls.h"
@@ -294,6 +295,15 @@ private:
         addRow(trJira("Assignee"), assignee.isEmpty() ? trJira("Unassigned") : assignee);
         addRow(trJira("Reporter"), person(QStringLiteral("reporter")));
         addRow(trJira("Sprint"), sprintOf(issue));
+
+        // A name the site does not have is left out quietly. See decision 0073.
+        const QJsonObject names = issue.value(QStringLiteral("names")).toObject();
+        const QStringList extraFields = extraFieldsOf(m_context.moduleSettings(kGeneralScreen));
+        for (const QString &name : extraFields) {
+            const QString value = fieldText(fields.value(fieldIdByName(names, name)));
+            if (!value.isEmpty())
+                form->addRow(plainLabel(name, details), plainLabel(value, details));
+        }
         return details;
     }
 

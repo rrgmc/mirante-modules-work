@@ -1,6 +1,7 @@
 #include "JiraLists.h"
 
 #include "JiraClient.h"
+#include "JiraFields.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -54,6 +55,39 @@ int positiveValue(const QJsonObject &config, const QString &key, int fallback)
 {
     const int value = config.value(key).toInt(fallback);
     return value < 1 ? fallback : value;
+}
+
+// The search of a list, which also asks for the fields in fieldNames, a map from
+// field id to name.
+void searchList(StatusJob &job, const QString &jql, const QJsonObject &fieldNames)
+{
+    SearchOptions options;
+    options.fields = QStringList{QStringLiteral("summary"), QStringLiteral("status"), QStringLiteral("assignee"),
+                                 QStringLiteral("updated")};
+    const QStringList ids = fieldNames.keys();
+    for (const QString &id : ids) {
+        if (!options.fields.contains(id))
+            options.fields << id;
+    }
+    if (!fieldNames.isEmpty())
+        options.expand = QStringList{QStringLiteral("names")};
+    options.maxRows = listLimit(job.config());
+
+    const JiraClient client(job.server(), deploymentOf(job.moduleSettings(kGeneralScreen)));
+    StatusJob *owner = &job;
+    client.search(jql, options, job.owner(), [owner, limit = options.maxRows, fieldNames](const ApiReply &reply) {
+        if (!reply.ok()) {
+            owner->finish(statusFromReply(reply));
+            return;
+        }
+        const QJsonObject answer = reply.json.object();
+        ItemStatus status = listStatus(answer.value(QStringLiteral("issues")).toArray(), limit);
+        // A server may ignore expand, and the ids are known anyway.
+        const QJsonObject names = answer.value(QStringLiteral("names")).toObject();
+        if (!fieldNames.isEmpty())
+            status.data.insert(QStringLiteral("names"), names.isEmpty() ? fieldNames : names);
+        owner->finish(status);
+    });
 }
 
 } // namespace
@@ -132,16 +166,16 @@ void fetchListStatus(StatusJob &job)
         return;
     }
 
-    SearchOptions options;
-    options.fields = QStringList{QStringLiteral("summary"), QStringLiteral("status"), QStringLiteral("assignee"),
-                                 QStringLiteral("updated")};
-    options.maxRows = listLimit(config);
+    const QStringList extraFields = extraFieldsOf(job.moduleSettings(kGeneralScreen));
+    if (extraFields.isEmpty()) {
+        searchList(job, *jql, QJsonObject());
+        return;
+    }
 
     const JiraClient client(job.server(), deploymentOf(job.moduleSettings(kGeneralScreen)));
     StatusJob *owner = &job;
-    client.search(*jql, options, job.owner(), [owner, limit = options.maxRows](const ApiReply &reply) {
-        owner->finish(reply.ok() ? listStatus(reply.json.object().value(QStringLiteral("issues")).toArray(), limit)
-                                 : statusFromReply(reply));
+    client.allFields(job.owner(), [owner, jql = *jql, extraFields](const ApiReply &reply) {
+        searchList(*owner, jql, reply.ok() ? wantedFieldNames(reply.json.array(), extraFields) : QJsonObject());
     });
 }
 

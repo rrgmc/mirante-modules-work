@@ -208,6 +208,41 @@ private slots:
         QVERIFY(!answer->json.object().contains(QStringLiteral("total")));
     }
 
+    void searchAsksForExpandAndKeepsTheNames()
+    {
+        SearchOptions options;
+        options.fields = QStringList{QStringLiteral("summary"), QStringLiteral("customfield_1")};
+        options.expand = QStringList{QStringLiteral("names")};
+        const QJsonObject names{{QStringLiteral("customfield_1"), QStringLiteral("Team")}};
+
+        FakeApiClient server;
+        server.setSynchronous(true);
+        server.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/search/jql"),
+                                          query({{QStringLiteral("jql"), QStringLiteral("a")},
+                                                 {QStringLiteral("fields"), QStringLiteral("summary,customfield_1")},
+                                                 {QStringLiteral("expand"), QStringLiteral("names")},
+                                                 {QStringLiteral("maxResults"), QStringLiteral("50")}})),
+                       QJsonDocument(QJsonObject{{QStringLiteral("issues"), QJsonArray()},
+                                                 {QStringLiteral("isLast"), true},
+                                                 {QStringLiteral("names"), names}}));
+
+        std::optional<ApiReply> answer;
+        JiraClient(server, Deployment::Cloud)
+            .search(QStringLiteral("a"), options, nullptr, [&answer](const ApiReply &reply) { answer = reply; });
+        QVERIFY(answer && answer->ok());
+        QCOMPARE(answer->json.object().value(QStringLiteral("names")).toObject(), names);
+    }
+
+    void allFields()
+    {
+        FakeApiClient server;
+        server.setSynchronous(true);
+        JiraClient(server, Deployment::Cloud).allFields(nullptr, [](const ApiReply &) {});
+        JiraClient(server, Deployment::DataCenter).allFields(nullptr, [](const ApiReply &) {});
+        QCOMPARE(server.requestKeys(),
+                 QStringList({QStringLiteral("GET rest/api/3/field"), QStringLiteral("GET rest/api/2/field")}));
+    }
+
     void searchStopsAtMaxRows()
     {
         FakeApiClient server;

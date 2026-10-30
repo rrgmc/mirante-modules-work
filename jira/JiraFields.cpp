@@ -50,6 +50,8 @@ QString fieldText(const QJsonValue &value)
         }
         return texts.join(QStringLiteral(", "));
     }
+    if (!value.isObject())
+        return {};
     const QJsonObject object = value.toObject();
     for (const QString &key : {QStringLiteral("name"), QStringLiteral("value"), QStringLiteral("displayName")}) {
         const QString text = fieldText(object.value(key));

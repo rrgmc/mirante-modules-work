@@ -514,6 +514,65 @@ private slots:
         QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/SEC-3"))});
     }
 
+    // Extra fields in the summary.
+
+    void extraFieldsShowInDetails()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.general.insert(QStringLiteral("extraFields"),
+                               QJsonArray{QStringLiteral("team"), QStringLiteral("Risk"), QStringLiteral("Reviewer"),
+                                          QStringLiteral("Points"), QStringLiteral("Area"), QStringLiteral("Fix version"),
+                                          QStringLiteral("Goal"), QStringLiteral("Not on this site")});
+        context.source.status = statusOf(cloudIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        const QString text = shownText(view.get());
+        for (const char *expected : {"team", "Platform", "Risk", "High", "Reviewer", "Dora Sample", "Points", "5.5",
+                                     "Area", "Build agents", "Fix version", "2026.11, 2026.12"})
+            QVERIFY2(text.contains(QLatin1String(expected)), expected);
+        // Without a value, or on a site without the field, nothing shows.
+        QVERIFY(!text.contains(QStringLiteral("Goal")));
+        QVERIFY(!text.contains(QStringLiteral("Not on this site")));
+    }
+
+    void extraFieldsOnDataCenter()
+    {
+        FakeContext context;
+        useDataCenter(context, QStringLiteral("INFRA-1203"));
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version")});
+        context.source.status = statusOf(dcIssue());
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        const QString text = shownText(view.get());
+        QVERIFY(text.contains(QStringLiteral("Storage")));
+        QVERIFY(text.contains(QStringLiteral("Week 45")));
+    }
+
+    void extraFieldValuesAreNeverMarkup()
+    {
+        QJsonObject issue = cloudIssue();
+        QJsonObject fields = issue.value(QStringLiteral("fields")).toObject();
+        fields.insert(QStringLiteral("customfield_10034"), QStringLiteral("<img src=\"https://evil.example/a.png\">"));
+        issue.insert(QStringLiteral("fields"), fields);
+
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Area")});
+        context.source.status = statusOf(issue);
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+
+        bool seen = false;
+        const auto labels = view->findChildren<QLabel *>();
+        for (const QLabel *label : labels) {
+            if (label->text().contains(QStringLiteral("evil.example"))) {
+                seen = true;
+                QCOMPARE(label->textFormat(), Qt::PlainText);
+            }
+        }
+        QVERIFY(seen);
+    }
+
     // The issues whose parent is this one.
 
     void childrenShowWithPillsAndLinks()
@@ -1052,6 +1111,91 @@ private slots:
         menuEntry(menu, QStringLiteral("Copy link"))->trigger();
         QCOMPARE(QGuiApplication::clipboard()->text(), page.toString());
         menu->close();
+    }
+
+    // Extra fields in the list.
+
+    void extraFieldsShowAsColumns()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.general.insert(QStringLiteral("extraFields"),
+                               QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version"), QStringLiteral("Not on this site")});
+        const QJsonObject answer = readJson(QFINDTESTDATA("data/search-extra-cloud.json"));
+        ItemStatus status = listStatusOf(answer);
+        status.data.insert(QStringLiteral("names"), answer.value(QStringLiteral("names")));
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        QTableView *table = tableOf(view.get());
+        const QAbstractItemModel *model = table->model();
+        QCOMPARE(model->columnCount(), 9);
+        QCOMPARE(model->headerData(5, Qt::Horizontal).toString(), QStringLiteral("Team"));
+        QCOMPARE(model->headerData(6, Qt::Horizontal).toString(), QStringLiteral("Fix version"));
+        QCOMPARE(model->headerData(8, Qt::Horizontal).toString(), QStringLiteral("Links"));
+        QCOMPARE(model->index(0, 0).data().toString(), QStringLiteral("OPS-21"));
+        QCOMPARE(model->index(0, 5).data().toString(), QStringLiteral("Platform"));
+        QCOMPARE(model->index(0, 6).data().toString(), QStringLiteral("2026.11, 2026.12"));
+        QVERIFY(model->index(1, 5).data().toString().isEmpty());
+        QCOMPARE(model->index(0, 8).data(kLinkIdsRole).toStringList().size(), 3);
+
+        // A name the site lacks is left out quietly.
+        view->resize(4000, 400);
+        view->show();
+        QVERIFY(QTest::qWaitForWindowExposed(view.get()));
+        QTRY_VERIFY(!table->isColumnHidden(5));
+        QVERIFY(!table->isColumnHidden(6));
+        QVERIFY(table->isColumnHidden(7));
+    }
+
+    // In a narrower and narrower cell, every extra field goes before any other
+    // column, and the summary and the links never go.
+    void extraFieldsHideFirst()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team"), QStringLiteral("Fix version")});
+        const QJsonObject answer = readJson(QFINDTESTDATA("data/search-extra-cloud.json"));
+        ItemStatus status = listStatusOf(answer);
+        status.data.insert(QStringLiteral("names"), answer.value(QStringLiteral("names")));
+        context.source.status = status;
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+        view->resize(4000, 400);
+        view->show();
+        QVERIFY(QTest::qWaitForWindowExposed(view.get()));
+        QTableView *table = tableOf(view.get());
+        QTRY_VERIFY(!table->isColumnHidden(5));
+
+        bool sawOnlyExtrasHidden = false;
+        for (int width = 1600; width >= 200; width -= 20) {
+            view->resize(width, 400);
+            QCoreApplication::processEvents();
+            bool otherHidden = false;
+            for (const int column : {0, 2, 3, 4})
+                otherHidden = otherHidden || table->isColumnHidden(column);
+            const bool extrasHidden = table->isColumnHidden(5) && table->isColumnHidden(6);
+            if (otherHidden)
+                QVERIFY2(extrasHidden, qPrintable(QString::number(width)));
+            sawOnlyExtrasHidden = sawOnlyExtrasHidden || (extrasHidden && !otherHidden);
+            QVERIFY(!table->isColumnHidden(1));
+            QVERIFY(!table->isColumnHidden(7));
+        }
+        QVERIFY(sawOnlyExtrasHidden);
+    }
+
+    // Before the status has names, or with none, the columns stay hidden and the
+    // links stay in their place.
+    void withoutNamesTheExtraColumnsStayHidden()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team")});
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+
+        QTableView *table = tableOf(view.get());
+        QVERIFY(table->isColumnHidden(5));
+        QCOMPARE(table->model()->index(0, 6).data(kLinkIdsRole).toStringList().size(), 3);
     }
 
     void listWithoutSourceSaysLoading()

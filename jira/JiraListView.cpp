@@ -1,5 +1,6 @@
 #include "JiraListView.h"
 
+#include "JiraFields.h"
 #include "JiraIssueView.h"
 #include "JiraLists.h"
 #include "JiraSettings.h"
@@ -25,7 +26,12 @@ namespace mirante::modules::jira {
 
 namespace {
 
-enum Column { KeyColumn, SummaryColumn, StatusColumn, AssigneeColumn, UpdatedColumn, LinksColumn };
+// The extra fields' columns come after these, and then the links.
+enum Column { KeyColumn, SummaryColumn, StatusColumn, AssigneeColumn, UpdatedColumn, FirstExtraColumn };
+
+// The hide priority of the first extra field. They hide before all other columns,
+// the last of them first.
+constexpr int kFirstExtraPriority = 5;
 
 const QString kWebLink = QStringLiteral("web");
 const QString kOpenLink = QStringLiteral("open");
@@ -57,7 +63,9 @@ QList<widgets::ListLink> rowLinks(bool hasSite)
     return links;
 }
 
-widgets::ListRow readRow(const QJsonObject &issue, const QList<widgets::ListLink> &links)
+// ids holds the field id of each extra field, or an empty one if the site has no
+// such field.
+widgets::ListRow readRow(const QJsonObject &issue, const QStringList &ids, const QList<widgets::ListLink> &links)
 {
     const QJsonObject fields = issue.value(QStringLiteral("fields")).toObject();
     const QJsonObject status = fields.value(QStringLiteral("status")).toObject();
@@ -77,9 +85,13 @@ widgets::ListRow readRow(const QJsonObject &issue, const QList<widgets::ListLink
         {status.value(QStringLiteral("name")).toString(), {}, statusCategoryRole(category)},
         {assignee.isEmpty() ? trJira("Unassigned") : assignee, {}, std::nullopt},
         {updated.isValid() ? widgets::compactDate(updated) : updatedText, updated.toMSecsSinceEpoch(), std::nullopt},
-        // Sorted by the key, since links have no text to sort by.
-        {QString(), keySortKey(key), std::nullopt, links},
     };
+    for (const QString &id : ids) {
+        const QJsonValue value = fields.value(id);
+        row.cells.append({fieldText(value), value.isDouble() ? QVariant(value.toDouble()) : QVariant(), std::nullopt});
+    }
+    // Sorted by the key, since links have no text to sort by.
+    row.cells.append({QString(), keySortKey(key), std::nullopt, links});
     return row;
 }
 
@@ -90,14 +102,20 @@ public:
     ListView(ItemContext &context, QWidget *parent)
         : widgets::ItemListView(parent)
         , m_context(context)
+        , m_extraFields(extraFieldsOf(context.moduleSettings(kGeneralScreen)))
     {
-        setColumns({{trJira("Key"), 1, false},
-                    {trJira("Summary"), 0, true},
-                    {trJira("Status"), 2, false},
-                    {trJira("Assignee"), 4, false},
-                    {trJira("Updated"), 3, false},
-                    {trJira("Links"), 0, false}},
-                   UpdatedColumn);
+        QList<widgets::ListColumn> columns{{trJira("Key"), 1, false},
+                                           {trJira("Summary"), 0, true},
+                                           {trJira("Status"), 2, false},
+                                           {trJira("Assignee"), 4, false},
+                                           {trJira("Updated"), 3, false}};
+        for (int i = 0; i < m_extraFields.size(); ++i)
+            columns.append({m_extraFields.at(i), kFirstExtraPriority + i, false});
+        columns.append({trJira("Links"), 0, false});
+        setColumns(columns, UpdatedColumn);
+        // They show once the status says the site has them.
+        for (int i = 0; i < m_extraFields.size(); ++i)
+            setColumnVisible(FirstExtraColumn + i, false);
         addFilter(StatusColumn, trJira("Status"));
         setPageSize(listPageSize(context.config()));
 
@@ -143,11 +161,18 @@ private:
         }
         setMessage(QString());
 
+        const QJsonObject names = status.data.value(QStringLiteral("names")).toObject();
+        QStringList ids;
+        for (int i = 0; i < m_extraFields.size(); ++i) {
+            ids << fieldIdByName(names, m_extraFields.at(i));
+            setColumnVisible(FirstExtraColumn + i, !ids.last().isEmpty());
+        }
+
         const QList<widgets::ListLink> links = rowLinks(!site().isEmpty());
         QList<widgets::ListRow> rows;
         const QJsonArray issues = status.data.value(QStringLiteral("rows")).toArray();
         for (const QJsonValue &issue : issues)
-            rows << readRow(issue.toObject(), links);
+            rows << readRow(issue.toObject(), ids, links);
         setRows(rows);
     }
 
@@ -198,6 +223,7 @@ private:
     }
 
     ItemContext &m_context;
+    QStringList m_extraFields;
 };
 
 } // namespace

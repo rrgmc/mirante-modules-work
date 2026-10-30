@@ -1,0 +1,36 @@
+{
+    "startAt": 0,
+    "maxResults": 50,
+    "total": 1,
+    "names": {
+        "summary": "Summary",
+        "customfield_10130": "Team",
+        "fixVersions": "Fix Version/s"
+    },
+    "issues": [
+        {
+            "id": "31",
+            "key": "INFRA-31",
+            "fields": {
+                "summary": "Move the mirror",
+                "status": {
+                    "name": "To Do",
+                    "id": "1",
+                    "statusCategory": {
+                        "key": "new"
+                    }
+                },
+                "assignee": null,
+                "updated": "2026-10-28T10:00:00.000+0000",
+                "customfield_10130": {
+                    "value": "Storage"
+                },
+                "fixVersions": [
+                    {
+                        "name": "Week 45"
+                    }
+                ]
+            }
+        }
+    ]
+}

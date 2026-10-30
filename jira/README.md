@@ -66,6 +66,7 @@ The module calls itself "Jira", so each profile's Modules submenu shows Profiles
 | | | `deployment` | choice | `auto` ("Automatic", the default), `cloud` ("Jira Cloud") or `dc` ("Jira Data Center"). See [server and authentication](#server-and-authentication). |
 | | | `email` | text | The email of the Atlassian account. Used only for Jira Cloud. Not a secret, so it is synced with the other values. |
 | | | `token` | secret | The token for that site: an API token on Jira Cloud, a personal access token on Data Center. Never stored with the values: the core keeps it in the keychain, under `<workspace id>/<profile id>/jira/token`. |
+| | | `extraFields` | text list | Extra fields to show, by name, one per line, such as `Team`. None by default. See [extra fields](#extra-fields). |
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.jira.general`, and synced. See decisions [0054](../../../docs/decisions/0054-module-settings-replace-connections.md) and [0060](../../../docs/decisions/0060-jira-cloud-or-data-center-by-setting.md).
 
@@ -84,7 +85,8 @@ Each profile has its own values, stored in its entry of `workspace.mirante` unde
 | Method | Request |
 |---|---|
 | `issue(key, fields, expand)` | `GET issue/<key>?fields=<fields>&expand=<expand>`. Without fields, all of them. `expand` is `renderedFields` unless given. |
-| `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues, with Jira's `total` where it gives one. Cloud's `search/jql` does not. |
+| `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues, with Jira's `total` where it gives one, which Cloud's `search/jql` does not, and its `names` if `options.expand` asks for them. |
+| `allFields()` | `GET field`: the id and name of each of the site's fields |
 | `myself()` | `GET myself` |
 
 The key is encoded as one path segment. A `+` or `%` in a query value is encoded, so the server reads the JQL as typed. The tests are in `tests/tst_client.cpp`.
@@ -116,13 +118,26 @@ All three types report status, in `JiraStatus.cpp` and `JiraLists.cpp`. See deci
   | `jql` | the `jql` field |
 
   The project key is written as a JQL string, with its quotes and backslashes escaped, so a value cannot change the query.
-- **Request.** One `search()` with the fields `summary`, `status`, `assignee` and `updated`, up to `limit` rows.
+- **Request.** One `search()` with the fields `summary`, `status`, `assignee` and `updated`, up to `limit` rows. With [extra fields](#extra-fields), first `allFields()`, and the search also asks for those fields and for `expand=names`.
 - **Summary.** "12 issues", "1 issue", or "100+ issues" at the row limit, which is the item's `limit`.
-- **Data.** `rows`, the issues as Jira gives them, and `total`, their number.
+- **Data.** `rows`, the issues as Jira gives them, and `total`, their number. With extra fields also `names`, from field id to name.
 - **Attention and closed.** Neither: no reasons, and `closed` stays unset.
 - **Missing values.** Without a project key, the two project presets finish with `State::None` and "Set the Jira project key in the project's settings." An empty `jql` finishes the same way with "Set the JQL query in the item's settings." Neither sends a request.
 
 The tests are in `tests/tst_status.cpp` and `tests/tst_list_jql.cpp`, on responses from both deployments in `tests/data/`, with made-up names.
+
+## Extra fields
+
+The General Configuration's `extraFields` names fields that differ per site, such as "Team" and "Fix version". See [decision 0073](../../../docs/decisions/0073-jira-extra-fields.md). `JiraFields.cpp` holds the reading:
+
+- **By name.** `fieldIdByName()` ignores case. A name that differs only in a final `s` or `/s` also matches, so "Fix version" finds Cloud's "Fix versions" and Data Center's "Fix Version/s". An exact name comes first, and of two fields with the same name, the lowest id in Jira's map.
+- **The value.** `fieldText()`: text and numbers as they are; an object by its `name`, `value` or `displayName`; a list joined with commas. Anything else, such as Cloud's rich text document in a paragraph field, reads as empty. It is shown as plain text.
+- **A name the site lacks** is left out quietly, and so is an empty value in the summary.
+
+The two views find the ids differently:
+
+- **A summary** asks for all fields and for `names`, so it has what it needs. The label is the name as the user wrote it.
+- **A list** needs the ids before its search, since `fields` takes only ids. It asks `GET field` on each fetch, and only when there are extra fields. This works the same on Cloud and Data Center, whatever the query matches. The other way, reading the `names` of a first search, would not do: Jira gives names only for the fields asked for, and none without rows. The search still asks for `expand=names`, as the decision says, and `data.names` holds its answer, or the names from `GET field` if the server ignored it. If `GET field` fails, the list keeps its usual columns. The columns exist from the start and show once `data.names` has their field, so the sort and the filter do not start over. A new list of names takes effect in a new view.
 
 ## Views
 
@@ -132,7 +147,7 @@ The tests are in `tests/tst_status.cpp` and `tests/tst_list_jql.cpp`, on respons
 
 | Section | Key | Field | Shows |
 |---|---|---|---|
-| Details | `details` | `showDetails` | Priority, assignee, reporter, sprint |
+| Details | `details` | `showDetails` | Priority, assignee, reporter, sprint, then the [extra fields](#extra-fields) |
 | Description | `description` | `showDescription` | The HTML in `renderedFields`, else the raw text on Data Center |
 | Comments | `comments` | `showComments` | The latest five, newest first, each with its author and date |
 | Sub-tasks and links | `links` | `showLinks` | Each with its key, as a button to the external browser, then its relation, summary and status. Then the children, each with that button, its summary and a status pill, and a line such as "23 more" if there are others. |
@@ -155,7 +170,7 @@ The views only read. Changing an issue happens on its page, as [decision 0070](.
 
 Other text from the server goes in labels with `Qt::PlainText`. A `&` in an issue key on a button is escaped, so it does not mark a shortcut.
 
-**The list.** An `ItemListView` with the columns Key, Summary, Status, Assignee, Updated and Links, sorted on Updated. Assignee hides first in a narrow cell, then Updated, Status and Key. Summary and Links stay. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`. Updated reads as `compactDate()` and sorts by the real date. A click on a row only selects it: there is no preview.
+**The list.** An `ItemListView` with the columns Key, Summary, Status, Assignee, Updated, the [extra fields](#extra-fields) and Links, sorted on Updated. The extra fields hide first in a narrow cell, the last of them first, then Assignee, Updated, Status and Key. Summary and Links stay. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`. Updated reads as `compactDate()` and sorts by the real date. A click on a row only selects it: there is no preview.
 
 - **Web link.** `listWebUrl()`, `<baseUrl>/issues/?jql=<query>`, above the table. It is hidden when the query cannot be built.
 - **Row links.** "Web" opens `<baseUrl>/browse/<key>` in the external browser. "Open" works as Open page above. "Add" calls `ItemContext::addItemToTask()` with the type `jira.issue.summary`, the key as its name and `{"key": <key>}`. Without a site only "Add" is there. The column sorts by the key.

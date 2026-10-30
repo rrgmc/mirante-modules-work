@@ -36,6 +36,7 @@ struct Search
     JiraDone done;
     QJsonArray issues;
     QJsonValue total;
+    QJsonObject names;
 };
 
 void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString &pageToken)
@@ -45,6 +46,8 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
     query.addQueryItem(QStringLiteral("jql"), queryValue(search->jql));
     if (!search->options.fields.isEmpty())
         query.addQueryItem(QStringLiteral("fields"), search->options.fields.join(QLatin1Char(',')));
+    if (!search->options.expand.isEmpty())
+        query.addQueryItem(QStringLiteral("expand"), search->options.expand.join(QLatin1Char(',')));
     query.addQueryItem(QStringLiteral("maxResults"), QString::number(wanted));
     if (search->deployment == Deployment::Cloud) {
         if (!pageToken.isEmpty())
@@ -62,6 +65,9 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
         const QJsonArray issues = page.value(QStringLiteral("issues")).toArray();
         if (page.value(QStringLiteral("total")).isDouble())
             search->total = page.value(QStringLiteral("total"));
+        const QJsonObject names = page.value(QStringLiteral("names")).toObject();
+        for (auto name = names.constBegin(); name != names.constEnd(); ++name)
+            search->names.insert(name.key(), name.value());
         for (const QJsonValue &issue : issues) {
             if (search->issues.size() >= search->options.maxRows)
                 break;
@@ -89,6 +95,8 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
         QJsonObject answer{{QStringLiteral("issues"), search->issues}};
         if (search->total.isDouble())
             answer.insert(QStringLiteral("total"), search->total);
+        if (!search->names.isEmpty())
+            answer.insert(QStringLiteral("names"), search->names);
         joined.json = QJsonDocument(answer);
         joined.body = joined.json.toJson(QJsonDocument::Compact);
         search->done(joined);
@@ -137,6 +145,11 @@ void JiraClient::search(const QString &jql, const SearchOptions &options, QObjec
     search->receiver = receiver;
     search->done = std::move(done);
     nextPage(search, 0, QString());
+}
+
+void JiraClient::allFields(QObject *receiver, JiraDone done) const
+{
+    m_server.get(apiRoot() + QStringLiteral("/field"), QUrlQuery(), GetOptions(), receiver, std::move(done));
 }
 
 void JiraClient::myself(QObject *receiver, JiraDone done) const

@@ -35,7 +35,10 @@ int listLimit(const QJsonObject &config);
 int listPageSize(const QJsonObject &config);
 
 // The fetch of ItemType::fetchStatus(). data holds rows, the issues as Jira
-// gives them, and total, their number.
+// gives them, and total, their number. With extra fields, a request to GET field
+// first finds their ids, and data also holds names, the map from those ids to
+// their names. If that request fails, the list has only its usual columns. See
+// decision 0073.
 void fetchListStatus(StatusJob &job);
 
 } // namespace mirante::modules::jira

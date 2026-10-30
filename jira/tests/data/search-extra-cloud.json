@@ -1,0 +1,59 @@
+{
+    "isLast": true,
+    "names": {
+        "summary": "Summary",
+        "status": "Status",
+        "assignee": "Assignee",
+        "updated": "Updated",
+        "customfield_10030": "Team",
+        "fixVersions": "Fix versions"
+    },
+    "issues": [
+        {
+            "id": "21",
+            "key": "OPS-21",
+            "fields": {
+                "summary": "Rotate the keys",
+                "status": {
+                    "name": "To Do",
+                    "id": "1",
+                    "statusCategory": {
+                        "key": "new"
+                    }
+                },
+                "assignee": null,
+                "updated": "2026-10-28T10:00:00.000+0000",
+                "customfield_10030": {
+                    "id": "b1f3",
+                    "name": "Platform"
+                },
+                "fixVersions": [
+                    {
+                        "name": "2026.11"
+                    },
+                    {
+                        "name": "2026.12"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "22",
+            "key": "OPS-22",
+            "fields": {
+                "summary": "Clean the logs",
+                "status": {
+                    "name": "To Do",
+                    "id": "1",
+                    "statusCategory": {
+                        "key": "new"
+                    }
+                },
+                "assignee": null,
+                "updated": "2026-10-27T10:00:00.000+0000",
+                "customfield_10030": null,
+                "fixVersions": []
+            }
+        }
+    ]
+}
