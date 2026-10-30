@@ -9,6 +9,7 @@
 #include <mirante/Status.h>
 #include <mirante/widgets/ActionRow.h>
 #include <mirante/widgets/FlowRow.h>
+#include <mirante/widgets/LinkStyle.h>
 #include <mirante/widgets/SummaryView.h>
 
 #include <QAbstractTextDocumentLayout>
@@ -196,8 +197,8 @@ public:
     {
         m_base = baseUrlOf(context.moduleSettings(kGeneralScreen));
 
-        actions()->addAction(kOpenPage, trJira("Open page"), trJira("Page"),
-                             [this] { openPage(m_context, pageUrl()); });
+        actions()->addLinkAction(kOpenPage, trJira("Open page"), trJira("Page"),
+                                 [this] { openPage(m_context, pageUrl()); });
         actions()->setWebLink(pageUrl());
         applySectionFields();
 
@@ -424,7 +425,7 @@ private:
         auto *button = new QToolButton(parent);
         button->setObjectName(QStringLiteral("issue:") + key);
         button->setText(withoutShortcuts(key));
-        button->setAutoRaise(true);
+        widgets::styleAsLink(button);
         const QUrl url = m_base.isEmpty() ? QUrl() : issueUrl(m_base, QJsonObject{{QStringLiteral("key"), key}});
         button->setEnabled(isWebAddress(url));
         connect(button, &QToolButton::clicked, parent, [url] { QDesktopServices::openUrl(url); });

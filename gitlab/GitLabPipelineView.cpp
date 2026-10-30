@@ -116,8 +116,8 @@ public:
         });
         actions()->addAction(kCancelPipeline, tr("Cancel pipeline"), tr("Cancel"), [this] { cancelPipeline(); });
         actions()->addAction(kTriggerPipeline, tr("Trigger pipeline"), tr("Trigger"), [this] { triggerPipeline(); });
-        actions()->addAction(kMergeRequest, tr("Merge request"), tr("MR"),
-                             [this] { QDesktopServices::openUrl(m_mergeRequestAddress); });
+        actions()->addLinkAction(kMergeRequest, tr("Merge request"), tr("MR"),
+                                 [this] { QDesktopServices::openUrl(m_mergeRequestAddress); });
         addOpenPage();
         actions()->setActionVisible(kTriggerPipeline, false);
         actions()->setActionVisible(kMergeRequest, false);
