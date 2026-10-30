@@ -19,6 +19,10 @@ namespace mirante::modules::jira {
 // the query.
 std::optional<QString> listJql(const QString &preset, const QString &jql, const QString &projectKey);
 
+// What a list shows, in words, for the line above its table, such as "My open
+// issues", "Current sprint of OPS", or the query itself.
+QString listDescription(const QString &preset, const QString &jql, const QString &projectKey);
+
 // The JQL of the issues whose parent is this one: parent = "<key>", and on Jira
 // Data Center also through the Epic Link field, which is how an epic holds its
 // issues there. The key is quoted, as in listJql().

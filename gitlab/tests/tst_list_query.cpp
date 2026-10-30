@@ -84,6 +84,42 @@ class TestListQuery : public QObject
     Q_OBJECT
 
 private slots:
+    // The line above a list's table says what the item is set to show.
+    void descriptions()
+    {
+        using namespace mirante::modules::gitlab;
+        const QJsonValue none(QJsonValue::Undefined);
+        const QString project = QStringLiteral("acme/backend");
+
+        QCOMPARE(listDescription(ListKind::MergeRequests,
+                                 QJsonObject{{QStringLiteral("preset"), QStringLiteral("reviewRequested")},
+                                             {QStringLiteral("project"), project}},
+                                 none),
+                 QStringLiteral("Review requested from me · acme/backend"));
+        QCOMPARE(listDescription(ListKind::Issues,
+                                 QJsonObject{{QStringLiteral("scope"), QStringLiteral("group")},
+                                             {QStringLiteral("group"), QStringLiteral("acme")},
+                                             {QStringLiteral("filter"), QStringLiteral("labels=bug")}},
+                                 none),
+                 QStringLiteral("Assigned to me · group acme · labels=bug"));
+        QCOMPARE(listDescription(ListKind::MergeRequests,
+                                 QJsonObject{{QStringLiteral("scope"), QStringLiteral("all")},
+                                             {QStringLiteral("preset"), QStringLiteral("allOpen")}},
+                                 none),
+                 QStringLiteral("All open · all projects"));
+
+        QCOMPARE(pipelineListDescription(QJsonObject{{QStringLiteral("source"), QStringLiteral("mergeRequest")},
+                                                     {QStringLiteral("iid"), 12936},
+                                                     {QStringLiteral("project"), project}},
+                                         none),
+                 QStringLiteral("Of merge request !12936 · acme/backend"));
+        QCOMPARE(pipelineListDescription(QJsonObject{{QStringLiteral("source"), QStringLiteral("branch")}}, project),
+                 QStringLiteral("Of branch master · acme/backend"));
+        QCOMPARE(pipelineListDescription(QJsonObject{{QStringLiteral("source"), QStringLiteral("mine")}}, project),
+                 QStringLiteral("Started by me · acme/backend"));
+        QCOMPARE(pipelineListDescription({}, none), QStringLiteral("All pipelines"));
+    }
+
     void presets()
     {
         const auto mergeRequests = ListKind::MergeRequests;

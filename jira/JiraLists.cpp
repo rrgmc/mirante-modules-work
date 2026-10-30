@@ -114,6 +114,20 @@ std::optional<QString> listJql(const QString &preset, const QString &jql, const 
     return QStringLiteral("assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC");
 }
 
+QString listDescription(const QString &preset, const QString &jql, const QString &projectKey)
+{
+    if (preset == kJqlPreset)
+        return jql.trimmed();
+    const QString key = projectKey.trimmed();
+    if (preset == QLatin1String("currentSprint"))
+        return key.isEmpty() ? QCoreApplication::translate("jira", "Current sprint")
+                             : QCoreApplication::translate("jira", "Current sprint of %1").arg(key);
+    if (preset == QLatin1String("recentlyUpdated"))
+        return key.isEmpty() ? QCoreApplication::translate("jira", "Recently updated")
+                             : QCoreApplication::translate("jira", "Recently updated in %1").arg(key);
+    return QCoreApplication::translate("jira", "My open issues");
+}
+
 QString childrenJql(Deployment deployment, const QString &key)
 {
     const QString quoted = quotedJql(key);
