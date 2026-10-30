@@ -6,6 +6,7 @@
 
 #include <mirante/ItemContext.h>
 
+#include <QCoreApplication>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -66,13 +67,13 @@ public:
         , m_showPipeline(context.config().value(QStringLiteral("showPipeline")).toBool(true))
         , m_showApprovals(context.config().value(QStringLiteral("showApprovals")).toBool(true))
     {
-        setColumns({{tr("Ref"), 1},
-                    {tr("Title"), 0, true},
-                    {tr("Author"), 5},
-                    {tr("Pipeline"), 2},
-                    {tr("Approvals"), 4},
-                    {tr("Updated"), 3},
-                    {tr("Links"), 0}},
+        setColumns({{QCoreApplication::translate("gitlab", "Ref"), 1},
+                    {QCoreApplication::translate("gitlab", "Title"), 0, true},
+                    {QCoreApplication::translate("gitlab", "Author"), 5},
+                    {QCoreApplication::translate("gitlab", "Pipeline"), 2},
+                    {QCoreApplication::translate("gitlab", "Approvals"), 4},
+                    {QCoreApplication::translate("gitlab", "Updated"), 3},
+                    {QCoreApplication::translate("gitlab", "Links"), 0}},
                    UpdatedColumn);
         setColumnVisible(PipelineColumn, m_showPipeline);
         setColumnVisible(ApprovalsColumn, m_showApprovals);

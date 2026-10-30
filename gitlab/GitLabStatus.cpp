@@ -27,17 +27,12 @@ const QString kSeparator = QStringLiteral(" · ");
 // How long after each other the pipelines of a group start. See decision 0072.
 constexpr qint64 kGroupWindowMs = 10 * 60 * 1000;
 
-QString tr(const char *text)
-{
-    return QCoreApplication::translate("gitlab", text);
-}
-
 // A pipeline or job status as words: "success" is "passed", and underscores
 // become spaces, as in "waiting for resource".
 QString statusWords(const QString &status)
 {
     if (status == QLatin1String("success"))
-        return tr("passed");
+        return QCoreApplication::translate("gitlab", "passed");
     QString words = status;
     words.replace(QLatin1Char('_'), QLatin1Char(' '));
     return words;
@@ -53,13 +48,13 @@ QString capitalised(QString text)
 QString stateText(const QString &state)
 {
     if (state == QLatin1String("opened"))
-        return tr("Open");
+        return QCoreApplication::translate("gitlab", "Open");
     if (state == QLatin1String("merged"))
-        return tr("Merged");
+        return QCoreApplication::translate("gitlab", "Merged");
     if (state == QLatin1String("closed"))
-        return tr("Closed");
+        return QCoreApplication::translate("gitlab", "Closed");
     if (state == QLatin1String("locked"))
-        return tr("Locked");
+        return QCoreApplication::translate("gitlab", "Locked");
     return capitalised(state);
 }
 
@@ -118,18 +113,19 @@ QString mergeRequestApprovals(const QJsonObject &approvals)
     const int required = approvals.value(QStringLiteral("approvals_required")).toInt();
     const int given = int(approvals.value(QStringLiteral("approved_by")).toArray().size());
     if (required > 0)
-        return tr("%1 of %2 approvals").arg(given).arg(required);
+        return QCoreApplication::translate("gitlab", "%1 of %2 approvals").arg(given).arg(required);
     if (given == 1)
-        return tr("1 approval");
+        return QCoreApplication::translate("gitlab", "1 approval");
     if (given > 1)
-        return tr("%1 approvals").arg(given);
+        return QCoreApplication::translate("gitlab", "%1 approvals").arg(given);
     return {};
 }
 
 AttentionReason failedPipeline(const QJsonObject &pipeline)
 {
     const QString id = QString::number(pipeline.value(QStringLiteral("id")).toInteger());
-    return reason(QStringLiteral("pipeline-failed:") + id, tr("Pipeline failed"), true);
+    return reason(QStringLiteral("pipeline-failed:") + id, QCoreApplication::translate("gitlab", "Pipeline failed"),
+                  true);
 }
 
 bool hasFailed(const QJsonObject &pipeline)
@@ -172,25 +168,29 @@ ItemStatus mergeRequestStatus(const QJsonObject &mergeRequest, const QJsonObject
 
     QStringList parts{stateText(state)};
     if (open && mergeRequest.value(QStringLiteral("draft")).toBool())
-        parts << tr("draft");
+        parts << QCoreApplication::translate("gitlab", "draft");
     const QString approvalText = mergeRequestApprovals(approvals);
     if (!approvalText.isEmpty())
         parts << approvalText;
     if (!pipeline.isEmpty())
-        parts << tr("pipeline %1").arg(statusWords(pipeline));
+        parts << QCoreApplication::translate("gitlab", "pipeline %1").arg(statusWords(pipeline));
     if (open && conflicts)
-        parts << tr("has conflicts");
+        parts << QCoreApplication::translate("gitlab", "has conflicts");
     status.summary = parts.join(kSeparator);
 
     if (open) {
         if (pipeline == QLatin1String("failed"))
-            status.attention << reason(QStringLiteral("pipeline-failed"), tr("Pipeline failed"), true);
+            status.attention << reason(QStringLiteral("pipeline-failed"),
+                                       QCoreApplication::translate("gitlab", "Pipeline failed"), true);
         if (reviewer && !approvedBy(approvals, me))
-            status.attention << reason(QStringLiteral("review"), tr("Review requested"));
+            status.attention << reason(QStringLiteral("review"),
+                                       QCoreApplication::translate("gitlab", "Review requested"));
         if (author && approvals.value(QStringLiteral("approved")).toBool())
-            status.attention << reason(QStringLiteral("approved"), tr("Approved"), false, true);
+            status.attention << reason(QStringLiteral("approved"), QCoreApplication::translate("gitlab", "Approved"),
+                                       false, true);
         if (author && conflicts)
-            status.attention << reason(QStringLiteral("conflicts"), tr("Has conflicts"));
+            status.attention << reason(QStringLiteral("conflicts"),
+                                       QCoreApplication::translate("gitlab", "Has conflicts"));
     }
 
     status.closed = state == QLatin1String("merged") || state == QLatin1String("closed");
@@ -216,7 +216,7 @@ ItemStatus issueStatus(const QJsonObject &issue)
             assignees << name;
     }
     if (!assignees.isEmpty())
-        parts << tr("assigned to %1").arg(assignees.join(QStringLiteral(", ")));
+        parts << QCoreApplication::translate("gitlab", "assigned to %1").arg(assignees.join(QStringLiteral(", ")));
     status.summary = parts.join(kSeparator);
     status.closed = state == QLatin1String("closed");
     status.data = QJsonObject{{QStringLiteral("issue"), issue}};
@@ -229,7 +229,7 @@ ItemStatus pipelineStatus(const QString &branch, const QJsonObject &pipeline, co
     ItemStatus status = okStatus();
     status.closed = false;
     if (pipeline.isEmpty()) {
-        status.summary = tr("No pipeline on %1").arg(branch);
+        status.summary = QCoreApplication::translate("gitlab", "No pipeline on %1").arg(branch);
         status.data = QJsonObject{{QStringLiteral("branch"), branch}};
         return status;
     }
@@ -238,9 +238,9 @@ ItemStatus pipelineStatus(const QString &branch, const QJsonObject &pipeline, co
     QStringList parts{capitalised(statusWords(state)), branch};
     const int failed = failedJobs(jobs);
     if (failed == 1)
-        parts << tr("1 failed job");
+        parts << QCoreApplication::translate("gitlab", "1 failed job");
     else if (failed > 1)
-        parts << tr("%1 failed jobs").arg(failed);
+        parts << QCoreApplication::translate("gitlab", "%1 failed jobs").arg(failed);
     status.summary = parts.join(kSeparator);
 
     if (hasFailed(pipeline))
@@ -315,7 +315,7 @@ bool namesAnObject(StatusJob &job, const QString &project, qint64 iid)
 {
     if (!project.isEmpty() && iid != 0)
         return true;
-    job.finish(incomplete(tr("Set the project and number in the item's settings.")));
+    job.finish(incomplete(QCoreApplication::translate("gitlab", "Set the project and number in the item's settings.")));
     return false;
 }
 
@@ -583,7 +583,7 @@ void fetchPipelineStatus(StatusJob &job)
     const QJsonObject config = job.config();
     const QString project = projectPath(config, job.projectSetting(kProjectSettingKey));
     if (project.isEmpty()) {
-        job.finish(incomplete(tr("Set the project in the item's settings.")));
+        job.finish(incomplete(QCoreApplication::translate("gitlab", "Set the project in the item's settings.")));
         return;
     }
 
@@ -594,12 +594,12 @@ void fetchPipelineStatus(StatusJob &job)
         // project without a main folder from one not mapped here.
         const QString path = job.folderPath(QString());
         if (path.isEmpty()) {
-            job.finish(incomplete(tr("Set the main folder's path on this device.")));
+            job.finish(incomplete(QCoreApplication::translate("gitlab", "Set the main folder's path on this device.")));
             return;
         }
         const QString branch = job.gitHead(path);
         if (branch.isEmpty()) {
-            job.finish(incomplete(tr("The main folder is not on a branch.")));
+            job.finish(incomplete(QCoreApplication::translate("gitlab", "The main folder is not on a branch.")));
             return;
         }
         fetchPipelines(&job, {project, branch, 0, {}});
@@ -610,7 +610,8 @@ void fetchPipelineStatus(StatusJob &job)
     if (source == QLatin1String("mergeRequest")) {
         const qint64 iid = itemNumber(config);
         if (iid == 0) {
-            job.finish(incomplete(tr("Set the merge request number in the item's settings.")));
+            job.finish(incomplete(
+                QCoreApplication::translate("gitlab", "Set the merge request number in the item's settings.")));
             return;
         }
         GitLabClient(job.server(), job.owner()).mergeRequest(project, iid, [target, project, iid](const ApiReply &reply) {

@@ -209,7 +209,7 @@ Field projectKeyField()
 void registerModule(ModuleRegistrar &registrar)
 {
     const ModuleSettings &settings = registrar.settings();
-    registrar.setModuleName(QStringLiteral("Jira"));
+    registrar.setModuleName(QCoreApplication::translate("jira", "Jira"));
     registrar.setModuleDescription(QCoreApplication::translate(
         "jira", "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's "
                 "General Configuration."));

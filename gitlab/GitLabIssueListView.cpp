@@ -5,6 +5,7 @@
 
 #include <mirante/ItemContext.h>
 
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QStringList>
@@ -39,12 +40,12 @@ public:
     IssueListView(ItemContext &context, QWidget *parent)
         : NumberedList(context, issueTraits(), parent)
     {
-        setColumns({{tr("Ref"), 1},
-                    {tr("Title"), 0, true},
-                    {tr("Assignees"), 3},
-                    {tr("Labels"), 4},
-                    {tr("Updated"), 2},
-                    {tr("Links"), 0}},
+        setColumns({{QCoreApplication::translate("gitlab", "Ref"), 1},
+                    {QCoreApplication::translate("gitlab", "Title"), 0, true},
+                    {QCoreApplication::translate("gitlab", "Assignees"), 3},
+                    {QCoreApplication::translate("gitlab", "Labels"), 4},
+                    {QCoreApplication::translate("gitlab", "Updated"), 2},
+                    {QCoreApplication::translate("gitlab", "Links"), 0}},
                    UpdatedColumn);
     }
 

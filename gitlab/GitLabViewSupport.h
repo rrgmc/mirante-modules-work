@@ -9,7 +9,6 @@
 #include <mirante/widgets/StatusPill.h>
 #include <mirante/widgets/SummaryView.h>
 
-#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -77,8 +76,6 @@ QWidget *labelChips(const QJsonArray &labels);
 // view is gone is dropped.
 class GitLabSummary : public widgets::SummaryView
 {
-    Q_DECLARE_TR_FUNCTIONS(gitlab)
-
 public:
     // Draws the item's status now and at each change. Null, where the core
     // keeps no status, stays at "Loading…".

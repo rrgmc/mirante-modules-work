@@ -7,6 +7,7 @@
 
 #include <mirante/ItemContext.h>
 
+#include <QCoreApplication>
 #include <QJsonObject>
 #include <QRegularExpression>
 
@@ -30,20 +31,20 @@ class PipelineListView : public GitLabList
 {
 public:
     PipelineListView(ItemContext &context, QWidget *parent)
-        : GitLabList(context, tr("No pipelines"),
+        : GitLabList(context, QCoreApplication::translate("gitlab", "No pipelines"),
                      pipelinesUrl(baseUrlOf(context.moduleSettings(kGeneralScreen)), context.config(),
                                   context.projectSetting(kProjectSettingKey)),
                      parent)
         , m_project(projectPath(context.config(), context.projectSetting(kProjectSettingKey)))
     {
-        setColumns({{tr("Id"), 2},
-                    {tr("Status"), 1},
-                    {tr("Ref"), 0, true},
-                    {tr("Author"), 4},
-                    {tr("Started"), 3},
-                    {tr("Links"), 0}},
+        setColumns({{QCoreApplication::translate("gitlab", "Id"), 2},
+                    {QCoreApplication::translate("gitlab", "Status"), 1},
+                    {QCoreApplication::translate("gitlab", "Ref"), 0, true},
+                    {QCoreApplication::translate("gitlab", "Author"), 4},
+                    {QCoreApplication::translate("gitlab", "Started"), 3},
+                    {QCoreApplication::translate("gitlab", "Links"), 0}},
                    IdColumn);
-        addFilter(StatusColumn, tr("Status"));
+        addFilter(StatusColumn, QCoreApplication::translate("gitlab", "Status"));
         setDescription(pipelineListDescription(context.config(), context.projectSetting(kProjectSettingKey)));
     }
 

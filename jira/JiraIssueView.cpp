@@ -51,11 +51,6 @@ const QString kDescription = QStringLiteral("description");
 const QString kComments = QStringLiteral("comments");
 const QString kLinks = QStringLiteral("links");
 
-QString trJira(const char *text)
-{
-    return QCoreApplication::translate("jira", text);
-}
-
 // A text from a server as a button, where "&" marks a shortcut.
 QString withoutShortcuts(QString text)
 {
@@ -171,7 +166,7 @@ QList<IssueRef> readRefs(const QJsonObject &fields)
     QList<IssueRef> refs;
     const QJsonArray subtasks = fields.value(QStringLiteral("subtasks")).toArray();
     for (const QJsonValue &subtask : subtasks)
-        refs << readRef(subtask.toObject(), trJira("Sub-task"));
+        refs << readRef(subtask.toObject(), QCoreApplication::translate("jira", "Sub-task"));
 
     const QJsonArray links = fields.value(QStringLiteral("issuelinks")).toArray();
     for (const QJsonValue &value : links) {
@@ -197,7 +192,8 @@ public:
     {
         m_base = baseUrlOf(context.moduleSettings(kGeneralScreen));
 
-        actions()->addLinkAction(kOpenPage, trJira("Open page"), trJira("Page"),
+        actions()->addLinkAction(kOpenPage, QCoreApplication::translate("jira", "Open page"),
+                                 QCoreApplication::translate("jira", "Page"),
                                  [this] { openPage(m_context, pageUrl()); });
         actions()->setWebLink(pageUrl());
         applySectionFields();
@@ -206,7 +202,7 @@ public:
             source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
             showStatus(source->current());
         } else {
-            setMessage(trJira("Loading…"));
+            setMessage(QCoreApplication::translate("jira", "Loading…"));
         }
     }
 
@@ -222,7 +218,7 @@ private:
     {
         const QJsonObject issue = status.data.value(QStringLiteral("issue")).toObject();
         if (issue.isEmpty()) {
-            setMessage(status.message.isEmpty() ? trJira("Loading…") : status.message);
+            setMessage(status.message.isEmpty() ? QCoreApplication::translate("jira", "Loading…") : status.message);
             return;
         }
         // An error keeps the old data, and the cell header shows the error.
@@ -252,10 +248,10 @@ private:
         const QString issueKey = issue.value(QStringLiteral("key")).toString();
         setTitle(issueKey + QLatin1Char(' ') + fields.value(QStringLiteral("summary")).toString());
         setStateRow(makeStateRow(fields));
-        setSection(kDetails, trJira("Details"), makeDetails(issue));
+        setSection(kDetails, QCoreApplication::translate("jira", "Details"), makeDetails(issue));
         drawDescription(issue);
-        setSection(kComments, trJira("Comments"), makeComments(issue));
-        setSection(kLinks, trJira("Sub-tasks and links"), makeLinks(fields, answer));
+        setSection(kComments, QCoreApplication::translate("jira", "Comments"), makeComments(issue));
+        setSection(kLinks, QCoreApplication::translate("jira", "Sub-tasks and links"), makeLinks(fields, answer));
     }
 
     QWidget *makeStateRow(const QJsonObject &fields)
@@ -291,11 +287,12 @@ private:
             if (!value.isEmpty())
                 form->addRow(label, plainLabel(value, details));
         };
-        addRow(trJira("Priority"),
+        addRow(QCoreApplication::translate("jira", "Priority"),
                fields.value(QStringLiteral("priority")).toObject().value(QStringLiteral("name")).toString());
-        addRow(trJira("Assignee"), assignee.isEmpty() ? trJira("Unassigned") : assignee);
-        addRow(trJira("Reporter"), person(QStringLiteral("reporter")));
-        addRow(trJira("Sprint"), sprintOf(issue));
+        addRow(QCoreApplication::translate("jira", "Assignee"),
+               assignee.isEmpty() ? QCoreApplication::translate("jira", "Unassigned") : assignee);
+        addRow(QCoreApplication::translate("jira", "Reporter"), person(QStringLiteral("reporter")));
+        addRow(QCoreApplication::translate("jira", "Sprint"), sprintOf(issue));
 
         // A name the site does not have is left out quietly. See decision 0073.
         const QJsonObject names = issue.value(QStringLiteral("names")).toObject();
@@ -314,7 +311,7 @@ private:
     {
         if (!m_description) {
             m_description = new RichText(m_base, nullptr);
-            setSection(kDescription, trJira("Description"), m_description);
+            setSection(kDescription, QCoreApplication::translate("jira", "Description"), m_description);
         }
         const QString html = issue.value(QStringLiteral("renderedFields"))
                                  .toObject()
@@ -326,7 +323,7 @@ private:
         else if (raw.isString() && !raw.toString().isEmpty())
             m_description->setPlainText(raw.toString());
         else
-            m_description->setPlainText(trJira("No description."));
+            m_description->setPlainText(QCoreApplication::translate("jira", "No description."));
     }
 
     QWidget *makeComments(const QJsonObject &issue)
@@ -362,7 +359,7 @@ private:
         auto *layout = new QVBoxLayout(section);
         layout->setContentsMargins(0, 0, 0, 0);
         if (comments.isEmpty())
-            layout->addWidget(plainLabel(trJira("No comments."), section));
+            layout->addWidget(plainLabel(QCoreApplication::translate("jira", "No comments."), section));
         for (qsizetype i = 0; i < std::min<qsizetype>(comments.size(), kLatestComments); ++i) {
             const QJsonObject &comment = comments.at(i);
             const QString author =
@@ -390,7 +387,7 @@ private:
         const QList<IssueRef> refs = readRefs(fields);
         const QJsonArray children = answer.value(QStringLiteral("children")).toArray();
         if (refs.isEmpty() && children.isEmpty())
-            layout->addWidget(plainLabel(trJira("No sub-tasks or links."), section));
+            layout->addWidget(plainLabel(QCoreApplication::translate("jira", "No sub-tasks or links."), section));
         for (const IssueRef &ref : refs) {
             auto *row = new QHBoxLayout;
             row->addWidget(makeIssueButton(ref.key, section));
@@ -412,7 +409,7 @@ private:
         }
         const int more = answer.value(QStringLiteral("childrenTotal")).toInt() - int(children.size());
         if (more > 0) {
-            QLabel *line = plainLabel(trJira("%1 more").arg(more), section);
+            QLabel *line = plainLabel(QCoreApplication::translate("jira", "%1 more").arg(more), section);
             line->setObjectName(QStringLiteral("childrenMore"));
             layout->addWidget(line);
         }

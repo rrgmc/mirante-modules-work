@@ -8,7 +8,6 @@
 #include <mirante/widgets/ItemListView.h>
 
 #include <QChar>
-#include <QCoreApplication>
 #include <QHash>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -55,8 +54,6 @@ widgets::ListCell dateCell(const QJsonValue &value);
 // as their receiver, so an answer that comes after the view is gone is dropped.
 class GitLabList : public widgets::ItemListView
 {
-    Q_DECLARE_TR_FUNCTIONS(gitlab)
-
 public:
     // Draws the item's status now and at each change. Null, where the core keeps
     // no status, stays at "Loading…".

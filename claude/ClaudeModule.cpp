@@ -90,7 +90,7 @@ std::vector<Field> webFields()
 
 void registerModule(ModuleRegistrar &registrar)
 {
-    registrar.setModuleName(QStringLiteral("Claude"));
+    registrar.setModuleName(QCoreApplication::translate("claude", "Claude"));
     registrar.setModuleDescription(QCoreApplication::translate("claude", "Claude sessions on claude.ai."));
     registrar.addItemType(std::make_unique<WebSessionItemType>(
         QStringLiteral("claude.session.web"), QCoreApplication::translate("claude", "Claude session (web)"),

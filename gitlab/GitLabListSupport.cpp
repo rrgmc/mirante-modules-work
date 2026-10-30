@@ -9,6 +9,7 @@
 
 #include <QAction>
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QGuiApplication>
@@ -111,9 +112,11 @@ ListCell GitLabList::linksCell(const ListRowTarget &target) const
     ListCell cell;
     cell.sortKey = target.sortKey;
     if (!target.address.isEmpty())
-        cell.links << ListLink{kWebLink, tr("Web")} << ListLink{kOpenLink, tr("Open")};
+        // "Open" is also a state; the link opens the row, so it is told apart.
+        cell.links << ListLink{kWebLink, QCoreApplication::translate("gitlab", "Web")}
+                   << ListLink{kOpenLink, QCoreApplication::translate("gitlab", "Open", "link that opens a row")};
     if (!target.addType.isEmpty())
-        cell.links << ListLink{kAddLink, tr("Add")};
+        cell.links << ListLink{kAddLink, QCoreApplication::translate("gitlab", "Add")};
     return cell;
 }
 
@@ -122,7 +125,7 @@ void GitLabList::showStatus(const ItemStatus &status)
     // Old data stays through an error. Problems show in the cell header.
     if (status.data.isEmpty()) {
         if (!m_drawn)
-            setMessage(status.message.isEmpty() ? tr("Loading…") : status.message);
+            setMessage(status.message.isEmpty() ? QCoreApplication::translate("gitlab", "Loading…") : status.message);
         return;
     }
     m_drawn = true;
@@ -156,19 +159,19 @@ void GitLabList::showRowMenu(const QString &key, const QPoint &globalPos)
     auto *menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
 
-    QAction *web = menu->addAction(tr("Web"));
+    QAction *web = menu->addAction(QCoreApplication::translate("gitlab", "Web"));
     web->setEnabled(!target.address.isEmpty());
     connect(web, &QAction::triggered, this, [this, key] { activateLink(key, kWebLink); });
 
-    QAction *open = menu->addAction(tr("Open page"));
+    QAction *open = menu->addAction(QCoreApplication::translate("gitlab", "Open page"));
     open->setEnabled(!target.address.isEmpty());
     connect(open, &QAction::triggered, this, [this, key] { activateLink(key, kOpenLink); });
 
-    QAction *add = menu->addAction(tr("Add to task as item"));
+    QAction *add = menu->addAction(QCoreApplication::translate("gitlab", "Add to task as item"));
     add->setEnabled(!target.addType.isEmpty());
     connect(add, &QAction::triggered, this, [this, key] { activateLink(key, kAddLink); });
 
-    QAction *copy = menu->addAction(tr("Copy link"));
+    QAction *copy = menu->addAction(QCoreApplication::translate("gitlab", "Copy link"));
     copy->setEnabled(!target.address.isEmpty());
     connect(copy, &QAction::triggered, this, [address = target.address] {
         QGuiApplication::clipboard()->setText(address.toString());
@@ -213,7 +216,8 @@ ListRowTarget NumberedList::rowTarget(const QJsonObject &row, int index, const Q
     target.iid = row.value(QStringLiteral("iid")).toInteger();
     const QString ref = target.project + m_traits.separator + QString::number(target.iid);
     target.key = target.complete() ? ref : QStringLiteral("row-%1").arg(index);
-    target.sortKey = target.project + m_traits.separator + QStringLiteral("%1").arg(target.iid, 12, 10, QLatin1Char('0'));
+    target.sortKey
+        = target.project + m_traits.separator + QStringLiteral("%1").arg(target.iid, 12, 10, QLatin1Char('0'));
 
     const QJsonObject config{{QStringLiteral("project"), target.project}, {QStringLiteral("iid"), target.iid}};
     const QUrl built = m_traits.kind == ListKind::MergeRequests ? mergeRequestUrl(baseUrl, config, {})
