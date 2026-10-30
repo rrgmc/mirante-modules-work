@@ -1,0 +1,108 @@
+{
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "id": "10042",
+    "self": "https://acme.atlassian.net/rest/api/3/issue/10042",
+    "key": "OPS-7",
+    "renderedFields": {
+        "summary": null,
+        "updated": "28/Oct/26 2:03 PM",
+        "description": "<p>Renew before <b>November</b>. See <a href=\"/browse/OPS-8\">the backups</a>.</p><p><img src=\"https://tracker.example.net/pixel.png\" width=\"20\" height=\"20\" /></p>",
+        "comment": {
+            "comments": [
+                {"id": "20001", "author": {"displayName": "Ana Example"}, "body": "<p>First comment</p>", "created": "20/Oct/26 9:00 AM"},
+                {"id": "20002", "author": {"displayName": "Bruno Sample"}, "body": "<p>Second comment</p>", "created": "21/Oct/26 9:00 AM"},
+                {"id": "20003", "author": {"displayName": "Ana Example"}, "body": "<p>Third comment</p>", "created": "22/Oct/26 9:00 AM"},
+                {"id": "20004", "author": {"displayName": "Bruno Sample"}, "body": "<p>Fourth comment</p>", "created": "23/Oct/26 9:00 AM"},
+                {"id": "20005", "author": {"displayName": "Ana Example"}, "body": "<p>Fifth comment</p>", "created": "24/Oct/26 9:00 AM"},
+                {"id": "20006", "author": {"displayName": "Bruno Sample"}, "body": "<p>Sixth comment</p>", "created": "25/Oct/26 9:00 AM"}
+            ],
+            "total": 6,
+            "maxResults": 20,
+            "startAt": 0
+        }
+    },
+    "names": {
+        "summary": "Summary",
+        "issuetype": "Issue Type",
+        "customfield_10014": "Epic Link",
+        "customfield_10020": "Sprint",
+        "priority": "Priority",
+        "assignee": "Assignee",
+        "reporter": "Reporter",
+        "updated": "Updated",
+        "status": "Status",
+        "description": "Description",
+        "comment": "Comment",
+        "subtasks": "Sub-tasks",
+        "issuelinks": "Linked Issues"
+    },
+    "fields": {
+        "summary": "Rotate the build server's certificates",
+        "issuetype": {"self": "https://acme.atlassian.net/rest/api/3/issuetype/10001", "id": "10001", "name": "Task", "subtask": false},
+        "priority": {"self": "https://acme.atlassian.net/rest/api/3/priority/3", "name": "Medium", "id": "3"},
+        "assignee": {"accountId": "5b10a2844c20165700ede21g", "displayName": "Ana Example", "active": true},
+        "reporter": {"accountId": "5b10ac8d82e05b22cc7d4ef5", "displayName": "Bruno Sample", "active": true},
+        "updated": "2026-10-28T14:03:11.123-0300",
+        "status": {
+            "self": "https://acme.atlassian.net/rest/api/3/status/10003",
+            "description": "",
+            "name": "In Review",
+            "id": "10003",
+            "statusCategory": {"id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress"}
+        },
+        "description": {
+            "version": 1,
+            "type": "doc",
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Renew before November."}]}]
+        },
+        "customfield_10014": null,
+        "customfield_10020": [
+            {"id": 31, "name": "Sprint 11", "state": "closed", "boardId": 4},
+            {"id": 32, "name": "Sprint 12", "state": "active", "boardId": 4}
+        ],
+        "comment": {
+            "comments": [
+                {"id": "20001", "author": {"displayName": "Ana Example"}, "body": {"type": "doc", "version": 1, "content": []}, "created": "2026-10-20T09:00:00.000-0300"},
+                {"id": "20002", "author": {"displayName": "Bruno Sample"}, "body": {"type": "doc", "version": 1, "content": []}, "created": "2026-10-21T09:00:00.000-0300"},
+                {"id": "20003", "author": {"displayName": "Ana Example"}, "body": {"type": "doc", "version": 1, "content": []}, "created": "2026-10-22T09:00:00.000-0300"},
+                {"id": "20004", "author": {"displayName": "Bruno Sample"}, "body": {"type": "doc", "version": 1, "content": []}, "created": "2026-10-23T09:00:00.000-0300"},
+                {"id": "20005", "author": {"displayName": "Ana Example"}, "body": {"type": "doc", "version": 1, "content": []}, "created": "2026-10-24T09:00:00.000-0300"},
+                {"id": "20006", "author": {"displayName": "Bruno Sample"}, "body": {"type": "doc", "version": 1, "content": []}, "created": "2026-10-25T09:00:00.000-0300"}
+            ],
+            "total": 6,
+            "maxResults": 20,
+            "startAt": 0
+        },
+        "subtasks": [
+            {
+                "id": "10050",
+                "key": "OPS-9",
+                "fields": {
+                    "summary": "Update the agents",
+                    "status": {"name": "To Do", "id": "10000", "statusCategory": {"key": "new"}},
+                    "issuetype": {"name": "Sub-task", "subtask": true}
+                }
+            }
+        ],
+        "issuelinks": [
+            {
+                "id": "10100",
+                "type": {"id": "10000", "name": "Blocks", "inward": "is blocked by", "outward": "blocks"},
+                "outwardIssue": {
+                    "id": "10043",
+                    "key": "OPS-8",
+                    "fields": {"summary": "Move the backups to the new bucket", "status": {"name": "In Progress", "id": "3"}}
+                }
+            },
+            {
+                "id": "10101",
+                "type": {"id": "10001", "name": "Relates", "inward": "relates to", "outward": "relates to"},
+                "inwardIssue": {
+                    "id": "10011",
+                    "key": "SEC-3",
+                    "fields": {"summary": "Yearly audit", "status": {"name": "Done", "id": "10001"}}
+                }
+            }
+        ]
+    }
+}

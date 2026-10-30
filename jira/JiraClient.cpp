@@ -107,12 +107,13 @@ QString JiraClient::issuePath(const QString &key) const
     return apiRoot() + QStringLiteral("/issue/") + QString::fromLatin1(QUrl::toPercentEncoding(key));
 }
 
-void JiraClient::issue(const QString &key, const QStringList &fields, QObject *receiver, JiraDone done) const
+void JiraClient::issue(const QString &key, const QStringList &fields, QObject *receiver, JiraDone done,
+                       const QStringList &expand) const
 {
     QUrlQuery query;
     if (!fields.isEmpty())
         query.addQueryItem(QStringLiteral("fields"), fields.join(QLatin1Char(',')));
-    query.addQueryItem(QStringLiteral("expand"), QStringLiteral("renderedFields"));
+    query.addQueryItem(QStringLiteral("expand"), expand.join(QLatin1Char(',')));
     m_server.get(issuePath(key), query, GetOptions(), receiver, std::move(done));
 }
 

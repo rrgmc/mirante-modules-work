@@ -1,0 +1,7 @@
+{
+    "expand": "transitions",
+    "transitions": [
+        {"id": "21", "name": "Start Progress", "to": {"name": "In Progress", "id": "3"}, "hasScreen": false, "isGlobal": true},
+        {"id": "31", "name": "Review & Merge", "to": {"name": "Done", "id": "10001"}, "hasScreen": false, "isGlobal": true}
+    ]
+}
