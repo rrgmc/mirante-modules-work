@@ -41,8 +41,9 @@ public:
     QString apiRoot() const;
 
     // GET issue/<key>?expand=renderedFields, with only the given fields if
-    // any.
-    void issue(const QString &key, const QStringList &fields, QObject *receiver, JiraDone done) const;
+    // any, and otherwise all of them. expand replaces the values of expand.
+    void issue(const QString &key, const QStringList &fields, QObject *receiver, JiraDone done,
+               const QStringList &expand = {QStringLiteral("renderedFields")}) const;
 
     // The issues of a JQL query. Jira Cloud pages with nextPageToken on
     // search/jql, Jira Data Center with startAt on search. The pages are

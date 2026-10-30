@@ -4,6 +4,11 @@
 #include "JiraSettings.h"
 
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QRegularExpression>
+
+#include <functional>
+#include <utility>
 
 namespace mirante::modules::jira {
 
@@ -14,12 +19,65 @@ QString nameOf(const QJsonObject &fields, const QString &key)
     return fields.value(key).toObject().value(QStringLiteral("name")).toString();
 }
 
+// One sprint from the value of the sprint field.
+struct Sprint
+{
+    QString name;
+    QString state;
+};
+
+// Older Jira Data Center writes a sprint as text, such as
+// "com.atlassian.greenhopper.service.sprint.Sprint@1b[id=4,state=ACTIVE,name=Sprint 12,goal=]".
+Sprint sprintFromText(const QString &text)
+{
+    static const QRegularExpression name(QStringLiteral("\\bname=(.*?)(?:,[A-Za-z]+=|\\]$)"));
+    static const QRegularExpression state(QStringLiteral("\\bstate=([^,\\]]*)"));
+    return {name.match(text).captured(1), state.match(text).captured(1)};
+}
+
+Sprint readSprint(const QJsonValue &value)
+{
+    if (value.isString())
+        return sprintFromText(value.toString());
+    const QJsonObject sprint = value.toObject();
+    return {sprint.value(QStringLiteral("name")).toString(), sprint.value(QStringLiteral("state")).toString()};
+}
+
+// Fetches the issue named by the job's "key", and finishes the job with what
+// read makes of the answer.
+void fetchIssue(StatusJob &job, const QStringList &fields, const QStringList &expand,
+                std::function<ItemStatus(const QJsonObject &)> read)
+{
+    const QString key = job.config().value(QStringLiteral("key")).toString().trimmed();
+    if (key.isEmpty()) {
+        ItemStatus status;
+        status.state = ItemStatus::State::Error;
+        status.message = QCoreApplication::translate("jira", "Set the issue key in the item's settings.");
+        job.finish(status);
+        return;
+    }
+
+    const JiraClient client(job.server(), deploymentOf(job.moduleSettings(kGeneralScreen)));
+    StatusJob *owner = &job;
+    client.issue(
+        key, fields, job.owner(),
+        [owner, read = std::move(read)](const ApiReply &reply) {
+            owner->finish(reply.ok() ? read(reply.json.object()) : statusFromReply(reply));
+        },
+        expand);
+}
+
 } // namespace
 
 QStringList statusFields()
 {
     return {QStringLiteral("summary"),  QStringLiteral("status"),    QStringLiteral("assignee"),
             QStringLiteral("priority"), QStringLiteral("issuetype"), QStringLiteral("updated")};
+}
+
+QStringList summaryExpand()
+{
+    return {QStringLiteral("renderedFields"), QStringLiteral("names")};
 }
 
 ItemStatus issueStatus(const QJsonObject &issue)
@@ -67,27 +125,39 @@ ItemStatus issueStatus(const QJsonObject &issue)
     return result;
 }
 
+QString sprintOf(const QJsonObject &issue)
+{
+    const QJsonObject names = issue.value(QStringLiteral("names")).toObject();
+    const QJsonObject fields = issue.value(QStringLiteral("fields")).toObject();
+    for (auto name = names.constBegin(); name != names.constEnd(); ++name) {
+        if (name.value().toString() != QLatin1String("Sprint"))
+            continue;
+        const QJsonArray sprints = fields.value(name.key()).toArray();
+        QString last;
+        for (const QJsonValue &value : sprints) {
+            const Sprint sprint = readSprint(value);
+            if (sprint.state.compare(QLatin1String("active"), Qt::CaseInsensitive) == 0)
+                return sprint.name;
+            last = sprint.name;
+        }
+        if (!last.isEmpty())
+            return last;
+    }
+    return {};
+}
+
 void fetchIssueStatus(StatusJob &job)
 {
-    const QString key = job.config().value(QStringLiteral("key")).toString().trimmed();
-    if (key.isEmpty()) {
-        ItemStatus status;
-        status.state = ItemStatus::State::Error;
-        status.message = QCoreApplication::translate("jira", "Set the issue key in the item's settings.");
-        job.finish(status);
-        return;
-    }
-
-    const JiraClient client(job.server(), deploymentOf(job.moduleSettings(kGeneralScreen)));
-    StatusJob *owner = &job;
-    client.issue(key, statusFields(), job.owner(), [owner](const ApiReply &reply) {
-        owner->finish(reply.ok() ? issueStatus(reply.json.object()) : statusFromReply(reply));
-    });
+    fetchIssue(job, statusFields(), {QStringLiteral("renderedFields")}, &issueStatus);
 }
 
 void fetchIssueSummaryStatus(StatusJob &job)
 {
-    fetchIssueStatus(job);
+    fetchIssue(job, {}, summaryExpand(), [](const QJsonObject &issue) {
+        ItemStatus status = issueStatus(issue);
+        status.data.insert(QStringLiteral("issue"), issue);
+        return status;
+    });
 }
 
 } // namespace mirante::modules::jira

@@ -1,0 +1,35 @@
+{
+    "issues": [
+        {
+            "id": "10042",
+            "key": "OPS-7",
+            "fields": {
+                "summary": "Rotate the build server's certificates",
+                "status": {"name": "In Review", "id": "10003", "statusCategory": {"id": 4, "key": "indeterminate", "name": "In Progress"}},
+                "assignee": {"accountId": "5b10a2844c20165700ede21g", "displayName": "Ana Example"},
+                "updated": "2026-10-28T14:03:11.123-0300"
+            }
+        },
+        {
+            "id": "10043",
+            "key": "OPS-10",
+            "fields": {
+                "summary": "Move the backups to the new bucket",
+                "status": {"name": "To Do", "id": "10000", "statusCategory": {"id": 2, "key": "new", "name": "To Do"}},
+                "assignee": null,
+                "updated": "2026-10-29T09:15:00.000-0300"
+            }
+        },
+        {
+            "id": "10044",
+            "key": "OPS-9",
+            "fields": {
+                "summary": "Update the agents",
+                "status": {"name": "Done", "id": "10001", "statusCategory": {"id": 3, "key": "done", "name": "Done"}},
+                "assignee": {"accountId": "5b10ac8d82e05b22cc7d4ef5", "displayName": "Bruno Sample"},
+                "updated": "2026-10-20T17:45:30.000-0300"
+            }
+        }
+    ],
+    "isLast": true
+}

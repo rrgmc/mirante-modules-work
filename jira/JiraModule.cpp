@@ -1,6 +1,7 @@
 // The jira module: Jira issues and issue lists as items. See README.md.
 #include "JiraIssueView.h"
 #include "JiraListView.h"
+#include "JiraLists.h"
 #include "JiraServerType.h"
 #include "JiraSettings.h"
 #include "JiraStatus.h"
@@ -219,7 +220,7 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("jira", "Jira"),
         QCoreApplication::translate("jira", "A table of issues from a preset, such as your open issues or the "
                                             "current sprint, or from a JQL query."),
-        listFields(), settings, nullptr, &createListView));
+        listFields(), settings, &fetchListStatus, &createListView));
 }
 
 } // namespace mirante::modules::jira

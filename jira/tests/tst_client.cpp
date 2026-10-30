@@ -58,6 +58,20 @@ private slots:
         QCOMPARE(JiraClient(server, Deployment::DataCenter).apiRoot(), QStringLiteral("rest/api/2"));
     }
 
+    void issueWithOtherExpandValues()
+    {
+        FakeApiClient server;
+        server.setSynchronous(true);
+        JiraClient(server, Deployment::Cloud)
+            .issue(
+                QStringLiteral("OPS-7"), {}, nullptr, [](const ApiReply &) {},
+                {QStringLiteral("renderedFields"), QStringLiteral("names")});
+        QCOMPARE(server.requestKeys(),
+                 QStringList{FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/issue/OPS-7"),
+                                                query({{QStringLiteral("expand"),
+                                                        QStringLiteral("renderedFields,names")}}))});
+    }
+
     void issue()
     {
         FakeApiClient server;

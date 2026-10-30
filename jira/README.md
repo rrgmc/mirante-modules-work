@@ -12,7 +12,7 @@ Jira issues and issue lists as items. See [item types](../../../docs/item-types.
 
 The module calls itself "Jira" and describes itself as: "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. Since M5 the issue types report [status](#status). The other types still show a placeholder; their views arrive in a later milestone.
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. Since M5 the issue types report [status](#status). Since M6 the list reports status. The summary and the list still show a placeholder.
 
 ## Pages
 
@@ -80,24 +80,45 @@ Each profile has its own values, stored in its entry of `workspace.mirante` unde
 
 | Method | Request |
 |---|---|
-| `issue(key, fields)` | `GET issue/<key>?fields=<fields>&expand=renderedFields`. Without fields, Jira's default fields. |
+| `issue(key, fields, expand)` | `GET issue/<key>?fields=<fields>&expand=<expand>`. Without fields, all of them. `expand` is `renderedFields` unless given. |
 | `search(jql, options)` | Cloud: `GET search/jql` with `jql`, `fields` and `maxResults`, then `nextPageToken` until `isLast`. Data Center: `GET search` with `startAt` until `total`. The pages are joined into `{"issues": [...]}`, up to `maxRows` issues (100 by default). |
 | `transitions(key)` | `GET issue/<key>/transitions` |
 | `transition(key, id)` | `POST issue/<key>/transitions` with `{"transition": {"id": <id>}}` |
 | `comment(key, text)` | `POST issue/<key>/comment`. Cloud gets the text as an Atlassian Document Format (ADF) body: a paragraph for each block between blank lines, and a hard break between lines. Data Center gets it as plain text. |
 | `myself()` | `GET myself` |
 
-The key is encoded as one path segment. A `+` or `%` in a query value is encoded, so the server reads the JQL as typed. The action methods, `transition` and `comment`, are tested but not called before M6, which adds their buttons. The tests are in `tests/tst_client.cpp`.
+The key is encoded as one path segment. A `+` or `%` in a query value is encoded, so the server reads the JQL as typed. The tests are in `tests/tst_client.cpp`.
 
 ## Status
 
-`jira.issue.summary` and `jira.issue.page` report status, in `JiraStatus.cpp`. `jira.list` reports none in M5. See [decision 0061](../../../docs/decisions/0061-attention-from-status-of-any-rendering.md).
+All three types report status, in `JiraStatus.cpp` and `JiraLists.cpp`. See decisions [0061](../../../docs/decisions/0061-attention-from-status-of-any-rendering.md) and [0067](../../../docs/decisions/0067-lists-report-status.md).
 
-- **Request.** One `issue()` call with the fields `summary`, `status`, `assignee`, `priority`, `issuetype` and `updated`.
+**An issue:**
+
+- **Request.** `jira.issue.page` makes one `issue()` call with the fields `summary`, `status`, `assignee`, `priority`, `issuetype` and `updated`. `jira.issue.summary` makes one with all fields and `expand=renderedFields,names`.
 - **Summary.** The status and the assignee, such as "In Review · assigned to Ana", or "Done · unassigned".
-- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`, for the M6 summary.
+- **Data.** `key`, `summary`, `status`, `statusId`, `statusCategory`, `assignee`, `priority`, `issueType` and `updated`. For `jira.issue.summary` also `issue`, the whole answer.
+- **Sprint.** `sprintOf()` reads the field whose entry in `names` is "Sprint", because its id differs per site. It takes the open sprint, else the last one. Jira Cloud gives objects, and older Data Center gives text such as `...Sprint@1f[id=4,state=ACTIVE,name=Week 44,...]`.
 - **Attention.** "Status changed to <name>", with the key `status:<status id>`, which clears when seen. It is reported on every fetch. The core records it as seen on the item's first status, so it counts only after the status changes.
 - **Closed.** When the status category is `done`.
 - **Errors.** A failed reply becomes its state with `statusFromReply()`. Without an issue key, the job ends with an error and sends nothing.
 
-The tests are in `tests/tst_status.cpp`, on responses recorded from both deployments in `tests/data/`, with names replaced.
+**A list:**
+
+- **Query.** `listJql()` in `JiraLists.cpp`, from the preset:
+
+  | Preset | JQL |
+  |---|---|
+  | `myOpen`, or none | `assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC` |
+  | `currentSprint` | `project = "<key>" AND sprint in openSprints() ORDER BY rank` |
+  | `recentlyUpdated` | `project = "<key>" AND updated >= -7d ORDER BY updated DESC` |
+  | `jql` | the `jql` field |
+
+  The project key is written as a JQL string, with its quotes and backslashes escaped, so a value cannot change the query.
+- **Request.** One `search()` with the fields `summary`, `status`, `assignee` and `updated`, up to 100 rows.
+- **Summary.** "12 issues", "1 issue", or "100+ issues" at the row limit.
+- **Data.** `rows`, the issues as Jira gives them, and `total`, their number.
+- **Attention and closed.** Neither: no reasons, and `closed` stays unset.
+- **Missing values.** Without a project key, the two project presets finish with `State::None` and "Set the Jira project key in the project's settings." An empty `jql` finishes the same way with "Set the JQL query in the item's settings." Neither sends a request.
+
+The tests are in `tests/tst_status.cpp` and `tests/tst_list_jql.cpp`, on responses from both deployments in `tests/data/`, with made-up names.

@@ -1,0 +1,38 @@
+{
+    "expand": "schema,names",
+    "startAt": 0,
+    "maxResults": 50,
+    "total": 3,
+    "issues": [
+        {
+            "id": "220311",
+            "key": "INFRA-1203",
+            "fields": {
+                "summary": "Upgrade the staging database",
+                "status": {"name": "Done", "id": "10001", "statusCategory": {"id": 3, "key": "done", "name": "Done"}},
+                "assignee": null,
+                "updated": "2026-10-27T09:41:52.000+0000"
+            }
+        },
+        {
+            "id": "220312",
+            "key": "INFRA-1204",
+            "fields": {
+                "summary": "Check the replication lag",
+                "status": {"name": "In Progress", "id": "3", "statusCategory": {"id": 4, "key": "indeterminate", "name": "In Progress"}},
+                "assignee": {"name": "csample", "displayName": "Carla Sample"},
+                "updated": "2026-10-28T11:02:00.000+0000"
+            }
+        },
+        {
+            "id": "220313",
+            "key": "INFRA-1205",
+            "fields": {
+                "summary": "Retire the old proxy",
+                "status": {"name": "Open", "id": "1", "statusCategory": {"id": 2, "key": "new", "name": "To Do"}},
+                "assignee": null,
+                "updated": "2026-10-26T08:30:00.000+0000"
+            }
+        }
+    ]
+}
