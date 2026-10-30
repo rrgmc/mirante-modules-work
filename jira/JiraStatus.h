@@ -18,5 +18,8 @@ ItemStatus issueStatus(const QJsonObject &issue);
 // Fetches the issue named by the job's "key" and finishes the job with its
 // status.
 void fetchIssueStatus(StatusJob &job);
+// The same for a summary, which asks for all fields, since it also shows the
+// description, comments, sprint and links. A page does not, so it stays cheap.
+void fetchIssueSummaryStatus(StatusJob &job);
 
 } // namespace mirante::modules::jira

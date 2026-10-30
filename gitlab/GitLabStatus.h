@@ -27,6 +27,10 @@ ItemStatus pipelineStatus(const QString &branch, const QJsonObject &pipeline, co
 // request.
 void fetchMergeRequestStatus(StatusJob &job);
 void fetchIssueStatus(StatusJob &job);
+// The same for a summary, which also needs the failed jobs or the latest
+// notes, in its data. A page does not, so it stays cheap.
+void fetchMergeRequestSummaryStatus(StatusJob &job);
+void fetchIssueSummaryStatus(StatusJob &job);
 void fetchPipelineStatus(StatusJob &job);
 
 } // namespace mirante::modules::gitlab

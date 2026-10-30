@@ -85,4 +85,9 @@ void fetchIssueStatus(StatusJob &job)
     });
 }
 
+void fetchIssueSummaryStatus(StatusJob &job)
+{
+    fetchIssueStatus(job);
+}
+
 } // namespace mirante::modules::jira

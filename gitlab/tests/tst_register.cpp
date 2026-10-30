@@ -64,13 +64,20 @@ private slots:
         const QStringList list{QStringLiteral("scope"), QStringLiteral("project"), QStringLiteral("group"),
                                QStringLiteral("preset"), QStringLiteral("filter")};
         QMap<QString, QStringList> expected;
-        expected.insert(QStringLiteral("gitlab.mr.summary"), single);
+        expected.insert(QStringLiteral("gitlab.mr.summary"),
+                        single
+                            + QStringList{QStringLiteral("showPipeline"), QStringLiteral("showApprovals"),
+                                          QStringLiteral("showPeople"), QStringLiteral("showLabels")});
         expected.insert(QStringLiteral("gitlab.mr.page"), single);
-        expected.insert(QStringLiteral("gitlab.mr.list"), list);
+        expected.insert(QStringLiteral("gitlab.mr.list"),
+                        list + QStringList{QStringLiteral("showPipeline"), QStringLiteral("showApprovals")});
         expected.insert(QStringLiteral("gitlab.pipeline"),
                         {QStringLiteral("project"), QStringLiteral("branchSource"), QStringLiteral("branch"),
                          QStringLiteral("iid")});
-        expected.insert(QStringLiteral("gitlab.issue.summary"), single);
+        expected.insert(QStringLiteral("gitlab.issue.summary"),
+                        single
+                            + QStringList{QStringLiteral("showDetails"), QStringLiteral("showLabels"),
+                                          QStringLiteral("showComments")});
         expected.insert(QStringLiteral("gitlab.issue.page"), single);
         expected.insert(QStringLiteral("gitlab.issue.list"), list);
 

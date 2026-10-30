@@ -1,4 +1,6 @@
 // The jira module: Jira issues and issue lists as items. See README.md.
+#include "JiraIssueView.h"
+#include "JiraListView.h"
 #include "JiraServerType.h"
 #include "JiraSettings.h"
 #include "JiraStatus.h"
@@ -20,14 +22,21 @@ namespace mirante::modules::jira {
 
 namespace {
 
+// Fetches one item's status, for ItemType::fetchStatus().
+using FetchStatus = void (*)(StatusJob &job);
+// Makes one placement's view, for ItemType::createView().
+using CreateView = QWidget *(*)(ItemContext &context, QWidget *parent);
+
 // A type with an id, a name, an icon and its configuration fields. All Jira
 // types talk to the site in the General Configuration of the item's profile.
-// The issue types report the issue's status. Native views arrive later.
-class StubItemType : public ItemType
+// A type with a fetch reports status, and one with a view factory shows that
+// view.
+class JiraItemType : public ItemType
 {
 public:
-    StubItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
-                 std::vector<Field> fields, const ModuleSettings &settings, bool issueStatus = false)
+    JiraItemType(const QString &id, const QString &name, const QString &shortName, const QString &description,
+                 std::vector<Field> fields, const ModuleSettings &settings, FetchStatus fetch = nullptr,
+                 CreateView view = nullptr)
         : m_id(id)
         , m_name(name)
         , m_shortName(shortName)
@@ -35,7 +44,8 @@ public:
         , m_icon(QStringLiteral(":/modules/jira/icons/jira.svg"))
         , m_fields(std::move(fields))
         , m_settings(settings)
-        , m_issueStatus(issueStatus)
+        , m_fetch(fetch)
+        , m_view(view)
     {
     }
 
@@ -47,13 +57,18 @@ public:
     std::vector<Field> fields() const override { return m_fields; }
     Rendering rendering() const override { return Rendering::Native; }
 
-    bool hasStatus() const override { return m_issueStatus; }
+    bool hasStatus() const override { return m_fetch != nullptr; }
     void fetchStatus(StatusJob &job) const override
     {
-        if (m_issueStatus)
-            fetchIssueStatus(job);
+        if (m_fetch)
+            m_fetch(job);
         else
             job.finish(ItemStatus());
+    }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        return m_view ? m_view(context, parent) : nullptr;
     }
 
     // An address on the profile's site, or on any site whose addresses look
@@ -75,15 +90,16 @@ private:
     QIcon m_icon;
     std::vector<Field> m_fields;
     const ModuleSettings &m_settings;
-    bool m_issueStatus;
+    FetchStatus m_fetch;
+    CreateView m_view;
 };
 
 // The issue page: a web view of the issue on the Jira site of the item's
 // profile, or a message when the site or the key is missing.
-class PageItemType : public StubItemType
+class PageItemType : public JiraItemType
 {
 public:
-    using StubItemType::StubItemType;
+    using JiraItemType::JiraItemType;
 
     Rendering rendering() const override { return Rendering::Web; }
 
@@ -113,6 +129,32 @@ std::vector<Field> issueFields()
     key.required = true;
     key.placeholder = QStringLiteral("PROJ-123");
     return {key};
+}
+
+// A switch for one section of the summary, on by default. The view also takes
+// it as on when the key is absent. See decision 0066.
+Field sectionField(const QString &key, const QString &label)
+{
+    Field field;
+    field.key = key;
+    field.label = label;
+    field.type = Field::Type::Bool;
+    field.defaultValue = true;
+    return field;
+}
+
+std::vector<Field> summaryFields()
+{
+    std::vector<Field> fields = issueFields();
+    fields.push_back(sectionField(QStringLiteral("showDetails"),
+                                  QCoreApplication::translate("jira", "Show the details")));
+    fields.push_back(sectionField(QStringLiteral("showDescription"),
+                                  QCoreApplication::translate("jira", "Show the description")));
+    fields.push_back(sectionField(QStringLiteral("showComments"),
+                                  QCoreApplication::translate("jira", "Show the comments")));
+    fields.push_back(sectionField(QStringLiteral("showLinks"),
+                                  QCoreApplication::translate("jira", "Show the sub-tasks and links")));
+    return fields;
 }
 
 // A preset, or "jql" for the query in the jql field.
@@ -161,23 +203,23 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.setServerType(std::make_unique<JiraServerType>());
     registrar.addProjectSetting(projectKeyField());
 
-    registrar.addItemType(std::make_unique<StubItemType>(
+    registrar.addItemType(std::make_unique<JiraItemType>(
         QStringLiteral("jira.issue.summary"), QCoreApplication::translate("jira", "Jira Issue (summary)"),
         QCoreApplication::translate("jira", "Jira"),
         QCoreApplication::translate("jira", "A summary of one issue: its status, people, sprint, description and "
                                             "latest comments."),
-        issueFields(), settings, true));
+        summaryFields(), settings, &fetchIssueSummaryStatus, &createIssueView));
     registrar.addItemType(std::make_unique<PageItemType>(
         QStringLiteral("jira.issue.page"), QCoreApplication::translate("jira", "Jira Issue (page)"),
         QCoreApplication::translate("jira", "Jira"),
         QCoreApplication::translate("jira", "The web page of one issue, on the Jira site of the item's profile."),
-        issueFields(), settings, true));
-    registrar.addItemType(std::make_unique<StubItemType>(
+        issueFields(), settings, &fetchIssueStatus));
+    registrar.addItemType(std::make_unique<JiraItemType>(
         QStringLiteral("jira.list"), QCoreApplication::translate("jira", "Jira List"),
         QCoreApplication::translate("jira", "Jira"),
         QCoreApplication::translate("jira", "A table of issues from a preset, such as your open issues or the "
                                             "current sprint, or from a JQL query."),
-        listFields(), settings));
+        listFields(), settings, nullptr, &createListView));
 }
 
 } // namespace mirante::modules::jira
