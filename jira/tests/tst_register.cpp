@@ -119,7 +119,7 @@ private slots:
     }
 
     // The module gives its UUID, version, author and homepage, for Help >
-    // Modules. See docs/decisions/0087-module-identity.md.
+    // Modules. See docs/decisions/0089-module-identity.md.
     void identity()
     {
         mirante::ItemTypeRegistry registry;
