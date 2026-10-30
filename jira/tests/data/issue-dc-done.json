@@ -1,0 +1,39 @@
+{
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "id": "220311",
+    "self": "https://jira.example.org/jira/rest/api/2/issue/220311",
+    "key": "INFRA-1203",
+    "renderedFields": {
+        "summary": null,
+        "updated": "27/Oct/26 9:41 AM"
+    },
+    "fields": {
+        "summary": "Upgrade the staging database",
+        "issuetype": {
+            "self": "https://jira.example.org/jira/rest/api/2/issuetype/3",
+            "id": "3",
+            "name": "Story",
+            "subtask": false
+        },
+        "priority": {
+            "self": "https://jira.example.org/jira/rest/api/2/priority/2",
+            "name": "High",
+            "id": "2"
+        },
+        "assignee": null,
+        "updated": "2026-10-27T09:41:52.000+0000",
+        "status": {
+            "self": "https://jira.example.org/jira/rest/api/2/status/10001",
+            "description": "",
+            "name": "Done",
+            "id": "10001",
+            "statusCategory": {
+                "self": "https://jira.example.org/jira/rest/api/2/statuscategory/3",
+                "id": 3,
+                "key": "done",
+                "colorName": "green",
+                "name": "Done"
+            }
+        }
+    }
+}

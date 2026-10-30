@@ -1,0 +1,10 @@
+{
+    "expand": "schema,names",
+    "startAt": 0,
+    "maxResults": 2,
+    "total": 3,
+    "issues": [
+        {"id": "220311", "key": "INFRA-1203", "fields": {"summary": "Upgrade the staging database"}},
+        {"id": "220312", "key": "INFRA-1204", "fields": {"summary": "Renew the load balancer's certificate"}}
+    ]
+}

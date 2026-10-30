@@ -1,0 +1,9 @@
+{
+    "expand": "schema,names",
+    "startAt": 2,
+    "maxResults": 2,
+    "total": 3,
+    "issues": [
+        {"id": "220320", "key": "INFRA-1212", "fields": {"summary": "Remove the old monitoring agent"}}
+    ]
+}
