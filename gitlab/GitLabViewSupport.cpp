@@ -6,6 +6,7 @@
 #include <mirante/ItemContext.h>
 #include <mirante/widgets/ActionRow.h>
 #include <mirante/widgets/FlowRow.h>
+#include <mirante/widgets/LinkStyle.h>
 
 #include <QDate>
 #include <QDateTime>
@@ -157,8 +158,7 @@ QPushButton *linkButton(const QString &text, const QString &name)
 {
     auto *button = new QPushButton(text);
     button->setObjectName(name);
-    button->setFlat(true);
-    button->setCursor(Qt::PointingHandCursor);
+    widgets::styleAsLink(button);
     return button;
 }
 
@@ -252,7 +252,7 @@ void GitLabSummary::applyField(const QString &section, const QString &field)
 
 void GitLabSummary::addOpenPage()
 {
-    actions()->addAction(kOpenPage, tr("Open page"), tr("Page"), [this] { openPage(); });
+    actions()->addLinkAction(kOpenPage, tr("Open page"), tr("Page"), [this] { openPage(); });
 }
 
 void GitLabSummary::setPageAddress(const QUrl &url)
