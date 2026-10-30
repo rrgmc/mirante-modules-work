@@ -1,0 +1,9 @@
+{
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "id": "220311",
+    "self": "https://jira.example.org/jira/rest/api/2/issue/220311",
+    "key": "INFRA-1203",
+    "fields": {
+        "summary": "Upgrade the staging database"
+    }
+}
