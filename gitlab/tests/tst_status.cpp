@@ -612,15 +612,16 @@ private slots:
         QCOMPARE(pipeline.client.requestKeys(), QStringList{kMergeRequest});
     }
 
-    // The types that name one object report status; the lists do not yet.
-    // fetchStatus() of a registered type runs the module's fetch.
+    // Every type reports status, the lists too. fetchStatus() of a registered
+    // type runs the module's fetch.
     void typesReportStatus()
     {
         mirante::ItemTypeRegistry registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
         const QStringList withStatus{QStringLiteral("gitlab.mr.summary"), QStringLiteral("gitlab.mr.page"),
-                                     QStringLiteral("gitlab.pipeline"), QStringLiteral("gitlab.issue.summary"),
-                                     QStringLiteral("gitlab.issue.page")};
+                                     QStringLiteral("gitlab.mr.list"),    QStringLiteral("gitlab.pipeline"),
+                                     QStringLiteral("gitlab.issue.summary"), QStringLiteral("gitlab.issue.page"),
+                                     QStringLiteral("gitlab.issue.list")};
         for (const mirante::ItemType *type : registry.types())
             QCOMPARE(type->hasStatus(), withStatus.contains(type->id()));
 
@@ -632,10 +633,27 @@ private slots:
         WAIT_FOR_FINISH(job);
         QCOMPARE(job.finished->state, ItemStatus::State::Ok);
 
-        FakeStatusJob list;
-        registry.type(QStringLiteral("gitlab.mr.list")).fetchStatus(list);
-        QCOMPARE(list.finishCount, 1);
-        QCOMPARE(list.finished->state, ItemStatus::State::None);
+        const QJsonObject allOpen{{QStringLiteral("scope"), QStringLiteral("all")},
+                                  {QStringLiteral("preset"), QStringLiteral("allOpen")}};
+        const QString query = QStringLiteral("?state=opened&scope=all&order_by=updated_at&per_page=100");
+
+        FakeStatusJob mergeRequests;
+        mergeRequests.configValues = allOpen;
+        QVERIFY(mergeRequests.client.setJsonFile(QStringLiteral("GET api/v4/merge_requests") + query,
+                                                 dataFile(QStringLiteral("merge_request_list.json"))));
+        registry.type(QStringLiteral("gitlab.mr.list")).fetchStatus(mergeRequests);
+        WAIT_FOR_FINISH(mergeRequests);
+        QCOMPARE(mergeRequests.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(mergeRequests.finished->summary, QStringLiteral("3 merge requests"));
+
+        FakeStatusJob issues;
+        issues.configValues = allOpen;
+        QVERIFY(issues.client.setJsonFile(QStringLiteral("GET api/v4/issues") + query,
+                                          dataFile(QStringLiteral("issue_list.json"))));
+        registry.type(QStringLiteral("gitlab.issue.list")).fetchStatus(issues);
+        WAIT_FOR_FINISH(issues);
+        QCOMPARE(issues.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(issues.finished->summary, QStringLiteral("2 issues"));
     }
 };
 

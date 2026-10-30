@@ -1,33 +1,216 @@
 #include "GitLabLists.h"
 
+#include "GitLabClient.h"
+#include "GitLabSettings.h"
+#include "GitLabUrls.h"
+
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QJsonArray>
+#include <QList>
+#include <QPair>
+
+#include <utility>
+
 namespace mirante::modules::gitlab {
+
+namespace {
+
+// The rows a list asks for. A list that reaches this many may have more.
+constexpr int kMaxRows = 100;
+
+QString tr(const char *text)
+{
+    return QCoreApplication::translate("gitlab", text);
+}
+
+// What a list's configuration points at. problem says what is missing, and is
+// empty when the scope is complete.
+struct ListScope
+{
+    enum class Where { Project, Group, All };
+
+    Where where = Where::All;
+    QString path;     // the project or the group
+    QString problem;
+};
+
+// An absent scope is a project, the first choice of the form.
+ListScope readScope(const QJsonObject &config, const QJsonValue &defaultProject)
+{
+    ListScope scope;
+    const QString name = config.value(QStringLiteral("scope")).toString();
+    if (name.isEmpty() || name == QLatin1String("project")) {
+        scope.where = ListScope::Where::Project;
+        scope.path = projectPath(config, defaultProject);
+        if (scope.path.isEmpty())
+            scope.problem = tr("Set the project in the item's settings.");
+    } else if (name == QLatin1String("group")) {
+        scope.where = ListScope::Where::Group;
+        // projectPath() also tidies a group path, given as the default.
+        scope.path = projectPath({}, config.value(QStringLiteral("group")));
+        if (scope.path.isEmpty())
+            scope.problem = tr("Set the group in the item's settings.");
+    } else if (name != QLatin1String("all")) {
+        scope.problem = tr("Set the scope in the item's settings.");
+    }
+    return scope;
+}
+
+void requestRows(const GitLabClient &client, ListKind kind, const ListScope &scope, const QUrlQuery &query,
+                 GitLabClient::Done done)
+{
+    const bool mergeRequests = kind == ListKind::MergeRequests;
+    switch (scope.where) {
+    case ListScope::Where::Project:
+        if (mergeRequests)
+            client.projectMergeRequests(scope.path, query, kMaxRows, std::move(done));
+        else
+            client.projectIssues(scope.path, query, kMaxRows, std::move(done));
+        break;
+    case ListScope::Where::Group:
+        if (mergeRequests)
+            client.groupMergeRequests(scope.path, query, kMaxRows, std::move(done));
+        else
+            client.groupIssues(scope.path, query, kMaxRows, std::move(done));
+        break;
+    case ListScope::Where::All:
+        if (mergeRequests)
+            client.mergeRequests(query, kMaxRows, std::move(done));
+        else
+            client.issues(query, kMaxRows, std::move(done));
+        break;
+    }
+}
+
+QString listSummary(ListKind kind, int total)
+{
+    const bool mergeRequests = kind == ListKind::MergeRequests;
+    if (total >= kMaxRows)
+        return (mergeRequests ? tr("%1+ merge requests") : tr("%1+ issues")).arg(kMaxRows);
+    if (total == 1)
+        return mergeRequests ? tr("1 merge request") : tr("1 issue");
+    return (mergeRequests ? tr("%1 merge requests") : tr("%1 issues")).arg(total);
+}
+
+// No attention, and closed stays unset, so a list never counts towards a task
+// being done. See decision 0067.
+ItemStatus listStatus(ListKind kind, const QJsonArray &rows)
+{
+    const int total = int(rows.size());
+    ItemStatus status;
+    status.state = ItemStatus::State::Ok;
+    status.updatedAt = QDateTime::currentDateTimeUtc();
+    status.summary = listSummary(kind, total);
+    status.data = QJsonObject{{QStringLiteral("rows"), rows}, {QStringLiteral("total"), total}};
+    return status;
+}
+
+void fetchList(StatusJob &job, ListKind kind)
+{
+    const QJsonObject config = job.config();
+    const ListScope scope = readScope(config, job.projectSetting(kProjectSettingKey));
+    if (!scope.problem.isEmpty()) {
+        ItemStatus status;
+        status.message = scope.problem;
+        job.finish(status);
+        return;
+    }
+
+    const QString preset = config.value(QStringLiteral("preset")).toString();
+    const QString filter = config.value(QStringLiteral("filter")).toString();
+    StatusJob *target = &job;
+    const GitLabClient client(job.server(), job.owner());
+    const GitLabClient::Done finishWithRows = [target, kind](const ApiReply &reply) {
+        target->finish(reply.ok() ? listStatus(kind, reply.json.array()) : statusFromReply(reply));
+    };
+
+    if (kind == ListKind::MergeRequests && preset == QLatin1String("reviewRequested")) {
+        client.currentUser([=](const ApiReply &user) {
+            if (!user.ok()) {
+                target->finish(statusFromReply(user));
+                return;
+            }
+            const qint64 userId = user.json.object().value(QStringLiteral("id")).toInteger();
+            requestRows(client, kind, scope, listQuery(kind, preset, userId, filter), finishWithRows);
+        });
+        return;
+    }
+    requestRows(client, kind, scope, listQuery(kind, preset, 0, filter), finishWithRows);
+}
+
+} // namespace
 
 QUrlQuery listQuery(ListKind kind, const QString &preset, qint64 userId, const QString &filter)
 {
-    Q_UNUSED(kind)
-    Q_UNUSED(preset)
-    Q_UNUSED(userId)
-    Q_UNUSED(filter)
-    return {};
+    const bool mergeRequests = kind == ListKind::MergeRequests;
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("state"), QStringLiteral("opened"));
+    if (mergeRequests && preset == QLatin1String("reviewRequested")) {
+        query.addQueryItem(QStringLiteral("scope"), QStringLiteral("all"));
+        query.addQueryItem(QStringLiteral("reviewer_id"), QString::number(userId));
+    } else if (preset == QLatin1String("allOpen")) {
+        query.addQueryItem(QStringLiteral("scope"), QStringLiteral("all"));
+    } else if (preset == QLatin1String("createdByMe")) {
+        query.addQueryItem(QStringLiteral("scope"), QStringLiteral("created_by_me"));
+    } else if (preset == QLatin1String("assignedToMe")) {
+        query.addQueryItem(QStringLiteral("scope"), QStringLiteral("assigned_to_me"));
+    } else {
+        // Any other preset is the first choice of the type's form.
+        query.addQueryItem(QStringLiteral("scope"),
+                           mergeRequests ? QStringLiteral("created_by_me") : QStringLiteral("assigned_to_me"));
+    }
+    query.addQueryItem(QStringLiteral("order_by"), QStringLiteral("updated_at"));
+
+    // Removed first, so that a name the filter repeats, as in labels[]=a&labels[]=b,
+    // keeps all its values.
+    const QList<QPair<QString, QString>> custom = QUrlQuery(filter.trimmed()).queryItems(QUrl::FullyEncoded);
+    for (const QPair<QString, QString> &item : custom)
+        query.removeAllQueryItems(item.first);
+    for (const QPair<QString, QString> &item : custom) {
+        if (!item.first.isEmpty())
+            query.addQueryItem(item.first, item.second);
+    }
+    return query;
 }
 
 QUrl listWebUrl(ListKind kind, const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)
 {
-    Q_UNUSED(kind)
-    Q_UNUSED(baseUrl)
-    Q_UNUSED(config)
-    Q_UNUSED(defaultProject)
-    return {};
+    const ListScope scope = readScope(config, defaultProject);
+    if (!scope.problem.isEmpty() || baseUrl.isEmpty())
+        return {};
+
+    QString path = baseUrl.path();
+    while (path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    const QString page = kind == ListKind::MergeRequests ? QStringLiteral("merge_requests") : QStringLiteral("issues");
+    switch (scope.where) {
+    case ListScope::Where::Project:
+        path += QLatin1Char('/') + scope.path + QStringLiteral("/-/") + page;
+        break;
+    case ListScope::Where::Group:
+        path += QStringLiteral("/groups/") + scope.path + QStringLiteral("/-/") + page;
+        break;
+    case ListScope::Where::All:
+        path += QStringLiteral("/dashboard/") + page;
+        break;
+    }
+
+    QUrl url = baseUrl;
+    url.setPath(path);
+    url.setQuery(QString());
+    url.setFragment(QString());
+    return url;
 }
 
 void fetchMergeRequestListStatus(StatusJob &job)
 {
-    job.finish(ItemStatus());
+    fetchList(job, ListKind::MergeRequests);
 }
 
 void fetchIssueListStatus(StatusJob &job)
 {
-    job.finish(ItemStatus());
+    fetchList(job, ListKind::Issues);
 }
 
 } // namespace mirante::modules::gitlab

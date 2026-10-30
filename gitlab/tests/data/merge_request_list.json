@@ -1,0 +1,97 @@
+[
+  {
+    "id": 300042,
+    "iid": 42,
+    "project_id": 77,
+    "title": "Add the retry button to the pipeline panel",
+    "state": "opened",
+    "draft": false,
+    "created_at": "2026-10-20T09:12:44.512Z",
+    "updated_at": "2026-10-28T16:03:10.118Z",
+    "target_branch": "main",
+    "source_branch": "feature/retry-button",
+    "author": {
+      "id": 2002,
+      "username": "bruno.author",
+      "name": "Bruno Author",
+      "state": "active",
+      "web_url": "https://gitlab.example/bruno.author"
+    },
+    "assignees": [],
+    "reviewers": [
+      {
+        "id": 1001,
+        "username": "ana.reviewer",
+        "name": "Ana Reviewer",
+        "state": "active",
+        "web_url": "https://gitlab.example/ana.reviewer"
+      }
+    ],
+    "labels": ["frontend", "ci"],
+    "has_conflicts": false,
+    "references": {
+      "short": "!42",
+      "relative": "!42",
+      "full": "acme/backend!42"
+    },
+    "web_url": "https://gitlab.example/acme/backend/-/merge_requests/42"
+  },
+  {
+    "id": 300041,
+    "iid": 41,
+    "project_id": 77,
+    "title": "Keep the sort order after a refresh",
+    "state": "opened",
+    "draft": true,
+    "created_at": "2026-10-19T11:40:02.000Z",
+    "updated_at": "2026-10-27T08:20:31.000Z",
+    "target_branch": "main",
+    "source_branch": "fix/sort-order",
+    "author": {
+      "id": 3003,
+      "username": "carla.reviewer",
+      "name": "Carla Reviewer",
+      "state": "active",
+      "web_url": "https://gitlab.example/carla.reviewer"
+    },
+    "assignees": [],
+    "reviewers": [],
+    "labels": [],
+    "has_conflicts": true,
+    "references": {
+      "short": "!41",
+      "relative": "!41",
+      "full": "acme/backend!41"
+    },
+    "web_url": "https://gitlab.example/acme/backend/-/merge_requests/41"
+  },
+  {
+    "id": 310008,
+    "iid": 8,
+    "project_id": 78,
+    "title": "Update the page footer",
+    "state": "opened",
+    "draft": false,
+    "created_at": "2026-10-15T14:05:17.000Z",
+    "updated_at": "2026-10-21T10:11:12.000Z",
+    "target_branch": "main",
+    "source_branch": "docs/footer",
+    "author": {
+      "id": 2002,
+      "username": "bruno.author",
+      "name": "Bruno Author",
+      "state": "active",
+      "web_url": "https://gitlab.example/bruno.author"
+    },
+    "assignees": [],
+    "reviewers": [],
+    "labels": ["docs"],
+    "has_conflicts": false,
+    "references": {
+      "short": "!8",
+      "relative": "!8",
+      "full": "acme/website!8"
+    },
+    "web_url": "https://gitlab.example/acme/website/-/merge_requests/8"
+  }
+]

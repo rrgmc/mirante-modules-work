@@ -1,0 +1,71 @@
+[
+  {
+    "id": 500007,
+    "iid": 7,
+    "project_id": 77,
+    "title": "The pipeline panel does not show manual jobs",
+    "state": "opened",
+    "created_at": "2026-10-10T07:45:00.000Z",
+    "updated_at": "2026-10-26T12:00:00.000Z",
+    "closed_at": null,
+    "labels": ["bug"],
+    "milestone": {
+      "id": 12,
+      "iid": 3,
+      "title": "M6",
+      "state": "active"
+    },
+    "assignees": [
+      {
+        "id": 1001,
+        "username": "ana.reviewer",
+        "name": "Ana Reviewer",
+        "state": "active",
+        "web_url": "https://gitlab.example/ana.reviewer"
+      }
+    ],
+    "author": {
+      "id": 2002,
+      "username": "bruno.author",
+      "name": "Bruno Author",
+      "state": "active",
+      "web_url": "https://gitlab.example/bruno.author"
+    },
+    "due_date": "2026-11-15",
+    "user_notes_count": 3,
+    "references": {
+      "short": "#7",
+      "relative": "#7",
+      "full": "acme/backend#7"
+    },
+    "web_url": "https://gitlab.example/acme/backend/-/issues/7"
+  },
+  {
+    "id": 510003,
+    "iid": 3,
+    "project_id": 78,
+    "title": "The footer overlaps the menu on a narrow window",
+    "state": "opened",
+    "created_at": "2026-10-05T16:30:00.000Z",
+    "updated_at": "2026-10-18T09:45:00.000Z",
+    "closed_at": null,
+    "labels": [],
+    "milestone": null,
+    "assignees": [],
+    "author": {
+      "id": 3003,
+      "username": "carla.reviewer",
+      "name": "Carla Reviewer",
+      "state": "active",
+      "web_url": "https://gitlab.example/carla.reviewer"
+    },
+    "due_date": null,
+    "user_notes_count": 0,
+    "references": {
+      "short": "#3",
+      "relative": "#3",
+      "full": "acme/website#3"
+    },
+    "web_url": "https://gitlab.example/acme/website/-/issues/3"
+  }
+]
