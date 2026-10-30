@@ -1,0 +1,44 @@
+[
+  {
+    "id": 70001,
+    "name": "build",
+    "stage": "build",
+    "status": "success",
+    "allow_failure": false,
+    "duration": 212.4,
+    "ref": "feature/retry-button",
+    "web_url": "https://gitlab.example/acme/backend/-/jobs/70001"
+  },
+  {
+    "id": 70002,
+    "name": "test:unit",
+    "stage": "test",
+    "status": "failed",
+    "allow_failure": false,
+    "duration": 301.9,
+    "failure_reason": "script_failure",
+    "ref": "feature/retry-button",
+    "web_url": "https://gitlab.example/acme/backend/-/jobs/70002"
+  },
+  {
+    "id": 70003,
+    "name": "test:lint",
+    "stage": "test",
+    "status": "failed",
+    "allow_failure": true,
+    "duration": 40.2,
+    "failure_reason": "script_failure",
+    "ref": "feature/retry-button",
+    "web_url": "https://gitlab.example/acme/backend/-/jobs/70003"
+  },
+  {
+    "id": 70004,
+    "name": "deploy:review",
+    "stage": "deploy",
+    "status": "skipped",
+    "allow_failure": false,
+    "duration": null,
+    "ref": "feature/retry-button",
+    "web_url": "https://gitlab.example/acme/backend/-/jobs/70004"
+  }
+]

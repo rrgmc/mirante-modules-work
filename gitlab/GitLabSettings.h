@@ -2,6 +2,7 @@
 // values. See README.md#settings.
 #pragma once
 
+#include <mirante/ApiClient.h>
 #include <mirante/Fields.h>
 #include <mirante/ModuleSettings.h>
 
@@ -26,6 +27,9 @@ inline const QString kBaseUrlKey = QStringLiteral("baseUrl");
 inline const QString kTokenKey = QStringLiteral("token");
 // The base URL used when the profile names none.
 inline const QString kDefaultBaseUrl = QStringLiteral("https://gitlab.com");
+// The key of the project setting with the default project path, kept in a
+// project's moduleSettings.gitlab.project.
+inline const QString kProjectSettingKey = QStringLiteral("project");
 
 // The screen: the server's base URL, its token, and a list of project paths,
 // offered where an item asks for one.
@@ -35,6 +39,21 @@ std::unique_ptr<SettingsScreen> makeGeneralScreen();
 // none is set. A base URL that is not an http or https address gives an empty
 // URL.
 QUrl baseUrlOf(const QJsonObject &general);
+
+// The GitLab server of a profile: the General Configuration screen, its base
+// URL and its token, sent in the PRIVATE-TOKEN header.
+class GitLabServerType : public ServerType
+{
+public:
+    QString screenId() const override { return kGeneralScreen; }
+    QString tokenKey() const override { return kTokenKey; }
+    QUrl baseUrl(const QJsonObject &values) const override { return baseUrlOf(values); }
+    void authorize(QNetworkRequest &request, const QString &token, const QJsonObject &values) const override;
+};
+
+// The project setting: the project path that items use when their own
+// "project" is empty.
+Field makeProjectSetting();
 
 // The project paths of the screen's values, in their order. Each is trimmed,
 // without slashes at its start and end. Empty and repeated paths are left out.

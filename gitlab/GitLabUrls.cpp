@@ -19,21 +19,6 @@ QString trimSlashes(QString text)
     return text;
 }
 
-// The "iid" key as a positive number, or 0. The form stores a number, but a
-// file edited by hand may hold the number as text.
-qint64 itemNumber(const QJsonObject &config)
-{
-    const QJsonValue value = config.value(QStringLiteral("iid"));
-    if (value.isDouble())
-        return value.toInteger() > 0 ? value.toInteger() : 0;
-    if (value.isString()) {
-        bool ok = false;
-        const qint64 number = value.toString().trimmed().toLongLong(&ok);
-        return ok && number > 0 ? number : 0;
-    }
-    return 0;
-}
-
 // <baseUrl>/<project>/-/<kind>/<iid>, without doubling a slash at the end of baseUrl.
 QUrl pageUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject,
              const QString &kind)
@@ -63,6 +48,19 @@ QString projectPath(const QJsonObject &config, const QJsonValue &defaultProject)
     if (!project.isEmpty())
         return project;
     return trimSlashes(defaultProject.toString());
+}
+
+qint64 itemNumber(const QJsonObject &config)
+{
+    const QJsonValue value = config.value(QStringLiteral("iid"));
+    if (value.isDouble())
+        return value.toInteger() > 0 ? value.toInteger() : 0;
+    if (value.isString()) {
+        bool ok = false;
+        const qint64 number = value.toString().trimmed().toLongLong(&ok);
+        return ok && number > 0 ? number : 0;
+    }
+    return 0;
 }
 
 QUrl mergeRequestUrl(const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)
