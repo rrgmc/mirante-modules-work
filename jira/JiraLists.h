@@ -3,6 +3,7 @@
 
 #include <mirante/Status.h>
 
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
 #include <QUrl>
@@ -19,6 +20,12 @@ std::optional<QString> listJql(const QString &preset, const QString &jql, const 
 // The search's page on the site, <baseUrl>/issues/?jql=<query>. Empty without
 // a base URL.
 QUrl listWebUrl(const QUrl &baseUrl, const QString &jql);
+
+// The item's "limit", the rows a list fetches, and its "pageSize", the rows its
+// view shows at a time. Items made before these fields lack them, so an absent
+// value, or one below 1, gives the default: 100 and 50.
+int listLimit(const QJsonObject &config);
+int listPageSize(const QJsonObject &config);
 
 // The fetch of ItemType::fetchStatus(). data holds rows, the issues as Jira
 // gives them, and total, their number.

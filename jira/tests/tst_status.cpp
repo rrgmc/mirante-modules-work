@@ -338,6 +338,45 @@ private slots:
         QCOMPARE(job.finished->data.value(QStringLiteral("total")).toInt(), atLimit ? 100 : rows);
     }
 
+    // The item's limit is the rows asked for, and the summary's number. An absent
+    // limit is covered above.
+    void listLimitIsTheRowsAskedFor_data()
+    {
+        QTest::addColumn<QJsonValue>("limit");
+        QTest::addColumn<QString>("maxResults");
+        QTest::addColumn<QString>("summary");
+        QTest::newRow("small") << QJsonValue(2) << QStringLiteral("2") << QStringLiteral("2+ issues");
+        QTest::newRow("zero uses the default") << QJsonValue(0) << QStringLiteral("50") << QStringLiteral("2 issues");
+        QTest::newRow("negative uses the default") << QJsonValue(-1) << QStringLiteral("50") << QStringLiteral("2 issues");
+    }
+
+    void listLimitIsTheRowsAskedFor()
+    {
+        QFETCH(QJsonValue, limit);
+        QFETCH(QString, maxResults);
+        QFETCH(QString, summary);
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("jql"), QStringLiteral("project = OPS"));
+        query.addQueryItem(QStringLiteral("fields"), QStringLiteral("summary,status,assignee,updated"));
+        query.addQueryItem(QStringLiteral("maxResults"), maxResults);
+        query.addQueryItem(QStringLiteral("startAt"), QStringLiteral("0"));
+
+        FakeStatusJob job;
+        setDataCenter(job, QString());
+        job.configValues = {{QStringLiteral("preset"), QStringLiteral("jql")},
+                            {QStringLiteral("jql"), QStringLiteral("project = OPS")},
+                            {QStringLiteral("limit"), limit}};
+        const QJsonArray issues{QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-1")}},
+                                QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-2")}}};
+        job.client.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/2/search"), query),
+                           QJsonDocument(QJsonObject{{QStringLiteral("issues"), issues}, {QStringLiteral("total"), 2}}));
+
+        type(QStringLiteral("jira.list")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->summary, summary);
+    }
+
     void listWithoutWhatItNeedsSendsNothing_data()
     {
         QTest::addColumn<QString>("preset");

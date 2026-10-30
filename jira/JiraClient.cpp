@@ -1,8 +1,8 @@
 #include "JiraClient.h"
 
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
-#include <QRegularExpression>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -133,59 +133,9 @@ void JiraClient::search(const QString &jql, const SearchOptions &options, QObjec
     nextPage(search, 0, QString());
 }
 
-void JiraClient::transitions(const QString &key, QObject *receiver, JiraDone done) const
-{
-    m_server.get(issuePath(key) + QStringLiteral("/transitions"), QUrlQuery(), GetOptions(), receiver,
-                 std::move(done));
-}
-
-void JiraClient::transition(const QString &key, const QString &transitionId, QObject *receiver,
-                            JiraDone done) const
-{
-    const QJsonObject body{{QStringLiteral("transition"), QJsonObject{{QStringLiteral("id"), transitionId}}}};
-    m_server.post(issuePath(key) + QStringLiteral("/transitions"), QJsonDocument(body), receiver, std::move(done));
-}
-
-void JiraClient::comment(const QString &key, const QString &text, QObject *receiver, JiraDone done) const
-{
-    m_server.post(issuePath(key) + QStringLiteral("/comment"), commentBody(m_deployment, text), receiver,
-                  std::move(done));
-}
-
 void JiraClient::myself(QObject *receiver, JiraDone done) const
 {
     m_server.get(apiRoot() + QStringLiteral("/myself"), QUrlQuery(), GetOptions(), receiver, std::move(done));
-}
-
-QJsonDocument JiraClient::commentBody(Deployment deployment, const QString &text)
-{
-    if (deployment == Deployment::DataCenter)
-        return QJsonDocument(QJsonObject{{QStringLiteral("body"), text}});
-
-    // A paragraph for each block of lines between blank lines, and a hard
-    // break between the lines of a block.
-    static const QRegularExpression blankLines(QStringLiteral("\\n[ \\t]*\\n\\s*"));
-    QString normalised = text;
-    normalised.replace(QLatin1String("\r\n"), QLatin1String("\n"));
-    QJsonArray paragraphs;
-    const QStringList blocks = normalised.trimmed().split(blankLines, Qt::SkipEmptyParts);
-    for (const QString &block : blocks) {
-        QJsonArray content;
-        const QStringList lines = block.split(QLatin1Char('\n'));
-        for (qsizetype i = 0; i < lines.size(); ++i) {
-            if (i > 0)
-                content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("hardBreak")}});
-            if (!lines.at(i).isEmpty())
-                content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                                           {QStringLiteral("text"), lines.at(i)}});
-        }
-        paragraphs.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("paragraph")},
-                                      {QStringLiteral("content"), content}});
-    }
-    const QJsonObject doc{{QStringLiteral("type"), QStringLiteral("doc")},
-                          {QStringLiteral("version"), 1},
-                          {QStringLiteral("content"), paragraphs}};
-    return QJsonDocument(QJsonObject{{QStringLiteral("body"), doc}});
 }
 
 } // namespace mirante::modules::jira

@@ -60,7 +60,8 @@ private slots:
                         {QStringLiteral("key"), QStringLiteral("showDetails"), QStringLiteral("showDescription"),
                          QStringLiteral("showComments"), QStringLiteral("showLinks")});
         expected.insert(QStringLiteral("jira.issue.page"), {QStringLiteral("key")});
-        expected.insert(QStringLiteral("jira.list"), {QStringLiteral("preset"), QStringLiteral("jql")});
+        expected.insert(QStringLiteral("jira.list"), {QStringLiteral("preset"), QStringLiteral("jql"),
+                                                      QStringLiteral("limit"), QStringLiteral("pageSize")});
 
         for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
             const mirante::ItemType &type = registry.type(it.key());

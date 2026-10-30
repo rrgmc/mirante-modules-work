@@ -12,8 +12,8 @@ namespace mirante::modules::jira {
 
 namespace {
 
-// The rows a list asks for. A list that reaches this many may have more.
-constexpr int kMaxRows = 100;
+constexpr int kDefaultLimit = 100;
+constexpr int kDefaultPageSize = 50;
 
 const QString kJqlPreset = QStringLiteral("jql");
 
@@ -27,10 +27,11 @@ QString quotedJql(QString text)
     return QLatin1Char('"') + text + QLatin1Char('"');
 }
 
-QString listSummary(int total)
+// A list that reaches its limit may have more.
+QString listSummary(int total, int limit)
 {
-    if (total >= kMaxRows)
-        return QCoreApplication::translate("jira", "%1+ issues").arg(kMaxRows);
+    if (total >= limit)
+        return QCoreApplication::translate("jira", "%1+ issues").arg(limit);
     if (total == 1)
         return QCoreApplication::translate("jira", "1 issue");
     return QCoreApplication::translate("jira", "%1 issues").arg(total);
@@ -38,15 +39,22 @@ QString listSummary(int total)
 
 // No attention, and closed stays unset, so a list never counts towards a task
 // being done. See decision 0067.
-ItemStatus listStatus(const QJsonArray &rows)
+ItemStatus listStatus(const QJsonArray &rows, int limit)
 {
     const int total = int(rows.size());
     ItemStatus status;
     status.state = ItemStatus::State::Ok;
     status.updatedAt = QDateTime::currentDateTimeUtc();
-    status.summary = listSummary(total);
+    status.summary = listSummary(total, limit);
     status.data = QJsonObject{{QStringLiteral("rows"), rows}, {QStringLiteral("total"), total}};
     return status;
+}
+
+// A positive whole number from the configuration, else the default.
+int positiveValue(const QJsonObject &config, const QString &key, int fallback)
+{
+    const int value = config.value(key).toInt(fallback);
+    return value < 1 ? fallback : value;
 }
 
 } // namespace
@@ -90,6 +98,16 @@ QUrl listWebUrl(const QUrl &baseUrl, const QString &jql)
     return url;
 }
 
+int listLimit(const QJsonObject &config)
+{
+    return positiveValue(config, QStringLiteral("limit"), kDefaultLimit);
+}
+
+int listPageSize(const QJsonObject &config)
+{
+    return positiveValue(config, QStringLiteral("pageSize"), kDefaultPageSize);
+}
+
 void fetchListStatus(StatusJob &job)
 {
     const QJsonObject config = job.config();
@@ -109,12 +127,12 @@ void fetchListStatus(StatusJob &job)
     SearchOptions options;
     options.fields = QStringList{QStringLiteral("summary"), QStringLiteral("status"), QStringLiteral("assignee"),
                                  QStringLiteral("updated")};
-    options.maxRows = kMaxRows;
+    options.maxRows = listLimit(config);
 
     const JiraClient client(job.server(), deploymentOf(job.moduleSettings(kGeneralScreen)));
     StatusJob *owner = &job;
-    client.search(*jql, options, job.owner(), [owner](const ApiReply &reply) {
-        owner->finish(reply.ok() ? listStatus(reply.json.object().value(QStringLiteral("issues")).toArray())
+    client.search(*jql, options, job.owner(), [owner, limit = options.maxRows](const ApiReply &reply) {
+        owner->finish(reply.ok() ? listStatus(reply.json.object().value(QStringLiteral("issues")).toArray(), limit)
                                  : statusFromReply(reply));
     });
 }

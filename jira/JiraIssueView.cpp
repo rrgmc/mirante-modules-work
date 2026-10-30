@@ -1,6 +1,5 @@
 #include "JiraIssueView.h"
 
-#include "JiraClient.h"
 #include "JiraSettings.h"
 #include "JiraStatus.h"
 #include "JiraUrls.h"
@@ -8,7 +7,6 @@
 #include <mirante/ItemContext.h>
 #include <mirante/Status.h>
 #include <mirante/widgets/ActionRow.h>
-#include <mirante/widgets/CommentDialog.h>
 #include <mirante/widgets/FlowRow.h>
 #include <mirante/widgets/SummaryView.h>
 
@@ -26,8 +24,6 @@
 #include <QLabel>
 #include <QList>
 #include <QLocale>
-#include <QMenu>
-#include <QPointer>
 #include <QScrollBar>
 #include <QString>
 #include <QTextBrowser>
@@ -38,9 +34,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <functional>
-#include <optional>
-#include <utility>
 
 namespace mirante::modules::jira {
 
@@ -49,8 +42,6 @@ namespace {
 // How many comments the section shows, newest first.
 constexpr int kLatestComments = 5;
 
-const QString kChangeStatus = QStringLiteral("changeStatus");
-const QString kComment = QStringLiteral("comment");
 const QString kOpenPage = QStringLiteral("openPage");
 
 const QString kDetails = QStringLiteral("details");
@@ -63,7 +54,7 @@ QString trJira(const char *text)
     return QCoreApplication::translate("jira", text);
 }
 
-// A text from a server as a menu entry or a button, where "&" marks a shortcut.
+// A text from a server as a button, where "&" marks a shortcut.
 QString withoutShortcuts(QString text)
 {
     return text.replace(QLatin1Char('&'), QLatin1String("&&"));
@@ -194,92 +185,35 @@ QList<IssueRef> readRefs(const QJsonObject &fields)
     return refs;
 }
 
-// The summary of one issue. A view draws from the item's status; a preview has
-// no status of its own, so it reads the issue through the server, and reads it
-// again after an action. See decision 0068.
+// The summary of one issue, drawn from the item's status. See decision 0070.
 class IssueView : public widgets::SummaryView
 {
 public:
-    IssueView(ItemContext &context, const QString &previewKey, QWidget *parent)
+    IssueView(ItemContext &context, QWidget *parent)
         : widgets::SummaryView(parent)
         , m_context(context)
-        , m_previewKey(previewKey)
-        , m_source(previewKey.isEmpty() ? context.status() : nullptr)
     {
         m_base = baseUrlOf(context.moduleSettings(kGeneralScreen));
 
-        actions()->addMenuAction(kChangeStatus, trJira("Change status"), trJira("Status"),
-                                 [this](QMenu &menu) { fillTransitions(menu); });
-        actions()->addAction(kComment, trJira("Comment"), QString(), [this] { addComment(); });
         actions()->addAction(kOpenPage, trJira("Open page"), trJira("Page"),
                              [this] { openPage(m_context, pageUrl()); });
         actions()->setWebLink(pageUrl());
         applySectionFields();
 
-        if (m_source) {
-            m_source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
-            showStatus(m_source->current());
+        if (ItemStatusSource *source = context.status()) {
+            source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
+            showStatus(source->current());
         } else {
-            reload();
-        }
-    }
-
-    // Reads the issue through the server, for a view without a status.
-    void reload()
-    {
-        const std::optional<JiraClient> jira = client();
-        if (!jira) {
-            setMessage(trJira("This profile has no Jira server."));
-            return;
-        }
-        if (key().isEmpty()) {
-            setMessage(trJira("Set the issue key in the item's settings."));
-            return;
-        }
-        if (m_drawn.isEmpty())
             setMessage(trJira("Loading…"));
-        // Answers can overtake each other, and only the last one counts.
-        const int reading = ++m_reading;
-        jira->issue(
-            key(), {}, this,
-            [this, reading](const ApiReply &reply) {
-                if (reading != m_reading)
-                    return;
-                if (reply.ok()) {
-                    if (m_readFailed)
-                        actions()->clearError();
-                    m_readFailed = false;
-                    setMessage(QString());
-                    draw(reply.json.object());
-                } else if (m_drawn.isEmpty()) {
-                    setMessage(reply.message);
-                } else {
-                    m_readFailed = true;
-                    actions()->showError(reply.message);
-                }
-            },
-            summaryExpand());
+        }
     }
 
 private:
-    bool isPreview() const { return !m_previewKey.isEmpty(); }
-
-    QString key() const
-    {
-        return isPreview() ? m_previewKey : m_context.config().value(QStringLiteral("key")).toString().trimmed();
-    }
+    QString key() const { return m_context.config().value(QStringLiteral("key")).toString().trimmed(); }
 
     QUrl pageUrl() const
     {
         return m_base.isEmpty() ? QUrl() : issueUrl(m_base, QJsonObject{{QStringLiteral("key"), key()}});
-    }
-
-    std::optional<JiraClient> client() const
-    {
-        ApiClient *server = m_context.server();
-        if (!server)
-            return std::nullopt;
-        return JiraClient(*server, deploymentOf(m_context.moduleSettings(kGeneralScreen)));
     }
 
     void showStatus(const ItemStatus &status)
@@ -294,8 +228,6 @@ private:
         draw(issue);
     }
 
-    // A list's configuration has no such fields, so a preview shows every
-    // section.
     void applySectionFields()
     {
         const QJsonObject config = m_context.config();
@@ -464,116 +396,17 @@ private:
         return section;
     }
 
-    // Asks for the transitions the issue allows now, each time the menu opens.
-    void fillTransitions(QMenu &menu)
-    {
-        const std::optional<JiraClient> jira = client();
-        if (!jira) {
-            actions()->showError(trJira("This profile has no Jira server."));
-            return;
-        }
-        menu.addAction(trJira("Loading…"))->setEnabled(false);
-        QMenu *target = &menu;
-        jira->transitions(key(), target, [this, target](const ApiReply &reply) {
-            target->clear();
-            if (!reply.ok()) {
-                target->addAction(trJira("No status changes"))->setEnabled(false);
-                actions()->showError(actionError(reply));
-                return;
-            }
-            const QJsonArray transitions = reply.json.object().value(QStringLiteral("transitions")).toArray();
-            if (transitions.isEmpty())
-                target->addAction(trJira("No status changes"))->setEnabled(false);
-            for (const QJsonValue &value : transitions) {
-                const QJsonObject transition = value.toObject();
-                const QString id = transition.value(QStringLiteral("id")).toString();
-                QAction *entry =
-                    target->addAction(withoutShortcuts(transition.value(QStringLiteral("name")).toString()));
-                connect(entry, &QAction::triggered, this, [this, id] { moveTo(id); });
-            }
-        });
-    }
-
-    void moveTo(const QString &transitionId)
-    {
-        // A menu entry does not clear the last error, as a button does.
-        actions()->clearError();
-        act(kChangeStatus, [this, transitionId](const JiraClient &jira, JiraDone done) {
-            jira.transition(key(), transitionId, this, std::move(done));
-        });
-    }
-
-    void addComment()
-    {
-        // The dialog runs its own event loop, and the view can go meanwhile, as
-        // when a change of configuration makes it again.
-        const QPointer<IssueView> self(this);
-        const std::optional<QString> text =
-            widgets::askComment(this, trJira("Comment on %1").arg(key()));
-        if (!self || !text)
-            return;
-        act(kComment, [this, text = *text](const JiraClient &jira, JiraDone done) {
-            jira.comment(key(), text, this, std::move(done));
-        });
-    }
-
-    // Runs one request of an action, with its button disabled meanwhile.
-    void act(const QString &action, const std::function<void(const JiraClient &, JiraDone)> &send)
-    {
-        const std::optional<JiraClient> jira = client();
-        if (!jira) {
-            actions()->showError(trJira("This profile has no Jira server."));
-            return;
-        }
-        actions()->setBusy(action, true);
-        send(*jira, [this, action](const ApiReply &reply) {
-            actions()->setBusy(action, false);
-            if (!reply.ok()) {
-                actions()->showError(actionError(reply));
-                return;
-            }
-            // The cell, the badges and the view change together. A list reads
-            // again after this as well, so a preview follows it.
-            if (ItemStatusSource *status = m_context.status())
-                status->refresh();
-            if (!m_source)
-                reload();
-        });
-    }
-
-    static QString actionError(const ApiReply &reply)
-    {
-        if (reply.error == ApiReply::Error::Forbidden)
-            return trJira("The token cannot do this: %1").arg(reply.message);
-        return reply.message;
-    }
-
     ItemContext &m_context;
-    QString m_previewKey;
-    ItemStatusSource *m_source;
     QUrl m_base;
     QJsonObject m_drawn;
     RichText *m_description = nullptr;
-    int m_reading = 0;
-    bool m_readFailed = false;
 };
 
 } // namespace
 
 QWidget *createIssueView(ItemContext &context, QWidget *parent)
 {
-    return new IssueView(context, QString(), parent);
-}
-
-QWidget *createIssuePreview(ItemContext &context, const QString &key, QWidget *parent)
-{
-    return new IssueView(context, key, parent);
-}
-
-void reloadIssuePreview(QWidget *preview)
-{
-    if (auto *view = dynamic_cast<IssueView *>(preview))
-        view->reload();
+    return new IssueView(context, parent);
 }
 
 widgets::StatusRole statusCategoryRole(const QString &category)

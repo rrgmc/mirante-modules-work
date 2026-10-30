@@ -6,7 +6,6 @@
 
 #include <mirante/ApiClient.h>
 
-#include <QJsonDocument>
 #include <QString>
 #include <QStringList>
 
@@ -51,20 +50,8 @@ public:
     // An error on any page answers with that page's reply.
     void search(const QString &jql, const SearchOptions &options, QObject *receiver, JiraDone done) const;
 
-    // GET issue/<key>/transitions: the transitions the user may take now.
-    void transitions(const QString &key, QObject *receiver, JiraDone done) const;
-    // POST issue/<key>/transitions: moves the issue with the transition id.
-    void transition(const QString &key, const QString &transitionId, QObject *receiver, JiraDone done) const;
-
-    // POST issue/<key>/comment with plain text. Jira Cloud gets it as an
-    // Atlassian Document Format (ADF) body, Jira Data Center as text.
-    void comment(const QString &key, const QString &text, QObject *receiver, JiraDone done) const;
-
     // GET myself: the user the token belongs to.
     void myself(QObject *receiver, JiraDone done) const;
-
-    // The body of a comment with this text on a deployment.
-    static QJsonDocument commentBody(Deployment deployment, const QString &text);
 
 private:
     QString issuePath(const QString &key) const;
