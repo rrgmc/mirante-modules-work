@@ -612,11 +612,10 @@ void fetchPipelineStatus(StatusJob &job)
         return;
     }
 
-    const QString branch = config.value(QStringLiteral("branch")).toString().trimmed();
-    if (branch.isEmpty()) {
-        job.finish(incomplete(tr("Set the branch in the item's settings.")));
-        return;
-    }
+    // An empty branch is the default that the field's placeholder shows.
+    QString branch = config.value(QStringLiteral("branch")).toString().trimmed();
+    if (branch.isEmpty())
+        branch = kDefaultBranch;
     fetchPipelines(target, {project, branch, 0, {}});
 }
 

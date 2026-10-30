@@ -783,9 +783,11 @@ private slots:
 
         FakeStatusJob noBranch;
         noBranch.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}};
+        // An empty branch is the default one.
         fetchPipelineStatus(noBranch);
-        QCOMPARE(noBranch.finished->message, QStringLiteral("Set the branch in the item's settings."));
-        QVERIFY(noBranch.client.requests().isEmpty());
+        QVERIFY(!noBranch.client.requests().isEmpty());
+        QVERIFY(noBranch.client.requestKeys().join(QLatin1Char(' ')).contains(QStringLiteral("ref=master")));
+        WAIT_FOR_FINISH(noBranch);
     }
 
     // A missing token reaches the status as NoToken, once, for every type.
