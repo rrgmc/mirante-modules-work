@@ -73,6 +73,45 @@ void fetchIssue(StatusJob &job, const QStringList &fields, const QStringList &ex
         expand);
 }
 
+// What finishing the search for an issue's children needs.
+struct ChildrenSearch
+{
+    JiraClient client;
+    SearchOptions options;
+    ItemStatus status;
+    QSet<QString> listed;
+    int subtaskCount = 0;
+};
+
+// Searches with jql, adds the children to the status, and finishes the job. A
+// site that does not know Epic Link refuses the whole query with a 400, so
+// fallback, if any, is asked next. Any other failure keeps the status as it is.
+void searchChildren(StatusJob *owner, const ChildrenSearch &search, const QString &jql, const QString &fallback)
+{
+    search.client.search(jql, search.options, owner->owner(), [owner, search, fallback](const ApiReply &reply) {
+        if (reply.error == ApiReply::Error::Http && !fallback.isEmpty()) {
+            searchChildren(owner, search, fallback, {});
+            return;
+        }
+        ItemStatus result = search.status;
+        if (reply.ok()) {
+            const QJsonObject answer = reply.json.object();
+            const QJsonArray rows = answer.value(QStringLiteral("issues")).toArray();
+            QJsonArray children;
+            for (const QJsonValue &row : rows) {
+                const QString key = row.toObject().value(QStringLiteral("key")).toString();
+                if (!search.listed.contains(key) && children.size() < kMaxChildren)
+                    children.append(row);
+            }
+            const int total = answer.value(QStringLiteral("total")).toInt(int(rows.size()));
+            result.data.insert(QStringLiteral("children"), children);
+            result.data.insert(QStringLiteral("childrenTotal"),
+                               std::max(total - search.subtaskCount, int(children.size())));
+        }
+        owner->finish(result);
+    });
+}
+
 // Adds the issue's children to status, and finishes the job.
 void fetchChildren(StatusJob &job, const QJsonObject &issue, const ItemStatus &status)
 {
@@ -91,26 +130,11 @@ void fetchChildren(StatusJob &job, const QJsonObject &issue, const ItemStatus &s
     options.maxRows = client.deployment() == Deployment::Cloud ? kCountedChildren
                                                                : kMaxChildren + int(subtasks.size());
 
-    StatusJob *owner = &job;
-    client.search(childrenJql(client.deployment(), issue.value(QStringLiteral("key")).toString()), options,
-                  job.owner(), [owner, status, listed, subtaskCount = int(subtasks.size())](const ApiReply &reply) {
-                      ItemStatus result = status;
-                      if (reply.ok()) {
-                          const QJsonObject answer = reply.json.object();
-                          const QJsonArray rows = answer.value(QStringLiteral("issues")).toArray();
-                          QJsonArray children;
-                          for (const QJsonValue &row : rows) {
-                              const QString key = row.toObject().value(QStringLiteral("key")).toString();
-                              if (!listed.contains(key) && children.size() < kMaxChildren)
-                                  children.append(row);
-                          }
-                          const int total = answer.value(QStringLiteral("total")).toInt(int(rows.size()));
-                          result.data.insert(QStringLiteral("children"), children);
-                          result.data.insert(QStringLiteral("childrenTotal"),
-                                             std::max(total - subtaskCount, int(children.size())));
-                      }
-                      owner->finish(result);
-                  });
+    const QString key = issue.value(QStringLiteral("key")).toString();
+    const QString jql = childrenJql(client.deployment(), key);
+    const QString parentOnly = childrenJql(Deployment::Cloud, key);
+    searchChildren(&job, {client, options, status, listed, int(subtasks.size())}, jql,
+                   jql == parentOnly ? QString() : parentOnly);
 }
 
 } // namespace

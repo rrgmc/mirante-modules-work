@@ -349,7 +349,7 @@ private slots:
 
         type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
-        QCOMPARE(job.client.requestKeys().last(), childrenRequest);
+        QVERIFY(job.client.requestKeys().contains(childrenRequest));
 
         const ItemStatus &status = *job.finished;
         QCOMPARE(status.state, ItemStatus::State::Ok);
@@ -358,6 +358,28 @@ private slots:
         QVERIFY(status.data.contains(QStringLiteral("issue")));
         QVERIFY(!status.data.contains(QStringLiteral("children")));
         QVERIFY(!status.data.contains(QStringLiteral("childrenTotal")));
+    }
+
+    // Without Epic Link on the site, the children under parent still show.
+    void unknownEpicLinkFallsBackToParent()
+    {
+        FakeStatusJob job;
+        setDataCenter(job, QStringLiteral("INFRA-1203"));
+        QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
+                                       QFINDTESTDATA("data/issue-full-dc.json")));
+        ApiReply refused;
+        refused.error = ApiReply::Error::Http;
+        refused.httpStatus = 400;
+        job.client.setReply(childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true), refused);
+        const QString parentOnly = childrenKey(kDcChildrenPath, QStringLiteral("parent = \"INFRA-1203\""),
+                                               QStringLiteral("50"), true);
+        QVERIFY(job.client.setJsonFile(parentOnly, QFINDTESTDATA("data/search-children-dc.json")));
+
+        type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.client.requestKeys().last(), parentOnly);
+        QCOMPARE(keysOf(job.finished->data.value(QStringLiteral("children")).toArray()),
+                 QStringList({QStringLiteral("INFRA-1210"), QStringLiteral("INFRA-1211")}));
     }
 
     void pageDoesNotKeepTheAnswer()
