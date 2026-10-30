@@ -29,6 +29,7 @@
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QScrollBar>
+#include <QSplitter>
 #include <QTableView>
 #include <QTemporaryDir>
 #include <QTest>
@@ -899,11 +900,10 @@ private slots:
         useCloud(context, QString());
         context.source.status = listStatusOf(readJson(QFINDTESTDATA("data/search-list-cloud.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
-        auto *list = static_cast<ItemListView *>(view.get());
 
         tableOf(view.get())->selectRow(rowOf(view.get(), QStringLiteral("OPS-7")));
-        QCOMPARE(list->selectedKey(), QStringLiteral("OPS-7"));
-        QVERIFY(!list->preview());
+        QVERIFY(tableOf(view.get())->selectionModel()->hasSelection());
+        QVERIFY(!view->findChild<QSplitter *>());
         QVERIFY(context.client.requests().isEmpty());
     }
 

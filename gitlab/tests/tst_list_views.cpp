@@ -734,7 +734,7 @@ private slots:
 
         clickRow(view, ref);
 
-        QVERIFY(!list(view)->selectedKey().isEmpty());
+        QVERIFY(table(view)->selectionModel()->hasSelection());
         QCOMPARE(int(context.client.requests().size()), before);
         for (QWidget *child : view->findChildren<QWidget *>())
             QVERIFY(!dynamic_cast<mirante::widgets::SummaryView *>(child));
