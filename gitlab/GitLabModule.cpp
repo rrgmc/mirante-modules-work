@@ -17,6 +17,8 @@
 #include <mirante/Module.h>
 
 #include <QCoreApplication>
+#include <QUrl>
+#include <QUuid>
 
 #include <memory>
 #include <optional>
@@ -285,6 +287,10 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.setModuleDescription(QCoreApplication::translate(
         "gitlab", "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and "
                   "token in the module's General Configuration."));
+    registrar.setModuleUuid(QUuid(QStringLiteral("24254446-1d00-47a0-b8de-b7c5f286588a")));
+    registrar.setModuleVersion(QStringLiteral("0.1.0"));
+    registrar.setModuleAuthor(QStringLiteral("Rangel Reale"));
+    registrar.setModuleHomepage(QUrl(QStringLiteral("https://github.com/rrgmc/mirante/tree/master/src/modules/gitlab")));
     registrar.addSettingsScreen(makeGeneralScreen());
     registrar.setServerType(std::make_unique<GitLabServerType>());
     registrar.addProjectSetting(makeProjectSetting());

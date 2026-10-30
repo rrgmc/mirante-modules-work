@@ -203,6 +203,20 @@ private slots:
         for (const mirante::ItemType *type : registry.types())
             QVERIFY2(!type->description().isEmpty(), qPrintable(type->id()));
     }
+
+    // The module gives its UUID, version, author and homepage, for Help >
+    // Modules. See docs/decisions/0087-module-identity.md.
+    void identity()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+
+        const QString id = QStringLiteral("gitlab");
+        QVERIFY(!registry.moduleUuid(id).isNull());
+        QVERIFY(!registry.moduleVersion(id).isEmpty());
+        QVERIFY(!registry.moduleAuthor(id).isEmpty());
+        QVERIFY(registry.moduleHomepage(id).isValid());
+    }
 };
 
 QTEST_MAIN(TestRegister)

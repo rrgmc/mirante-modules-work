@@ -7,6 +7,8 @@
 #include <mirante/Module.h>
 
 #include <QCoreApplication>
+#include <QUrl>
+#include <QUuid>
 
 #include <memory>
 #include <utility>
@@ -92,6 +94,10 @@ void registerModule(ModuleRegistrar &registrar)
 {
     registrar.setModuleName(QCoreApplication::translate("claude", "Claude"));
     registrar.setModuleDescription(QCoreApplication::translate("claude", "Claude sessions on claude.ai."));
+    registrar.setModuleUuid(QUuid(QStringLiteral("00caf22e-8d0f-431f-8832-17a09c048ac2")));
+    registrar.setModuleVersion(QStringLiteral("0.1.0"));
+    registrar.setModuleAuthor(QStringLiteral("Rangel Reale"));
+    registrar.setModuleHomepage(QUrl(QStringLiteral("https://github.com/rrgmc/mirante/tree/master/src/modules/claude")));
     registrar.addItemType(std::make_unique<WebSessionItemType>(
         QStringLiteral("claude.session.web"), QCoreApplication::translate("claude", "Claude session (web)"),
         QCoreApplication::translate("claude", "Claude"),

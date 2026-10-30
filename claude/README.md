@@ -10,6 +10,8 @@ Claude sessions on claude.ai, as items. See [item types](../../../docs/item-type
 
 The module calls itself "Claude" and describes itself as: "Claude sessions on claude.ai." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
+Its UUID is `00caf22e-8d0f-431f-8832-17a09c048ac2`. It is at version 0.1.0, by Rangel Reale. Help > Modules also shows these, and the module's homepage. See [decision 0087](../../../docs/decisions/0087-module-identity.md).
+
 Since M3 the type declares its configuration fields, so items can be created and edited. Since M4 `claude.session.web` shows its page in a web view, through `ItemContext::createWebView`. `ClaudeUrls.cpp` reads the address. If `url` is empty or is not an `http` or `https` address, the cell says "Set the address in the item's settings." instead.
 
 M7 added `claude.session.local`, a Claude Code session resumed in a terminal. [Decision 0084](../../../docs/decisions/0084-no-local-claude-sessions.md) removed it. Items of that type that are still in a workspace are kept unchanged, and their cell says "This item type is no longer available: claude.session.local."

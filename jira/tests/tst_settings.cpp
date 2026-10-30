@@ -210,6 +210,10 @@ private:
         void addItemType(std::unique_ptr<mirante::ItemType>) override {}
         void setModuleName(const QString &) override {}
         void setModuleDescription(const QString &) override {}
+        void setModuleUuid(const QUuid &) override {}
+        void setModuleVersion(const QString &) override {}
+        void setModuleAuthor(const QString &) override {}
+        void setModuleHomepage(const QUrl &) override {}
         void addSettingsScreen(std::unique_ptr<mirante::SettingsScreen>) override {}
         const mirante::ModuleSettings &settings() const override { return m_settings; }
         void setServerType(std::unique_ptr<mirante::ServerType> type) override { server = std::move(type); }

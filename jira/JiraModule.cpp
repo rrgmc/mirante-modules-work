@@ -14,6 +14,8 @@
 #include <mirante/Module.h>
 
 #include <QCoreApplication>
+#include <QUrl>
+#include <QUuid>
 
 #include <memory>
 #include <optional>
@@ -213,6 +215,10 @@ void registerModule(ModuleRegistrar &registrar)
     registrar.setModuleDescription(QCoreApplication::translate(
         "jira", "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's "
                 "General Configuration."));
+    registrar.setModuleUuid(QUuid(QStringLiteral("dfc0970e-7a8d-401e-b337-dffbfcabe1a7")));
+    registrar.setModuleVersion(QStringLiteral("0.1.0"));
+    registrar.setModuleAuthor(QStringLiteral("Rangel Reale"));
+    registrar.setModuleHomepage(QUrl(QStringLiteral("https://github.com/rrgmc/mirante/tree/master/src/modules/jira")));
     registrar.addSettingsScreen(makeGeneralScreen());
     registrar.setServerType(std::make_unique<JiraServerType>());
     registrar.addProjectSetting(projectKeyField());

@@ -12,6 +12,8 @@ Jira issues and issue lists as items. See [item types](../../../docs/item-types.
 
 The module calls itself "Jira" and describes itself as: "Issues and lists of issues from a Jira site. Each profile sets its site and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
+Its UUID is `dfc0970e-7a8d-401e-b337-dffbfcabe1a7`. It is at version 0.1.0, by Rangel Reale. Help > Modules also shows these, and the module's homepage. See [decision 0087](../../../docs/decisions/0087-module-identity.md).
+
 Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 `jira.issue.page` shows the issue's page in a web view. Since M5 the issue types report [status](#status). Since M6 the summary and the list have native [views](#views), and the list reports status. Since M7 the module takes part in [quick add](#quick-add).
 
 ## Pages
