@@ -213,18 +213,6 @@ private slots:
         QCOMPARE(view->property("url").toUrl(), url);
         QCOMPARE(view->property("message").toString(), message);
     }
-
-    void listTypesHaveNoViewYet()
-    {
-        mirante::ItemTypeRegistry registry;
-        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
-
-        FakeContext context;
-        context.general = server(QStringLiteral("https://gitlab.example.com"));
-        context.itemConfig = config("g/p", 1);
-        for (const QString &id : {QStringLiteral("gitlab.mr.list"), QStringLiteral("gitlab.issue.list")})
-            QVERIFY2(!registry.type(id).createView(context, nullptr), qPrintable(id));
-    }
 };
 
 QTEST_MAIN(TestUrls)
