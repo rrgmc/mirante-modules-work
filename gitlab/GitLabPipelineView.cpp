@@ -205,19 +205,19 @@ private:
     };
 
     // Newest first: the latest, the rest of its group, then the older ones.
-    void readPipelines(const QJsonObject &data)
+    void readPipelines(const QJsonObject &answer)
     {
         m_pipelines.clear();
-        const QJsonObject latest = data.value(QStringLiteral("pipeline")).toObject();
+        const QJsonObject latest = answer.value(QStringLiteral("pipeline")).toObject();
         if (latest.isEmpty())
             return;
-        m_pipelines << Pipeline{latest, data.value(QStringLiteral("jobs")), true};
-        for (const QJsonValue &value : data.value(QStringLiteral("siblings")).toArray()) {
+        m_pipelines << Pipeline{latest, answer.value(QStringLiteral("jobs")), true};
+        for (const QJsonValue &value : answer.value(QStringLiteral("siblings")).toArray()) {
             const QJsonObject sibling = value.toObject();
             m_pipelines << Pipeline{sibling.value(QStringLiteral("pipeline")).toObject(),
                                     sibling.value(QStringLiteral("jobs")), true};
         }
-        for (const QJsonValue &value : data.value(QStringLiteral("older")).toArray())
+        for (const QJsonValue &value : answer.value(QStringLiteral("older")).toArray())
             m_pipelines << Pipeline{value.toObject(), QJsonValue(QJsonValue::Undefined), false};
     }
 

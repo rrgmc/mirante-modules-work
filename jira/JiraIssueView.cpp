@@ -238,15 +238,15 @@ private:
         setSectionVisible(kLinks, config.value(QStringLiteral("showLinks")).toBool(true));
     }
 
-    void draw(const QJsonObject &data)
+    void draw(const QJsonObject &answer)
     {
         // A poll usually brings the same answer, and drawing would lose a
         // selection in the text.
-        if (data == m_drawn)
+        if (answer == m_drawn)
             return;
-        m_drawn = data;
+        m_drawn = answer;
 
-        const QJsonObject issue = data.value(QStringLiteral("issue")).toObject();
+        const QJsonObject issue = answer.value(QStringLiteral("issue")).toObject();
         const QJsonObject fields = issue.value(QStringLiteral("fields")).toObject();
         const QString issueKey = issue.value(QStringLiteral("key")).toString();
         setTitle(issueKey + QLatin1Char(' ') + fields.value(QStringLiteral("summary")).toString());
@@ -254,7 +254,7 @@ private:
         setSection(kDetails, trJira("Details"), makeDetails(issue));
         drawDescription(issue);
         setSection(kComments, trJira("Comments"), makeComments(issue));
-        setSection(kLinks, trJira("Sub-tasks and links"), makeLinks(fields, data));
+        setSection(kLinks, trJira("Sub-tasks and links"), makeLinks(fields, answer));
     }
 
     QWidget *makeStateRow(const QJsonObject &fields)
@@ -381,13 +381,13 @@ private:
         return section;
     }
 
-    QWidget *makeLinks(const QJsonObject &fields, const QJsonObject &data)
+    QWidget *makeLinks(const QJsonObject &fields, const QJsonObject &answer)
     {
         auto *section = new QWidget;
         auto *layout = new QVBoxLayout(section);
         layout->setContentsMargins(0, 0, 0, 0);
         const QList<IssueRef> refs = readRefs(fields);
-        const QJsonArray children = data.value(QStringLiteral("children")).toArray();
+        const QJsonArray children = answer.value(QStringLiteral("children")).toArray();
         if (refs.isEmpty() && children.isEmpty())
             layout->addWidget(plainLabel(trJira("No sub-tasks or links."), section));
         for (const IssueRef &ref : refs) {
@@ -409,7 +409,7 @@ private:
                                                    statusCategoryRole(category), section));
             layout->addLayout(row);
         }
-        const int more = data.value(QStringLiteral("childrenTotal")).toInt() - int(children.size());
+        const int more = answer.value(QStringLiteral("childrenTotal")).toInt() - int(children.size());
         if (more > 0) {
             QLabel *line = plainLabel(trJira("%1 more").arg(more), section);
             line->setObjectName(QStringLiteral("childrenMore"));
