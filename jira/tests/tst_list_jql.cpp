@@ -6,7 +6,11 @@
 #include <QTest>
 #include <QUrlQuery>
 
+using mirante::modules::jira::childrenJql;
+using mirante::modules::jira::Deployment;
 using mirante::modules::jira::listJql;
+using mirante::modules::jira::listLimit;
+using mirante::modules::jira::listPageSize;
 using mirante::modules::jira::listWebUrl;
 
 namespace {
@@ -80,6 +84,37 @@ private slots:
         QFETCH(QString, jql);
         QFETCH(QString, projectKey);
         QVERIFY(!listJql(preset, jql, projectKey));
+    }
+
+    void children()
+    {
+        QCOMPARE(childrenJql(Deployment::Cloud, QStringLiteral("OPS-7")), QStringLiteral("parent = \"OPS-7\""));
+        QCOMPARE(childrenJql(Deployment::DataCenter, QStringLiteral("OPS-7")),
+                 QStringLiteral("\"Epic Link\" = \"OPS-7\" OR parent = \"OPS-7\""));
+        // A key cannot end the string and change the query.
+        QCOMPARE(childrenJql(Deployment::Cloud, QStringLiteral("A\" OR 1=1")),
+                 QStringLiteral("parent = \"A\\\" OR 1=1\""));
+    }
+
+    void limitAndPageSize_data()
+    {
+        QTest::addColumn<QJsonObject>("config");
+        QTest::addColumn<int>("limit");
+        QTest::addColumn<int>("pageSize");
+        QTest::newRow("absent") << QJsonObject() << 100 << 50;
+        QTest::newRow("set") << QJsonObject{{QStringLiteral("limit"), 30}, {QStringLiteral("pageSize"), 10}} << 30 << 10;
+        QTest::newRow("zero") << QJsonObject{{QStringLiteral("limit"), 0}, {QStringLiteral("pageSize"), 0}} << 100 << 50;
+        QTest::newRow("negative") << QJsonObject{{QStringLiteral("limit"), -5}, {QStringLiteral("pageSize"), -1}} << 100 << 50;
+        QTest::newRow("text") << QJsonObject{{QStringLiteral("limit"), QStringLiteral("9")}} << 100 << 50;
+    }
+
+    void limitAndPageSize()
+    {
+        QFETCH(QJsonObject, config);
+        QFETCH(int, limit);
+        QFETCH(int, pageSize);
+        QCOMPARE(listLimit(config), limit);
+        QCOMPARE(listPageSize(config), pageSize);
     }
 
     void webUrl_data()

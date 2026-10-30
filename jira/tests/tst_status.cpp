@@ -1,5 +1,6 @@
 // The status of the Jira types, from recorded responses of Jira Cloud and Jira
 // Data Center in tests/data/. See README.md#status.
+#include "../JiraFields.h"
 #include "../JiraStatus.h"
 #include "items/ItemTypeRegistry.h"
 
@@ -39,6 +40,39 @@ QString searchKey(const QString &path, const QString &jql, bool startAt)
     if (startAt)
         query.addQueryItem(QStringLiteral("startAt"), QStringLiteral("0"));
     return FakeApiClient::key(QStringLiteral("GET"), path, query);
+}
+
+// The search for a summary's children.
+QString childrenKey(const QString &path, const QString &jql, const QString &maxResults, bool startAt)
+{
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("jql"), jql);
+    query.addQueryItem(QStringLiteral("fields"), QStringLiteral("summary,status"));
+    query.addQueryItem(QStringLiteral("maxResults"), maxResults);
+    if (startAt)
+        query.addQueryItem(QStringLiteral("startAt"), QStringLiteral("0"));
+    return FakeApiClient::key(QStringLiteral("GET"), path, query);
+}
+
+const QString kCloudChildrenPath = QStringLiteral("rest/api/3/search/jql");
+const QString kDcChildrenPath = QStringLiteral("rest/api/2/search");
+const QString kCloudChildrenJql = QStringLiteral("parent = \"OPS-7\"");
+const QString kDcChildrenJql = QStringLiteral("\"Epic Link\" = \"INFRA-1203\" OR parent = \"INFRA-1203\"");
+
+QStringList keysOf(const QJsonArray &issues)
+{
+    QStringList keys;
+    for (const QJsonValue &issue : issues)
+        keys << issue.toObject().value(QStringLiteral("key")).toString();
+    return keys;
+}
+
+QJsonArray numberedIssues(const QString &project, int count)
+{
+    QJsonArray issues;
+    for (int i = 1; i <= count; ++i)
+        issues.append(QJsonObject{{QStringLiteral("key"), QStringLiteral("%1-%2").arg(project).arg(1000 + i)}});
+    return issues;
 }
 
 QString issueKey(const QString &root, const QString &key)
@@ -112,7 +146,7 @@ private slots:
 
         type(typeId).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
-        QCOMPARE(job.client.requests().size(), 1);
+        QCOMPARE(job.client.requestKeys().first(), request);
 
         const ItemStatus &status = *job.finished;
         QCOMPARE(status.state, ItemStatus::State::Ok);
@@ -182,7 +216,6 @@ private slots:
 
         type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
         QTRY_COMPARE(job.finishCount, 1);
-        QCOMPARE(job.client.requests().size(), 1);
 
         const ItemStatus &status = *job.finished;
         QCOMPARE(status.state, ItemStatus::State::Ok);
@@ -194,6 +227,159 @@ private slots:
         // The attention rules are the page's.
         QCOMPARE(status.attention.size(), 1);
         QVERIFY(status.attention.at(0).key.startsWith(QStringLiteral("status:")));
+    }
+
+    // The children come from a further search. A sub-task the issue already
+    // lists is not listed twice.
+    void childrenOnCloud()
+    {
+        FakeStatusJob job;
+        setCloud(job, QStringLiteral("OPS-7"));
+        QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7")),
+                                       QFINDTESTDATA("data/issue-full-cloud.json")));
+        const QString request = childrenKey(kCloudChildrenPath, kCloudChildrenJql, QStringLiteral("100"), false);
+        QVERIFY(job.client.setJsonFile(request, QFINDTESTDATA("data/search-children-cloud.json")));
+
+        type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.client.requests().size(), 2);
+        QCOMPARE(job.client.requestKeys().last(), request);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(keysOf(status.data.value(QStringLiteral("children")).toArray()),
+                 QStringList({QStringLiteral("OPS-11"), QStringLiteral("OPS-12")}));
+        QCOMPARE(status.data.value(QStringLiteral("childrenTotal")).toInt(), 2);
+    }
+
+    void childrenOnDataCenter()
+    {
+        FakeStatusJob job;
+        setDataCenter(job, QStringLiteral("INFRA-1203"));
+        QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
+                                       QFINDTESTDATA("data/issue-full-dc.json")));
+        const QString request = childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true);
+        QVERIFY(job.client.setJsonFile(request, QFINDTESTDATA("data/search-children-dc.json")));
+
+        type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.client.requests().size(), 2);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(keysOf(status.data.value(QStringLiteral("children")).toArray()),
+                 QStringList({QStringLiteral("INFRA-1210"), QStringLiteral("INFRA-1211")}));
+        QCOMPARE(status.data.value(QStringLiteral("childrenTotal")).toInt(), 2);
+    }
+
+    // Data Center's total counts all of them, from one request of 50.
+    void childrenAreCappedOnDataCenter()
+    {
+        FakeStatusJob job;
+        setDataCenter(job, QStringLiteral("INFRA-1203"));
+        QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
+                                       QFINDTESTDATA("data/issue-full-dc.json")));
+        job.client.setJson(childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true),
+                           QJsonDocument(QJsonObject{{QStringLiteral("issues"), numberedIssues(QStringLiteral("INFRA"), 50)},
+                                                     {QStringLiteral("total"), 73}}));
+
+        type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.client.requests().size(), 2);
+        QCOMPARE(job.finished->data.value(QStringLiteral("children")).toArray().size(), 50);
+        QCOMPARE(job.finished->data.value(QStringLiteral("childrenTotal")).toInt(), 73);
+    }
+
+    // Cloud gives no total, so the rows are counted. OPS-9 is also a sub-task.
+    void childrenAreCappedOnCloud()
+    {
+        FakeStatusJob job;
+        setCloud(job, QStringLiteral("OPS-7"));
+        QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7")),
+                                       QFINDTESTDATA("data/issue-full-cloud.json")));
+        QJsonArray issues = numberedIssues(QStringLiteral("OPS"), 59);
+        issues.prepend(QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-9")}});
+        job.client.setJson(childrenKey(kCloudChildrenPath, kCloudChildrenJql, QStringLiteral("100"), false),
+                           QJsonDocument(QJsonObject{{QStringLiteral("issues"), issues},
+                                                     {QStringLiteral("isLast"), true}}));
+
+        type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        const QJsonArray children = job.finished->data.value(QStringLiteral("children")).toArray();
+        QCOMPARE(children.size(), 50);
+        QVERIFY(!keysOf(children).contains(QStringLiteral("OPS-9")));
+        QCOMPARE(job.finished->data.value(QStringLiteral("childrenTotal")).toInt(), 59);
+    }
+
+    // A site that does not know parent or Epic Link answers the search with an
+    // error, and the status of the issue stands.
+    void failedChildrenKeepTheStatus_data()
+    {
+        QTest::addColumn<bool>("cloud");
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QString>("issueRequest");
+        QTest::addColumn<QString>("file");
+        QTest::addColumn<QString>("childrenRequest");
+        QTest::newRow("cloud") << true << QStringLiteral("OPS-7")
+                               << summaryKey(QStringLiteral("rest/api/3"), QStringLiteral("OPS-7"))
+                               << QFINDTESTDATA("data/issue-full-cloud.json")
+                               << childrenKey(kCloudChildrenPath, kCloudChildrenJql, QStringLiteral("100"), false);
+        QTest::newRow("data center") << false << QStringLiteral("INFRA-1203")
+                                     << summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203"))
+                                     << QFINDTESTDATA("data/issue-full-dc.json")
+                                     << childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true);
+    }
+
+    void failedChildrenKeepTheStatus()
+    {
+        QFETCH(bool, cloud);
+        QFETCH(QString, key);
+        QFETCH(QString, issueRequest);
+        QFETCH(QString, file);
+        QFETCH(QString, childrenRequest);
+        FakeStatusJob job;
+        if (cloud)
+            setCloud(job, key);
+        else
+            setDataCenter(job, key);
+        QVERIFY(job.client.setJsonFile(issueRequest, file));
+        ApiReply refused;
+        refused.error = ApiReply::Error::Http;
+        refused.httpStatus = 400;
+        refused.message = QStringLiteral("Field 'Epic Link' does not exist");
+        job.client.setReply(childrenRequest, refused);
+
+        type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QVERIFY(job.client.requestKeys().contains(childrenRequest));
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QVERIFY(status.message.isEmpty());
+        QCOMPARE(status.data.value(QStringLiteral("key")).toString(), key);
+        QVERIFY(status.data.contains(QStringLiteral("issue")));
+        QVERIFY(!status.data.contains(QStringLiteral("children")));
+        QVERIFY(!status.data.contains(QStringLiteral("childrenTotal")));
+    }
+
+    // Without Epic Link on the site, the children under parent still show.
+    void unknownEpicLinkFallsBackToParent()
+    {
+        FakeStatusJob job;
+        setDataCenter(job, QStringLiteral("INFRA-1203"));
+        QVERIFY(job.client.setJsonFile(summaryKey(QStringLiteral("rest/api/2"), QStringLiteral("INFRA-1203")),
+                                       QFINDTESTDATA("data/issue-full-dc.json")));
+        ApiReply refused;
+        refused.error = ApiReply::Error::Http;
+        refused.httpStatus = 400;
+        job.client.setReply(childrenKey(kDcChildrenPath, kDcChildrenJql, QStringLiteral("50"), true), refused);
+        const QString parentOnly = childrenKey(kDcChildrenPath, QStringLiteral("parent = \"INFRA-1203\""),
+                                               QStringLiteral("50"), true);
+        QVERIFY(job.client.setJsonFile(parentOnly, QFINDTESTDATA("data/search-children-dc.json")));
+
+        type(QStringLiteral("jira.issue.summary")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.client.requestKeys().last(), parentOnly);
+        QCOMPARE(keysOf(job.finished->data.value(QStringLiteral("children")).toArray()),
+                 QStringList({QStringLiteral("INFRA-1210"), QStringLiteral("INFRA-1211")}));
     }
 
     void pageDoesNotKeepTheAnswer()
@@ -336,6 +522,232 @@ private slots:
         QTRY_COMPARE(job.finishCount, 1);
         QCOMPARE(job.finished->summary, summary);
         QCOMPARE(job.finished->data.value(QStringLiteral("total")).toInt(), atLimit ? 100 : rows);
+    }
+
+    // The item's limit is the rows asked for, and the summary's number. An absent
+    // limit is covered above.
+    void listLimitIsTheRowsAskedFor_data()
+    {
+        QTest::addColumn<QJsonValue>("limit");
+        QTest::addColumn<QString>("maxResults");
+        QTest::addColumn<QString>("summary");
+        QTest::newRow("small") << QJsonValue(2) << QStringLiteral("2") << QStringLiteral("2+ issues");
+        QTest::newRow("zero uses the default") << QJsonValue(0) << QStringLiteral("50") << QStringLiteral("2 issues");
+        QTest::newRow("negative uses the default") << QJsonValue(-1) << QStringLiteral("50") << QStringLiteral("2 issues");
+    }
+
+    void listLimitIsTheRowsAskedFor()
+    {
+        QFETCH(QJsonValue, limit);
+        QFETCH(QString, maxResults);
+        QFETCH(QString, summary);
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("jql"), QStringLiteral("project = OPS"));
+        query.addQueryItem(QStringLiteral("fields"), QStringLiteral("summary,status,assignee,updated"));
+        query.addQueryItem(QStringLiteral("maxResults"), maxResults);
+        query.addQueryItem(QStringLiteral("startAt"), QStringLiteral("0"));
+
+        FakeStatusJob job;
+        setDataCenter(job, QString());
+        job.configValues = {{QStringLiteral("preset"), QStringLiteral("jql")},
+                            {QStringLiteral("jql"), QStringLiteral("project = OPS")},
+                            {QStringLiteral("limit"), limit}};
+        const QJsonArray issues{QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-1")}},
+                                QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-2")}}};
+        job.client.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/2/search"), query),
+                           QJsonDocument(QJsonObject{{QStringLiteral("issues"), issues}, {QStringLiteral("total"), 2}}));
+
+        type(QStringLiteral("jira.list")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->summary, summary);
+    }
+
+    void fieldValues_data()
+    {
+        QTest::addColumn<QJsonValue>("value");
+        QTest::addColumn<QString>("text");
+        const auto object = [](const char *key, const QString &value) {
+            return QJsonValue(QJsonObject{{QLatin1String(key), value}});
+        };
+        QTest::newRow("text") << QJsonValue(QStringLiteral("Build agents")) << QStringLiteral("Build agents");
+        QTest::newRow("whole number") << QJsonValue(5) << QStringLiteral("5");
+        QTest::newRow("large number") << QJsonValue(1200000) << QStringLiteral("1200000");
+        QTest::newRow("fraction") << QJsonValue(5.5) << QStringLiteral("5.5");
+        QTest::newRow("name") << object("name", QStringLiteral("Platform")) << QStringLiteral("Platform");
+        QTest::newRow("value") << object("value", QStringLiteral("High")) << QStringLiteral("High");
+        QTest::newRow("displayName") << object("displayName", QStringLiteral("Dora")) << QStringLiteral("Dora");
+        QTest::newRow("name comes first")
+            << QJsonValue(QJsonObject{{QStringLiteral("displayName"), QStringLiteral("B")},
+                                      {QStringLiteral("name"), QStringLiteral("A")}})
+            << QStringLiteral("A");
+        QTest::newRow("list of objects")
+            << QJsonValue(QJsonArray{object("name", QStringLiteral("2026.11")), object("name", QStringLiteral("2026.12"))})
+            << QStringLiteral("2026.11, 2026.12");
+        QTest::newRow("list of text") << QJsonValue(QJsonArray{QStringLiteral("a"), QStringLiteral("b")})
+                                      << QStringLiteral("a, b");
+        QTest::newRow("list with gaps") << QJsonValue(QJsonArray{QJsonValue(), QStringLiteral("b")}) << QStringLiteral("b");
+        QTest::newRow("empty list") << QJsonValue(QJsonArray()) << QString();
+        QTest::newRow("null") << QJsonValue() << QString();
+        QTest::newRow("object without a name") << QJsonValue(QJsonObject{{QStringLiteral("type"), QStringLiteral("doc")}})
+                                               << QString();
+    }
+
+    void fieldValues()
+    {
+        QFETCH(QJsonValue, value);
+        QFETCH(QString, text);
+        QCOMPARE(mirante::modules::jira::fieldText(value), text);
+    }
+
+    void fieldsByName_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QString>("id");
+        QTest::newRow("exact") << QStringLiteral("Team") << QStringLiteral("customfield_1");
+        QTest::newRow("case") << QStringLiteral("tEAM") << QStringLiteral("customfield_1");
+        QTest::newRow("spaces") << QStringLiteral(" Team ") << QStringLiteral("customfield_1");
+        QTest::newRow("without the s") << QStringLiteral("Fix version") << QStringLiteral("fixVersions");
+        QTest::newRow("with the s") << QStringLiteral("Fix versions") << QStringLiteral("fixVersions");
+        QTest::newRow("data center's name") << QStringLiteral("Component") << QStringLiteral("components");
+        QTest::newRow("an added s") << QStringLiteral("Teams") << QStringLiteral("customfield_1");
+        QTest::newRow("exact comes first") << QStringLiteral("Label") << QStringLiteral("customfield_9");
+        QTest::newRow("unknown") << QStringLiteral("Nothing here") << QString();
+        QTest::newRow("empty") << QStringLiteral("  ") << QString();
+    }
+
+    void fieldsByName()
+    {
+        QFETCH(QString, name);
+        QFETCH(QString, id);
+        const QJsonObject names{{QStringLiteral("customfield_1"), QStringLiteral("Team")},
+                                {QStringLiteral("fixVersions"), QStringLiteral("Fix versions")},
+                                {QStringLiteral("components"), QStringLiteral("Component/s")},
+                                {QStringLiteral("a_labels"), QStringLiteral("Labels")},
+                                {QStringLiteral("customfield_9"), QStringLiteral("Label")}};
+        QCOMPARE(mirante::modules::jira::fieldIdByName(names, name), id);
+    }
+
+    // The ids come from GET field, and the search asks for those fields.
+    void listAsksForExtraFields_data()
+    {
+        QTest::addColumn<bool>("cloud");
+        QTest::addColumn<QString>("root");
+        QTest::addColumn<QString>("searchPath");
+        QTest::addColumn<QString>("fields");
+        QTest::addColumn<QString>("fieldsFile");
+        QTest::addColumn<QString>("searchFile");
+        QTest::addColumn<QStringList>("ids");
+        QTest::newRow("cloud") << true << QStringLiteral("rest/api/3") << QStringLiteral("rest/api/3/search/jql")
+                               << QStringLiteral("summary,status,assignee,updated,customfield_10030,fixVersions")
+                               << QFINDTESTDATA("data/fields-cloud.json") << QFINDTESTDATA("data/search-extra-cloud.json")
+                               << QStringList{QStringLiteral("customfield_10030"), QStringLiteral("fixVersions")};
+        QTest::newRow("data center") << false << QStringLiteral("rest/api/2") << QStringLiteral("rest/api/2/search")
+                                     << QStringLiteral("summary,status,assignee,updated,customfield_10130,fixVersions")
+                                     << QFINDTESTDATA("data/fields-dc.json") << QFINDTESTDATA("data/search-extra-dc.json")
+                                     << QStringList{QStringLiteral("customfield_10130"), QStringLiteral("fixVersions")};
+    }
+
+    void listAsksForExtraFields()
+    {
+        QFETCH(bool, cloud);
+        QFETCH(QString, root);
+        QFETCH(QString, searchPath);
+        QFETCH(QString, fields);
+        QFETCH(QString, fieldsFile);
+        QFETCH(QString, searchFile);
+        QFETCH(QStringList, ids);
+        FakeStatusJob job;
+        cloud ? setCloud(job, QString()) : setDataCenter(job, QString());
+        job.configValues = {{QStringLiteral("preset"), QStringLiteral("jql")},
+                            {QStringLiteral("jql"), QStringLiteral("project = OPS")}};
+        QJsonObject general = job.screens.value(QStringLiteral("general"));
+        general.insert(QStringLiteral("extraFields"),
+                       QJsonArray{QStringLiteral("team"), QStringLiteral("Fix version"), QStringLiteral("Not on this site")});
+        job.screens.insert(QStringLiteral("general"), general);
+
+        const QString fieldsRequest = FakeApiClient::key(QStringLiteral("GET"), root + QStringLiteral("/field"));
+        QVERIFY(job.client.setJsonFile(fieldsRequest, fieldsFile));
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("jql"), QStringLiteral("project = OPS"));
+        query.addQueryItem(QStringLiteral("fields"), fields);
+        query.addQueryItem(QStringLiteral("expand"), QStringLiteral("names"));
+        query.addQueryItem(QStringLiteral("maxResults"), QStringLiteral("50"));
+        if (!cloud)
+            query.addQueryItem(QStringLiteral("startAt"), QStringLiteral("0"));
+        const QString searchRequest = FakeApiClient::key(QStringLiteral("GET"), searchPath, query);
+        QVERIFY(job.client.setJsonFile(searchRequest, searchFile));
+
+        type(QStringLiteral("jira.list")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.client.requestKeys(), QStringList({fieldsRequest, searchRequest}));
+
+        const QJsonObject names = job.finished->data.value(QStringLiteral("names")).toObject();
+        for (const QString &id : ids)
+            QVERIFY2(names.contains(id), qPrintable(id));
+        const QJsonObject first = job.finished->data.value(QStringLiteral("rows")).toArray().at(0).toObject();
+        QVERIFY(first.value(QStringLiteral("fields")).toObject().contains(ids.at(0)));
+    }
+
+    // A server that ignores expand answers without names. The ids are known.
+    void extraFieldsSurviveAnIgnoredExpand()
+    {
+        FakeStatusJob job;
+        setCloud(job, QString());
+        job.configValues = {{QStringLiteral("preset"), QStringLiteral("jql")},
+                            {QStringLiteral("jql"), QStringLiteral("project = OPS")}};
+        QJsonObject general = job.screens.value(QStringLiteral("general"));
+        general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Team")});
+        job.screens.insert(QStringLiteral("general"), general);
+        QVERIFY(job.client.setJsonFile(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/field")),
+                                       QFINDTESTDATA("data/fields-cloud.json")));
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("jql"), QStringLiteral("project = OPS"));
+        query.addQueryItem(QStringLiteral("fields"), QStringLiteral("summary,status,assignee,updated,customfield_10030"));
+        query.addQueryItem(QStringLiteral("expand"), QStringLiteral("names"));
+        query.addQueryItem(QStringLiteral("maxResults"), QStringLiteral("50"));
+        job.client.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/search/jql"), query),
+                           QJsonDocument(QJsonObject{{QStringLiteral("issues"), QJsonArray()},
+                                                     {QStringLiteral("isLast"), true}}));
+
+        type(QStringLiteral("jira.list")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->data.value(QStringLiteral("names")).toObject(),
+                 (QJsonObject{{QStringLiteral("customfield_10030"), QStringLiteral("Team")}}));
+    }
+
+    // Without the ids, or with none that match, the list has its usual columns.
+    void extraFieldsNeverBreakTheList_data()
+    {
+        QTest::addColumn<bool>("fieldsFail");
+        QTest::newRow("GET field fails") << true;
+        QTest::newRow("no name matches") << false;
+    }
+
+    void extraFieldsNeverBreakTheList()
+    {
+        QFETCH(bool, fieldsFail);
+        FakeStatusJob job;
+        setCloud(job, QString());
+        job.configValues = {{QStringLiteral("preset"), QStringLiteral("myOpen")}};
+        QJsonObject general = job.screens.value(QStringLiteral("general"));
+        general.insert(QStringLiteral("extraFields"), QJsonArray{QStringLiteral("Not on this site")});
+        job.screens.insert(QStringLiteral("general"), general);
+        if (!fieldsFail) {
+            QVERIFY(job.client.setJsonFile(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/field")),
+                                           QFINDTESTDATA("data/fields-cloud.json")));
+        }
+        const QString jql =
+            QStringLiteral("assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC");
+        QVERIFY(job.client.setJsonFile(searchKey(QStringLiteral("rest/api/3/search/jql"), jql, false),
+                                       QFINDTESTDATA("data/search-list-cloud.json")));
+
+        type(QStringLiteral("jira.list")).fetchStatus(job);
+        QTRY_COMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->data.value(QStringLiteral("total")).toInt(), 3);
+        QVERIFY(!job.finished->data.contains(QStringLiteral("names")));
     }
 
     void listWithoutWhatItNeedsSendsNothing_data()

@@ -1,5 +1,6 @@
 #include "JiraListView.h"
 
+#include "JiraFields.h"
 #include "JiraIssueView.h"
 #include "JiraLists.h"
 #include "JiraSettings.h"
@@ -7,10 +8,12 @@
 
 #include <mirante/ItemContext.h>
 #include <mirante/Status.h>
+#include <mirante/widgets/CompactDate.h>
 #include <mirante/widgets/ItemListView.h>
 
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -23,7 +26,16 @@ namespace mirante::modules::jira {
 
 namespace {
 
-enum Column { KeyColumn, SummaryColumn, StatusColumn, AssigneeColumn, UpdatedColumn };
+// The extra fields' columns come after these, and then the links.
+enum Column { KeyColumn, SummaryColumn, StatusColumn, AssigneeColumn, UpdatedColumn, FirstExtraColumn };
+
+// The hide priority of the first extra field. They hide before all other columns,
+// the last of them first.
+constexpr int kFirstExtraPriority = 5;
+
+const QString kWebLink = QStringLiteral("web");
+const QString kOpenLink = QStringLiteral("open");
+const QString kAddLink = QStringLiteral("add");
 
 QString trJira(const char *text)
 {
@@ -40,7 +52,20 @@ QString keySortKey(const QString &key)
     return match.captured(1) + match.captured(2).rightJustified(12, QLatin1Char('0'));
 }
 
-widgets::ListRow readRow(const QJsonObject &issue)
+// The links of a row, with the web page first. Without a site, only the one that
+// needs none.
+QList<widgets::ListLink> rowLinks(bool hasSite)
+{
+    QList<widgets::ListLink> links;
+    if (hasSite)
+        links << widgets::ListLink{kWebLink, trJira("Web")} << widgets::ListLink{kOpenLink, trJira("Open")};
+    links << widgets::ListLink{kAddLink, trJira("Add")};
+    return links;
+}
+
+// ids holds the field id of each extra field, or an empty one if the site has no
+// such field.
+widgets::ListRow readRow(const QJsonObject &issue, const QStringList &ids, const QList<widgets::ListLink> &links)
 {
     const QJsonObject fields = issue.value(QStringLiteral("fields")).toObject();
     const QJsonObject status = fields.value(QStringLiteral("status")).toObject();
@@ -48,7 +73,8 @@ widgets::ListRow readRow(const QJsonObject &issue)
         status.value(QStringLiteral("statusCategory")).toObject().value(QStringLiteral("key")).toString();
     const QString assignee =
         fields.value(QStringLiteral("assignee")).toObject().value(QStringLiteral("displayName")).toString();
-    const QString updated = fields.value(QStringLiteral("updated")).toString();
+    const QString updatedText = fields.value(QStringLiteral("updated")).toString();
+    const QDateTime updated = readJiraDate(updatedText);
     const QString key = issue.value(QStringLiteral("key")).toString();
 
     widgets::ListRow row;
@@ -58,29 +84,43 @@ widgets::ListRow readRow(const QJsonObject &issue)
         {fields.value(QStringLiteral("summary")).toString(), {}, std::nullopt},
         {status.value(QStringLiteral("name")).toString(), {}, statusCategoryRole(category)},
         {assignee.isEmpty() ? trJira("Unassigned") : assignee, {}, std::nullopt},
-        {shortJiraDate(updated), readJiraDate(updated).toMSecsSinceEpoch(), std::nullopt},
+        {updated.isValid() ? widgets::compactDate(updated) : updatedText, updated.toMSecsSinceEpoch(), std::nullopt},
     };
+    for (const QString &id : ids) {
+        const QJsonValue value = fields.value(id);
+        row.cells.append({fieldText(value), value.isDouble() ? QVariant(value.toDouble()) : QVariant(), std::nullopt});
+    }
+    // Sorted by the key, since links have no text to sort by.
+    row.cells.append({QString(), keySortKey(key), std::nullopt, links});
     return row;
 }
 
-// The table of a list, from the item's status. A row's preview reads its issue
-// itself, and reads it again when the list has a new status. See decision 0068.
+// The table of a list, from the item's status. See decision 0071.
 class ListView : public widgets::ItemListView
 {
 public:
     ListView(ItemContext &context, QWidget *parent)
         : widgets::ItemListView(parent)
         , m_context(context)
+        , m_extraFields(extraFieldsOf(context.moduleSettings(kGeneralScreen)))
     {
-        setColumns({{trJira("Key"), 1, false},
-                    {trJira("Summary"), 0, true},
-                    {trJira("Status"), 2, false},
-                    {trJira("Assignee"), 4, false},
-                    {trJira("Updated"), 3, false}},
-                   UpdatedColumn);
+        QList<widgets::ListColumn> columns{{trJira("Key"), 1, false},
+                                           {trJira("Summary"), 0, true},
+                                           {trJira("Status"), 2, false},
+                                           {trJira("Assignee"), 4, false},
+                                           {trJira("Updated"), 3, false}};
+        for (int i = 0; i < m_extraFields.size(); ++i)
+            columns.append({m_extraFields.at(i), kFirstExtraPriority + i, false});
+        columns.append({trJira("Links"), 0, false});
+        setColumns(columns, UpdatedColumn);
+        // They show once the status says the site has them.
+        for (int i = 0; i < m_extraFields.size(); ++i)
+            setColumnVisible(FirstExtraColumn + i, false);
+        addFilter(StatusColumn, trJira("Status"));
+        setPageSize(listPageSize(context.config()));
 
-        connect(this, &widgets::ItemListView::rowSelected, this,
-                [this](const QString &key) { setPreview(createIssuePreview(m_context, key, this)); });
+        connect(this, &widgets::ItemListView::rowLinkActivated, this,
+                [this](const QString &key, const QString &link) { activateLink(key, link); });
         connect(this, &widgets::ItemListView::rowMenuRequested, this,
                 [this](const QString &key, const QPoint &globalPos) { showRowMenu(key, globalPos); });
 
@@ -121,16 +161,41 @@ private:
         }
         setMessage(QString());
 
+        const QJsonObject names = status.data.value(QStringLiteral("names")).toObject();
+        QStringList ids;
+        for (int i = 0; i < m_extraFields.size(); ++i) {
+            ids << fieldIdByName(names, m_extraFields.at(i));
+            setColumnVisible(FirstExtraColumn + i, !ids.last().isEmpty());
+        }
+
+        const QList<widgets::ListLink> links = rowLinks(!site().isEmpty());
         QList<widgets::ListRow> rows;
         const QJsonArray issues = status.data.value(QStringLiteral("rows")).toArray();
         for (const QJsonValue &issue : issues)
-            rows << readRow(issue.toObject());
+            rows << readRow(issue.toObject(), ids, links);
         setRows(rows);
+    }
 
-        // If its row went, the preview stays until the user chooses another
-        // row or closes it, since the issue itself may still be of interest.
-        if (preview())
-            reloadIssuePreview(preview());
+    void activateLink(const QString &key, const QString &link)
+    {
+        if (link == kWebLink)
+            openWeb(key);
+        else if (link == kOpenLink)
+            openPage(m_context, issuePageUrl(key));
+        else if (link == kAddLink)
+            addToTask(key);
+    }
+
+    void openWeb(const QString &key)
+    {
+        const QUrl url = issuePageUrl(key);
+        if (!url.isEmpty())
+            QDesktopServices::openUrl(url);
+    }
+
+    void addToTask(const QString &key)
+    {
+        m_context.addItemToTask(QStringLiteral("jira.issue.summary"), key, QJsonObject{{QStringLiteral("key"), key}});
     }
 
     // Not exec(), whose event loop could outlive this view.
@@ -141,13 +206,14 @@ private:
         menu->setAttribute(Qt::WA_DeleteOnClose);
         const QUrl url = issuePageUrl(key);
 
-        connect(menu->addAction(trJira("Add to task as item")), &QAction::triggered, this, [this, key] {
-            m_context.addItemToTask(QStringLiteral("jira.issue.summary"), key,
-                                    QJsonObject{{QStringLiteral("key"), key}});
-        });
+        QAction *web = menu->addAction(trJira("Web"));
+        web->setEnabled(!url.isEmpty());
+        connect(web, &QAction::triggered, this, [this, key] { openWeb(key); });
         QAction *open = menu->addAction(trJira("Open page"));
         open->setEnabled(!url.isEmpty());
         connect(open, &QAction::triggered, this, [this, url] { openPage(m_context, url); });
+        connect(menu->addAction(trJira("Add to task as item")), &QAction::triggered, this,
+                [this, key] { addToTask(key); });
         QAction *copy = menu->addAction(trJira("Copy link"));
         copy->setEnabled(!url.isEmpty());
         connect(copy, &QAction::triggered, this,
@@ -157,6 +223,7 @@ private:
     }
 
     ItemContext &m_context;
+    QStringList m_extraFields;
 };
 
 } // namespace

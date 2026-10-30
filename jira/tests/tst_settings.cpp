@@ -8,6 +8,7 @@
 #include "items/FieldValidation.h"
 #include "items/ItemTypeRegistry.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QNetworkRequest>
 #include <QTest>
@@ -38,7 +39,7 @@ private slots:
         QCOMPARE(screens.front()->name(), QStringLiteral("General Configuration"));
 
         const std::vector<mirante::Field> fields = screens.front()->fields();
-        QCOMPARE(fields.size(), std::size_t(4));
+        QCOMPARE(fields.size(), std::size_t(5));
         QCOMPARE(fields[0].key, QStringLiteral("baseUrl"));
         QCOMPARE(fields[0].type, mirante::Field::Type::Url);
         QVERIFY(fields[0].defaultValue.isNull() || fields[0].defaultValue.isUndefined());   // no default
@@ -53,6 +54,9 @@ private slots:
         QCOMPARE(fields[2].type, mirante::Field::Type::Text);
         QCOMPARE(fields[3].key, QStringLiteral("token"));
         QCOMPARE(fields[3].type, mirante::Field::Type::Secret);
+        QCOMPARE(fields[4].key, QStringLiteral("extraFields"));
+        QCOMPARE(fields[4].label, QStringLiteral("Extra fields"));
+        QCOMPARE(fields[4].type, mirante::Field::Type::TextList);
         QVERIFY(mirante::validate(fields, {}).empty());
 
         // The server is on that screen, with that token.
@@ -64,6 +68,17 @@ private slots:
         // Every Jira type uses a profile, through the screen.
         for (const mirante::ItemType *type : registry.types())
             QVERIFY2(registry.usesProfile(type->id()), qPrintable(type->id()));
+    }
+
+    void extraFields()
+    {
+        using mirante::modules::jira::extraFieldsOf;
+        QVERIFY(extraFieldsOf({}).isEmpty());
+        QVERIFY(extraFieldsOf({{QStringLiteral("extraFields"), QStringLiteral("Team")}}).isEmpty());
+        const QJsonArray names{QStringLiteral(" Team "), QStringLiteral(""), QStringLiteral("  "),
+                               QStringLiteral("Fix version"), QStringLiteral("team"), 5};
+        QCOMPARE(extraFieldsOf({{QStringLiteral("extraFields"), names}}),
+                 QStringList({QStringLiteral("Team"), QStringLiteral("Fix version")}));
     }
 
     void baseUrl()

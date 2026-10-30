@@ -178,7 +178,19 @@ std::vector<Field> listFields()
     jql.key = QStringLiteral("jql");
     jql.label = QCoreApplication::translate("jira", "JQL query");
     jql.placeholder = QStringLiteral("assignee = currentUser() AND resolution = Unresolved");
-    return {preset, jql};
+
+    Field limit;
+    limit.key = QStringLiteral("limit");
+    limit.label = QCoreApplication::translate("jira", "Rows to fetch");
+    limit.type = Field::Type::Integer;
+    limit.defaultValue = 100;
+
+    Field pageSize;
+    pageSize.key = QStringLiteral("pageSize");
+    pageSize.label = QCoreApplication::translate("jira", "Rows per page");
+    pageSize.type = Field::Type::Integer;
+    pageSize.defaultValue = 50;
+    return {preset, jql, limit, pageSize};
 }
 
 // The project's Jira project key, which the list presets of the project use.

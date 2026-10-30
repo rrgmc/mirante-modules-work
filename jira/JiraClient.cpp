@@ -1,8 +1,8 @@
 #include "JiraClient.h"
 
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
-#include <QRegularExpression>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -35,6 +35,8 @@ struct Search
     QObject *receiver = nullptr;
     JiraDone done;
     QJsonArray issues;
+    QJsonValue total;
+    QJsonObject names;
 };
 
 void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString &pageToken)
@@ -44,6 +46,8 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
     query.addQueryItem(QStringLiteral("jql"), queryValue(search->jql));
     if (!search->options.fields.isEmpty())
         query.addQueryItem(QStringLiteral("fields"), search->options.fields.join(QLatin1Char(',')));
+    if (!search->options.expand.isEmpty())
+        query.addQueryItem(QStringLiteral("expand"), search->options.expand.join(QLatin1Char(',')));
     query.addQueryItem(QStringLiteral("maxResults"), QString::number(wanted));
     if (search->deployment == Deployment::Cloud) {
         if (!pageToken.isEmpty())
@@ -59,6 +63,11 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
         }
         const QJsonObject page = reply.json.object();
         const QJsonArray issues = page.value(QStringLiteral("issues")).toArray();
+        if (page.value(QStringLiteral("total")).isDouble())
+            search->total = page.value(QStringLiteral("total"));
+        const QJsonObject names = page.value(QStringLiteral("names")).toObject();
+        for (auto name = names.constBegin(); name != names.constEnd(); ++name)
+            search->names.insert(name.key(), name.value());
         for (const QJsonValue &issue : issues) {
             if (search->issues.size() >= search->options.maxRows)
                 break;
@@ -83,7 +92,12 @@ void nextPage(const std::shared_ptr<Search> &search, int startAt, const QString 
         }
 
         ApiReply joined = reply;
-        joined.json = QJsonDocument(QJsonObject{{QStringLiteral("issues"), search->issues}});
+        QJsonObject answer{{QStringLiteral("issues"), search->issues}};
+        if (search->total.isDouble())
+            answer.insert(QStringLiteral("total"), search->total);
+        if (!search->names.isEmpty())
+            answer.insert(QStringLiteral("names"), search->names);
+        joined.json = QJsonDocument(answer);
         joined.body = joined.json.toJson(QJsonDocument::Compact);
         search->done(joined);
     });
@@ -133,59 +147,14 @@ void JiraClient::search(const QString &jql, const SearchOptions &options, QObjec
     nextPage(search, 0, QString());
 }
 
-void JiraClient::transitions(const QString &key, QObject *receiver, JiraDone done) const
+void JiraClient::allFields(QObject *receiver, JiraDone done) const
 {
-    m_server.get(issuePath(key) + QStringLiteral("/transitions"), QUrlQuery(), GetOptions(), receiver,
-                 std::move(done));
-}
-
-void JiraClient::transition(const QString &key, const QString &transitionId, QObject *receiver,
-                            JiraDone done) const
-{
-    const QJsonObject body{{QStringLiteral("transition"), QJsonObject{{QStringLiteral("id"), transitionId}}}};
-    m_server.post(issuePath(key) + QStringLiteral("/transitions"), QJsonDocument(body), receiver, std::move(done));
-}
-
-void JiraClient::comment(const QString &key, const QString &text, QObject *receiver, JiraDone done) const
-{
-    m_server.post(issuePath(key) + QStringLiteral("/comment"), commentBody(m_deployment, text), receiver,
-                  std::move(done));
+    m_server.get(apiRoot() + QStringLiteral("/field"), QUrlQuery(), GetOptions(), receiver, std::move(done));
 }
 
 void JiraClient::myself(QObject *receiver, JiraDone done) const
 {
     m_server.get(apiRoot() + QStringLiteral("/myself"), QUrlQuery(), GetOptions(), receiver, std::move(done));
-}
-
-QJsonDocument JiraClient::commentBody(Deployment deployment, const QString &text)
-{
-    if (deployment == Deployment::DataCenter)
-        return QJsonDocument(QJsonObject{{QStringLiteral("body"), text}});
-
-    // A paragraph for each block of lines between blank lines, and a hard
-    // break between the lines of a block.
-    static const QRegularExpression blankLines(QStringLiteral("\\n[ \\t]*\\n\\s*"));
-    QString normalised = text;
-    normalised.replace(QLatin1String("\r\n"), QLatin1String("\n"));
-    QJsonArray paragraphs;
-    const QStringList blocks = normalised.trimmed().split(blankLines, Qt::SkipEmptyParts);
-    for (const QString &block : blocks) {
-        QJsonArray content;
-        const QStringList lines = block.split(QLatin1Char('\n'));
-        for (qsizetype i = 0; i < lines.size(); ++i) {
-            if (i > 0)
-                content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("hardBreak")}});
-            if (!lines.at(i).isEmpty())
-                content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                                           {QStringLiteral("text"), lines.at(i)}});
-        }
-        paragraphs.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("paragraph")},
-                                      {QStringLiteral("content"), content}});
-    }
-    const QJsonObject doc{{QStringLiteral("type"), QStringLiteral("doc")},
-                          {QStringLiteral("version"), 1},
-                          {QStringLiteral("content"), paragraphs}};
-    return QJsonDocument(QJsonObject{{QStringLiteral("body"), doc}});
 }
 
 } // namespace mirante::modules::jira

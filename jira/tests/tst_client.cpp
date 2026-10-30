@@ -1,6 +1,6 @@
-// JiraClient on both deployments: the API root, the paths and queries, the
-// two search paging styles, and the bodies of the actions. Answered by a
-// FakeApiClient from recorded responses in tests/data/.
+// JiraClient on both deployments: the API root, the paths and queries, and the
+// two search paging styles. Answered by a FakeApiClient from recorded responses
+// in tests/data/.
 #include "../JiraClient.h"
 
 #include <mirante/testing/FakeApiClient.h>
@@ -103,8 +103,8 @@ private slots:
     {
         FakeApiClient server;
         server.setSynchronous(true);
-        JiraClient(server, Deployment::Cloud).transitions(QStringLiteral("A/B 1"), nullptr, [](const ApiReply &) {});
-        QCOMPARE(server.requests().at(0).path, QStringLiteral("rest/api/3/issue/A%2FB%201/transitions"));
+        JiraClient(server, Deployment::Cloud).issue(QStringLiteral("A/B 1"), {}, nullptr, [](const ApiReply &) {});
+        QCOMPARE(server.requests().at(0).path, QStringLiteral("rest/api/3/issue/A%2FB%201"));
     }
 
     void searchCloudFollowsNextPageToken()
@@ -178,6 +178,71 @@ private slots:
         QCOMPARE(server.requests().size(), 2);
     }
 
+    // Data Center gives a total, and Cloud's search/jql does not.
+    void searchPassesTheTotal()
+    {
+        const auto issues = QJsonArray{QJsonObject{{QStringLiteral("key"), QStringLiteral("OPS-1")}}};
+        SearchOptions options;
+        options.maxRows = 1;
+
+        FakeApiClient server;
+        server.setSynchronous(true);
+        server.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/2/search"),
+                                          query({{QStringLiteral("jql"), QStringLiteral("a")},
+                                                 {QStringLiteral("maxResults"), QStringLiteral("1")},
+                                                 {QStringLiteral("startAt"), QStringLiteral("0")}})),
+                       QJsonDocument(QJsonObject{{QStringLiteral("issues"), issues}, {QStringLiteral("total"), 7}}));
+        server.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/search/jql"),
+                                          query({{QStringLiteral("jql"), QStringLiteral("a")},
+                                                 {QStringLiteral("maxResults"), QStringLiteral("1")}})),
+                       QJsonDocument(QJsonObject{{QStringLiteral("issues"), issues}, {QStringLiteral("isLast"), true}}));
+
+        std::optional<ApiReply> answer;
+        const auto keep = [&answer](const ApiReply &reply) { answer = reply; };
+        JiraClient(server, Deployment::DataCenter).search(QStringLiteral("a"), options, nullptr, keep);
+        QVERIFY(answer && answer->ok());
+        QCOMPARE(answer->json.object().value(QStringLiteral("total")).toInt(), 7);
+
+        JiraClient(server, Deployment::Cloud).search(QStringLiteral("a"), options, nullptr, keep);
+        QVERIFY(answer->ok());
+        QVERIFY(!answer->json.object().contains(QStringLiteral("total")));
+    }
+
+    void searchAsksForExpandAndKeepsTheNames()
+    {
+        SearchOptions options;
+        options.fields = QStringList{QStringLiteral("summary"), QStringLiteral("customfield_1")};
+        options.expand = QStringList{QStringLiteral("names")};
+        const QJsonObject names{{QStringLiteral("customfield_1"), QStringLiteral("Team")}};
+
+        FakeApiClient server;
+        server.setSynchronous(true);
+        server.setJson(FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("rest/api/3/search/jql"),
+                                          query({{QStringLiteral("jql"), QStringLiteral("a")},
+                                                 {QStringLiteral("fields"), QStringLiteral("summary,customfield_1")},
+                                                 {QStringLiteral("expand"), QStringLiteral("names")},
+                                                 {QStringLiteral("maxResults"), QStringLiteral("50")}})),
+                       QJsonDocument(QJsonObject{{QStringLiteral("issues"), QJsonArray()},
+                                                 {QStringLiteral("isLast"), true},
+                                                 {QStringLiteral("names"), names}}));
+
+        std::optional<ApiReply> answer;
+        JiraClient(server, Deployment::Cloud)
+            .search(QStringLiteral("a"), options, nullptr, [&answer](const ApiReply &reply) { answer = reply; });
+        QVERIFY(answer && answer->ok());
+        QCOMPARE(answer->json.object().value(QStringLiteral("names")).toObject(), names);
+    }
+
+    void allFields()
+    {
+        FakeApiClient server;
+        server.setSynchronous(true);
+        JiraClient(server, Deployment::Cloud).allFields(nullptr, [](const ApiReply &) {});
+        JiraClient(server, Deployment::DataCenter).allFields(nullptr, [](const ApiReply &) {});
+        QCOMPARE(server.requestKeys(),
+                 QStringList({QStringLiteral("GET rest/api/3/field"), QStringLiteral("GET rest/api/2/field")}));
+    }
+
     void searchStopsAtMaxRows()
     {
         FakeApiClient server;
@@ -246,22 +311,6 @@ private slots:
         QCOMPARE(keysOf(*answer), QStringList({QStringLiteral("OPS-12")}));
     }
 
-    void transitions()
-    {
-        FakeApiClient server;
-        server.setSynchronous(true);
-        JiraClient cloud(server, Deployment::Cloud);
-        cloud.transitions(QStringLiteral("OPS-7"), nullptr, [](const ApiReply &) {});
-        cloud.transition(QStringLiteral("OPS-7"), QStringLiteral("31"), nullptr, [](const ApiReply &) {});
-
-        QCOMPARE(server.requestKeys(),
-                 QStringList({QStringLiteral("GET rest/api/3/issue/OPS-7/transitions"),
-                              QStringLiteral("POST rest/api/3/issue/OPS-7/transitions")}));
-        const QJsonObject body = server.requests().at(1).body.object();
-        QCOMPARE(body, QJsonObject({{QStringLiteral("transition"),
-                                     QJsonObject({{QStringLiteral("id"), QStringLiteral("31")}})}}));
-    }
-
     void myself()
     {
         FakeApiClient server;
@@ -270,46 +319,6 @@ private slots:
         JiraClient(server, Deployment::DataCenter).myself(nullptr, [](const ApiReply &) {});
         QCOMPARE(server.requestKeys(),
                  QStringList({QStringLiteral("GET rest/api/3/myself"), QStringLiteral("GET rest/api/2/myself")}));
-    }
-
-    void commentDataCenterIsPlainText()
-    {
-        FakeApiClient server;
-        server.setSynchronous(true);
-        JiraClient(server, Deployment::DataCenter)
-            .comment(QStringLiteral("INFRA-1203"), QStringLiteral("Done.\nThanks"), nullptr, [](const ApiReply &) {});
-        QCOMPARE(server.requestKeys(), QStringList({QStringLiteral("POST rest/api/2/issue/INFRA-1203/comment")}));
-        QCOMPARE(server.requests().at(0).body.object(),
-                 QJsonObject({{QStringLiteral("body"), QStringLiteral("Done.\nThanks")}}));
-    }
-
-    // Paragraphs between blank lines, and hard breaks between lines.
-    void commentCloudIsAdf()
-    {
-        FakeApiClient server;
-        server.setSynchronous(true);
-        JiraClient(server, Deployment::Cloud)
-            .comment(QStringLiteral("OPS-7"), QStringLiteral("First line\r\nsecond line\n\n\nNext paragraph\n"),
-                     nullptr, [](const ApiReply &) {});
-        QCOMPARE(server.requestKeys(), QStringList({QStringLiteral("POST rest/api/3/issue/OPS-7/comment")}));
-
-        const auto text = [](const QString &value) {
-            return QJsonObject({{QStringLiteral("type"), QStringLiteral("text")}, {QStringLiteral("text"), value}});
-        };
-        const QJsonObject hardBreak({{QStringLiteral("type"), QStringLiteral("hardBreak")}});
-        const auto paragraph = [](const QJsonArray &content) {
-            return QJsonObject({{QStringLiteral("type"), QStringLiteral("paragraph")},
-                                {QStringLiteral("content"), content}});
-        };
-        const QJsonObject expected(
-            {{QStringLiteral("body"),
-              QJsonObject({{QStringLiteral("type"), QStringLiteral("doc")},
-                           {QStringLiteral("version"), 1},
-                           {QStringLiteral("content"),
-                            QJsonArray({paragraph(QJsonArray({text(QStringLiteral("First line")), hardBreak,
-                                                              text(QStringLiteral("second line"))})),
-                                        paragraph(QJsonArray({text(QStringLiteral("Next paragraph"))}))})}})}});
-        QCOMPARE(server.requests().at(0).body.object(), expected);
     }
 };
 

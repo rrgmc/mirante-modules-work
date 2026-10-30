@@ -3,6 +3,7 @@
 #include <mirante/Fields.h>
 
 #include <QCoreApplication>
+#include <QJsonArray>
 
 #include <vector>
 
@@ -44,7 +45,13 @@ public:
         token.label = QCoreApplication::translate("jira", "Token");
         token.type = Field::Type::Secret;
         token.placeholder = QCoreApplication::translate("jira", "Kept in this device's keychain");
-        return {baseUrl, deployment, email, token};
+
+        Field extraFields;
+        extraFields.key = kExtraFieldsKey;
+        extraFields.label = QCoreApplication::translate("jira", "Extra fields");
+        extraFields.type = Field::Type::TextList;
+        extraFields.placeholder = QCoreApplication::translate("jira", "Field names, one per line, such as Team");
+        return {baseUrl, deployment, email, token, extraFields};
     }
 };
 
@@ -83,6 +90,18 @@ Deployment deploymentOf(const QJsonObject &general)
 QString emailOf(const QJsonObject &general)
 {
     return general.value(kEmailKey).toString().trimmed();
+}
+
+QStringList extraFieldsOf(const QJsonObject &general)
+{
+    QStringList names;
+    const QJsonArray values = general.value(kExtraFieldsKey).toArray();
+    for (const QJsonValue &value : values) {
+        const QString name = value.toString().trimmed();
+        if (!name.isEmpty() && !names.contains(name, Qt::CaseInsensitive))
+            names << name;
+    }
+    return names;
 }
 
 } // namespace mirante::modules::jira

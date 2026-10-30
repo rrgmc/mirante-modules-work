@@ -1,0 +1,35 @@
+{
+    "startAt": 0,
+    "maxResults": 50,
+    "total": 2,
+    "issues": [
+        {
+            "id": "1210",
+            "key": "INFRA-1210",
+            "fields": {
+                "summary": "Copy the staging data",
+                "status": {
+                    "name": "Open",
+                    "id": "1",
+                    "statusCategory": {
+                        "key": "new"
+                    }
+                }
+            }
+        },
+        {
+            "id": "1211",
+            "key": "INFRA-1211",
+            "fields": {
+                "summary": "Check the copied data",
+                "status": {
+                    "name": "Closed",
+                    "id": "6",
+                    "statusCategory": {
+                        "key": "done"
+                    }
+                }
+            }
+        }
+    ]
+}

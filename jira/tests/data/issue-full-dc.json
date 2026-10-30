@@ -18,6 +18,8 @@
     },
     "names": {
         "summary": "Summary",
+        "customfield_10130": "Team",
+        "fixVersions": "Fix Version/s",
         "issuetype": "Issue Type",
         "customfield_10105": "Sprint",
         "priority": "Priority",
@@ -32,6 +34,8 @@
     },
     "fields": {
         "summary": "Upgrade the staging database",
+        "customfield_10130": {"self": "https://jira.example.org/jira/rest/api/2/customFieldOption/501", "value": "Storage", "id": "501"},
+        "fixVersions": [{"id": "700", "name": "Week 45"}],
         "issuetype": {"self": "https://jira.example.org/jira/rest/api/2/issuetype/3", "id": "3", "name": "Story", "subtask": false},
         "priority": {"self": "https://jira.example.org/jira/rest/api/2/priority/2", "name": "High", "id": "2"},
         "assignee": null,
