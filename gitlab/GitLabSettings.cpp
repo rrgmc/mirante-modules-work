@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QNetworkRequest>
 
 #include <utility>
 
@@ -45,6 +46,22 @@ public:
 std::unique_ptr<SettingsScreen> makeGeneralScreen()
 {
     return std::make_unique<GeneralScreen>();
+}
+
+void GitLabServerType::authorize(QNetworkRequest &request, const QString &token, const QJsonObject &values) const
+{
+    Q_UNUSED(values)
+    request.setRawHeader("PRIVATE-TOKEN", token.toUtf8());
+}
+
+Field makeProjectSetting()
+{
+    Field field;
+    field.key = kProjectSettingKey;
+    field.label = QCoreApplication::translate("gitlab", "GitLab project path");
+    field.type = Field::Type::Text;
+    field.placeholder = QStringLiteral("group/project");
+    return field;
 }
 
 QUrl baseUrlOf(const QJsonObject &general)

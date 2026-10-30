@@ -1,0 +1,20 @@
+{
+  "id": 300051,
+  "iid": 51,
+  "project_id": 77,
+  "state": "opened",
+  "approved": true,
+  "approvals_required": 0,
+  "approvals_left": 0,
+  "approved_by": [
+    {
+      "user": {
+        "id": 3003,
+        "username": "carla.reviewer",
+        "name": "Carla Reviewer",
+        "state": "active",
+        "web_url": "https://gitlab.example/carla.reviewer"
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": 9001,
+  "iid": 512,
+  "project_id": 77,
+  "sha": "4f1c2d0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
+  "ref": "feature/retry-button",
+  "status": "failed",
+  "source": "push",
+  "created_at": "2026-10-28T15:50:02.000Z",
+  "updated_at": "2026-10-28T16:01:44.000Z",
+  "started_at": "2026-10-28T15:50:05.000Z",
+  "finished_at": "2026-10-28T16:01:44.000Z",
+  "duration": 699,
+  "web_url": "https://gitlab.example/acme/backend/-/pipelines/9001",
+  "user": {
+    "id": 2002,
+    "username": "bruno.author",
+    "name": "Bruno Author"
+  }
+}

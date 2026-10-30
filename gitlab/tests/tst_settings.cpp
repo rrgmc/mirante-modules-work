@@ -7,6 +7,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QNetworkRequest>
 #include <QTest>
 
 namespace mirante::modules::gitlab {
@@ -77,6 +78,43 @@ private slots:
         const auto elsewhere = summary.fromUrl(link, QStringLiteral("default"));
         QVERIFY(elsewhere);
         QCOMPARE(elsewhere->config.value(QStringLiteral("project")).toString(), QStringLiteral("gitlab/acme/app"));
+    }
+
+    // The server is the General Configuration's base URL, and the token goes
+    // in the PRIVATE-TOKEN header.
+    void serverType()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+        const mirante::ServerType *server = registry.serverType(QStringLiteral("gitlab"));
+        QVERIFY(server);
+        QCOMPARE(server->screenId(), QStringLiteral("general"));
+        QCOMPARE(server->tokenKey(), QStringLiteral("token"));
+        QCOMPARE(server->baseUrl({}), QUrl(QStringLiteral("https://gitlab.com")));
+        const QJsonObject values{{QStringLiteral("baseUrl"), QStringLiteral("https://example.org/gitlab")}};
+        QCOMPARE(server->baseUrl(values), QUrl(QStringLiteral("https://example.org/gitlab")));
+        QVERIFY(!server->baseUrl({{QStringLiteral("baseUrl"), QStringLiteral("ftp://example.org")}}).isValid());
+        QVERIFY(server->problem(values).isEmpty());
+
+        // The token field names a Secret field of that screen.
+        bool found = false;
+        for (const mirante::Field &field : registry.settingsScreens(QStringLiteral("gitlab")).front()->fields())
+            found = found || (field.key == server->tokenKey() && field.type == mirante::Field::Type::Secret);
+        QVERIFY(found);
+
+        QNetworkRequest request(QUrl(QStringLiteral("https://example.org/gitlab/api/v4/user")));
+        server->authorize(request, QStringLiteral("glpat-example"), values);
+        QCOMPARE(request.rawHeader("PRIVATE-TOKEN"), QByteArray("glpat-example"));
+        QVERIFY(!request.hasRawHeader("Authorization"));
+    }
+
+    void projectSetting()
+    {
+        const mirante::Field field = mirante::modules::gitlab::makeProjectSetting();
+        QCOMPARE(field.key, QStringLiteral("project"));
+        QCOMPARE(field.label, QStringLiteral("GitLab project path"));
+        QCOMPARE(field.type, mirante::Field::Type::Text);
+        QVERIFY(!field.required);
     }
 
     void projectPathsAreCleaned()

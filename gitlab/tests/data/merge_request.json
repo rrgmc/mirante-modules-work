@@ -1,0 +1,64 @@
+{
+  "id": 300042,
+  "iid": 42,
+  "project_id": 77,
+  "title": "Add the retry button to the pipeline panel",
+  "state": "opened",
+  "draft": false,
+  "created_at": "2026-10-20T09:12:44.512Z",
+  "updated_at": "2026-10-28T16:03:10.118Z",
+  "target_branch": "main",
+  "source_branch": "feature/retry-button",
+  "author": {
+    "id": 2002,
+    "username": "bruno.author",
+    "name": "Bruno Author",
+    "state": "active",
+    "web_url": "https://gitlab.example/bruno.author"
+  },
+  "assignees": [
+    {
+      "id": 2002,
+      "username": "bruno.author",
+      "name": "Bruno Author",
+      "state": "active",
+      "web_url": "https://gitlab.example/bruno.author"
+    }
+  ],
+  "reviewers": [
+    {
+      "id": 1001,
+      "username": "ana.reviewer",
+      "name": "Ana Reviewer",
+      "state": "active",
+      "web_url": "https://gitlab.example/ana.reviewer"
+    },
+    {
+      "id": 3003,
+      "username": "carla.reviewer",
+      "name": "Carla Reviewer",
+      "state": "active",
+      "web_url": "https://gitlab.example/carla.reviewer"
+    }
+  ],
+  "labels": ["frontend", "ci"],
+  "merge_status": "can_be_merged",
+  "detailed_merge_status": "not_approved",
+  "has_conflicts": false,
+  "references": {
+    "short": "!42",
+    "relative": "!42",
+    "full": "acme/backend!42"
+  },
+  "web_url": "https://gitlab.example/acme/backend/-/merge_requests/42",
+  "head_pipeline": {
+    "id": 9001,
+    "iid": 512,
+    "project_id": 77,
+    "sha": "4f1c2d0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
+    "ref": "feature/retry-button",
+    "status": "failed",
+    "source": "merge_request_event",
+    "web_url": "https://gitlab.example/acme/backend/-/pipelines/9001"
+  }
+}
