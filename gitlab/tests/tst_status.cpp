@@ -30,6 +30,8 @@ const QString kIssue = QStringLiteral("GET api/v4/projects/acme%2Fbackend/issues
 const QString kLatest =
     QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/latest?ref=feature%2Fretry-button");
 const QString kJobs = QStringLiteral("GET api/v4/projects/acme%2Fbackend/pipelines/9001/jobs?per_page=100");
+const QString kNotes =
+    QStringLiteral("GET api/v4/projects/acme%2Fbackend/issues/7/notes?sort=desc&order_by=created_at&per_page=20");
 
 QString dataFile(const QString &name)
 {
@@ -70,6 +72,23 @@ void setUpMergeRequest(FakeStatusJob &job, const QString &mergeRequest, const QS
     QVERIFY(job.client.setJsonFile(kMergeRequest, dataFile(mergeRequest)));
     QVERIFY(job.client.setJsonFile(kApprovals, dataFile(approvals)));
     QVERIFY(job.client.setJsonFile(kUser, dataFile(QStringLiteral("user.json"))));
+}
+
+// An issue job for acme/backend#7.
+void setUpIssue(FakeStatusJob &job)
+{
+    job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                   {QStringLiteral("iid"), 7}};
+    QVERIFY(job.client.setJsonFile(kIssue, dataFile(QStringLiteral("issue.json"))));
+}
+
+ApiReply forbiddenReply()
+{
+    ApiReply reply;
+    reply.error = ApiReply::Error::Forbidden;
+    reply.httpStatus = 403;
+    reply.message = QStringLiteral("Forbidden (403)");
+    return reply;
 }
 
 // Waits for the job to finish, and checks it finished once.
@@ -219,6 +238,187 @@ private slots:
         QVERIFY(*closedStatus.closed);
     }
 
+    // A summary asks for the jobs of a failed head pipeline. The rest of the
+    // status is that of the plain fetch.
+    void mergeRequestSummaryWithFailedPipeline()
+    {
+        FakeStatusJob job;
+        setUpMergeRequest(job, QStringLiteral("merge_request.json"), QStringLiteral("approvals.json"));
+        QVERIFY(job.client.setJsonFile(kJobs, dataFile(QStringLiteral("pipeline_jobs.json"))));
+        fetchMergeRequestSummaryStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QCOMPARE(status.summary, QStringLiteral("Open · 2 of 3 approvals · pipeline failed"));
+        QCOMPARE(keysOf(status), (QStringList{QStringLiteral("pipeline-failed"), QStringLiteral("review")}));
+        QCOMPARE(status.data.value(QStringLiteral("mergeRequest")).toObject().value(QStringLiteral("iid")).toInt(), 42);
+        const QJsonArray jobs = status.data.value(QStringLiteral("jobs")).toArray();
+        QCOMPARE(jobs.size(), 4);
+        QCOMPARE(jobs.at(1).toObject().value(QStringLiteral("name")).toString(), QStringLiteral("test:unit"));
+        QCOMPARE(job.client.requestKeys(), (QStringList{kMergeRequest, kApprovals, kUser, kJobs}));
+        QVERIFY(job.client.requests().constLast().options.followLinks);
+    }
+
+    // Without a failed head pipeline, a summary asks for no jobs.
+    void mergeRequestSummaryAsksForJobsOnlyWhenFailed()
+    {
+        FakeStatusJob withoutPipeline;
+        setUpMergeRequest(withoutPipeline, QStringLiteral("merge_request_no_pipeline.json"),
+                          QStringLiteral("approvals_approved.json"));
+        fetchMergeRequestSummaryStatus(withoutPipeline);
+        WAIT_FOR_FINISH(withoutPipeline);
+        QCOMPARE(withoutPipeline.finished->state, ItemStatus::State::Ok);
+        QVERIFY(!withoutPipeline.finished->data.contains(QStringLiteral("jobs")));
+        QCOMPARE(withoutPipeline.client.requestKeys(), (QStringList{kMergeRequest, kApprovals, kUser}));
+
+        for (const QString &pipelineState : {QStringLiteral("success"), QStringLiteral("canceled")}) {
+            QJsonObject mergeRequest = readJson(QStringLiteral("merge_request.json")).object();
+            QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
+            pipeline.insert(QStringLiteral("status"), pipelineState);
+            mergeRequest.insert(QStringLiteral("head_pipeline"), pipeline);
+
+            FakeStatusJob job;
+            setUpMergeRequest(job, QStringLiteral("merge_request.json"), QStringLiteral("approvals.json"));
+            job.client.setJson(kMergeRequest, QJsonDocument(mergeRequest));
+            fetchMergeRequestSummaryStatus(job);
+            WAIT_FOR_FINISH(job);
+            QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+            QVERIFY(!job.finished->data.contains(QStringLiteral("jobs")));
+            QCOMPARE(job.client.requestKeys(), (QStringList{kMergeRequest, kApprovals, kUser}));
+        }
+    }
+
+    // A failed jobs request keeps the status and leaves the jobs out.
+    void mergeRequestSummaryWhenJobsFail()
+    {
+        FakeStatusJob job;
+        setUpMergeRequest(job, QStringLiteral("merge_request.json"), QStringLiteral("approvals.json"));
+        job.client.setReply(kJobs, forbiddenReply());
+        fetchMergeRequestSummaryStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QVERIFY(status.message.isEmpty());
+        QCOMPARE(status.summary, QStringLiteral("Open · 2 of 3 approvals · pipeline failed"));
+        QCOMPARE(keysOf(status), (QStringList{QStringLiteral("pipeline-failed"), QStringLiteral("review")}));
+        QVERIFY(status.data.contains(QStringLiteral("mergeRequest")));
+        QVERIFY(!status.data.contains(QStringLiteral("jobs")));
+        QCOMPARE(job.client.requestKeys(), (QStringList{kMergeRequest, kApprovals, kUser, kJobs}));
+    }
+
+    // An unknown merge request is NotFound, and no jobs are asked for.
+    void mergeRequestSummaryNotFound()
+    {
+        FakeStatusJob job;
+        job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                       {QStringLiteral("iid"), 42}};
+        QVERIFY(job.client.setJsonFile(kUser, dataFile(QStringLiteral("user.json"))));
+        QVERIFY(job.client.setJsonFile(kApprovals, dataFile(QStringLiteral("approvals.json"))));
+        fetchMergeRequestSummaryStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::NotFound);
+        QCOMPARE(job.client.requestKeys(), (QStringList{kMergeRequest, kApprovals, kUser}));
+    }
+
+    // A summary has the latest notes, newest first, without system notes.
+    void issueSummaryLeavesOutSystemNotes()
+    {
+        FakeStatusJob job;
+        setUpIssue(job);
+        QVERIFY(job.client.setJsonFile(kNotes, dataFile(QStringLiteral("issue_notes.json"))));
+        fetchIssueSummaryStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QCOMPARE(status.summary, QStringLiteral("Open · assigned to Ana Reviewer"));
+        QVERIFY(status.attention.isEmpty());
+        QVERIFY(!*status.closed);
+        QCOMPARE(status.data.value(QStringLiteral("issue")).toObject().value(QStringLiteral("iid")).toInt(), 7);
+
+        QList<int> ids;
+        for (const QJsonValue &note : status.data.value(QStringLiteral("notes")).toArray()) {
+            QVERIFY(!note.toObject().value(QStringLiteral("system")).toBool());
+            ids << note.toObject().value(QStringLiteral("id")).toInt();
+        }
+        QCOMPARE(ids, (QList<int>{880005, 880003, 880001}));
+        QCOMPARE(job.client.requestKeys(), (QStringList{kIssue, kNotes}));
+        QVERIFY(job.client.requests().constLast().options.followLinks);
+        QCOMPARE(job.client.requests().constLast().options.maxRows, 20);
+    }
+
+    // A failed notes request keeps the status and leaves the notes out.
+    void issueSummaryWhenNotesFail()
+    {
+        FakeStatusJob job;
+        setUpIssue(job);
+        job.client.setReply(kNotes, forbiddenReply());
+        fetchIssueSummaryStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QVERIFY(status.message.isEmpty());
+        QCOMPARE(status.summary, QStringLiteral("Open · assigned to Ana Reviewer"));
+        QVERIFY(status.data.contains(QStringLiteral("issue")));
+        QVERIFY(!status.data.contains(QStringLiteral("notes")));
+        QCOMPARE(job.client.requestKeys(), (QStringList{kIssue, kNotes}));
+    }
+
+    // An unknown issue is NotFound, and no notes are asked for.
+    void issueSummaryNotFound()
+    {
+        FakeStatusJob job;
+        job.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
+                                       {QStringLiteral("iid"), 7}};
+        fetchIssueSummaryStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::NotFound);
+        QCOMPARE(job.client.requestKeys(), QStringList{kIssue});
+    }
+
+    // The registered types: a summary asks for more, and a page for what it
+    // asked for in M5, even with a failed pipeline.
+    void pagesAskForLessThanSummaries()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+
+        const auto runMergeRequest = [&registry](const QString &typeId, FakeStatusJob &job) {
+            setUpMergeRequest(job, QStringLiteral("merge_request.json"), QStringLiteral("approvals.json"));
+            QVERIFY(job.client.setJsonFile(kJobs, dataFile(QStringLiteral("pipeline_jobs.json"))));
+            registry.type(typeId).fetchStatus(job);
+            WAIT_FOR_FINISH(job);
+        };
+        FakeStatusJob mergeRequestPage;
+        runMergeRequest(QStringLiteral("gitlab.mr.page"), mergeRequestPage);
+        QCOMPARE(mergeRequestPage.client.requestKeys(), (QStringList{kMergeRequest, kApprovals, kUser}));
+        QVERIFY(!mergeRequestPage.finished->data.contains(QStringLiteral("jobs")));
+
+        FakeStatusJob mergeRequestSummary;
+        runMergeRequest(QStringLiteral("gitlab.mr.summary"), mergeRequestSummary);
+        QCOMPARE(mergeRequestSummary.client.requestKeys(), (QStringList{kMergeRequest, kApprovals, kUser, kJobs}));
+        QVERIFY(mergeRequestSummary.finished->data.contains(QStringLiteral("jobs")));
+
+        const auto runIssue = [&registry](const QString &typeId, FakeStatusJob &job) {
+            setUpIssue(job);
+            QVERIFY(job.client.setJsonFile(kNotes, dataFile(QStringLiteral("issue_notes.json"))));
+            registry.type(typeId).fetchStatus(job);
+            WAIT_FOR_FINISH(job);
+        };
+        FakeStatusJob issuePage;
+        runIssue(QStringLiteral("gitlab.issue.page"), issuePage);
+        QCOMPARE(issuePage.client.requestKeys(), QStringList{kIssue});
+        QVERIFY(!issuePage.finished->data.contains(QStringLiteral("notes")));
+
+        FakeStatusJob issueSummary;
+        runIssue(QStringLiteral("gitlab.issue.summary"), issueSummary);
+        QCOMPARE(issueSummary.client.requestKeys(), (QStringList{kIssue, kNotes}));
+        QVERIFY(issueSummary.finished->data.contains(QStringLiteral("notes")));
+    }
+
     // A fixed branch whose latest pipeline failed. A failed job that may
     // fail is not counted.
     void pipelineOfAFixedBranch()
@@ -318,6 +518,20 @@ private slots:
         QCOMPARE(mergeRequest.finished->message, QStringLiteral("Set the project and number in the item's settings."));
         QVERIFY(mergeRequest.client.requests().isEmpty());
 
+        FakeStatusJob mergeRequestSummary;
+        mergeRequestSummary.configValues = QJsonObject{{QStringLiteral("iid"), 42}};
+        fetchMergeRequestSummaryStatus(mergeRequestSummary);
+        QCOMPARE(mergeRequestSummary.finishCount, 1);
+        QCOMPARE(mergeRequestSummary.finished->state, ItemStatus::State::None);
+        QVERIFY(mergeRequestSummary.client.requests().isEmpty());
+
+        FakeStatusJob issueSummary;
+        issueSummary.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}};
+        fetchIssueSummaryStatus(issueSummary);
+        QCOMPARE(issueSummary.finishCount, 1);
+        QCOMPARE(issueSummary.finished->state, ItemStatus::State::None);
+        QVERIFY(issueSummary.client.requests().isEmpty());
+
         FakeStatusJob issue;
         issue.configValues = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}};
         fetchIssueStatus(issue);
@@ -358,6 +572,8 @@ private slots:
                                  {QStringLiteral("iid"), 42}};
         check(&fetchMergeRequestStatus, single);
         check(&fetchIssueStatus, single);
+        check(&fetchMergeRequestSummaryStatus, single);
+        check(&fetchIssueSummaryStatus, single);
         check(&fetchPipelineStatus, QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
                                                 {QStringLiteral("branch"), QStringLiteral("main")}});
         check(&fetchPipelineStatus, QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},

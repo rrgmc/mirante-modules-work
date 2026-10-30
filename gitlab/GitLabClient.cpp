@@ -115,41 +115,32 @@ void GitLabClient::issues(const QUrlQuery &filter, int maxRows, Done done) const
 
 void GitLabClient::pipeline(const QString &project, qint64 pipelineId, Done done) const
 {
-    Q_UNUSED(project)
-    Q_UNUSED(pipelineId)
-    Q_UNUSED(done)
+    get(pipelinePath(project, pipelineId), {}, std::move(done));
 }
 
 void GitLabClient::issueNotes(const QString &project, qint64 iid, int maxRows, Done done) const
 {
-    Q_UNUSED(project)
-    Q_UNUSED(iid)
-    Q_UNUSED(maxRows)
-    Q_UNUSED(done)
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("sort"), QStringLiteral("desc"));
+    query.addQueryItem(QStringLiteral("order_by"), QStringLiteral("created_at"));
+    list(issuePath(project, iid) + QStringLiteral("/notes"), query, maxRows, std::move(done));
 }
 
 void GitLabClient::projectIssues(const QString &project, const QUrlQuery &filter, int maxRows, Done done) const
 {
-    Q_UNUSED(project)
-    Q_UNUSED(filter)
-    Q_UNUSED(maxRows)
-    Q_UNUSED(done)
+    list(projectPathOf(project) + QStringLiteral("/issues"), filter, maxRows, std::move(done));
 }
 
 void GitLabClient::groupIssues(const QString &group, const QUrlQuery &filter, int maxRows, Done done) const
 {
-    Q_UNUSED(group)
-    Q_UNUSED(filter)
-    Q_UNUSED(maxRows)
-    Q_UNUSED(done)
+    list(QStringLiteral("api/v4/groups/") + encodePath(group) + QStringLiteral("/issues"), filter, maxRows,
+         std::move(done));
 }
 
 void GitLabClient::setIssueState(const QString &project, qint64 iid, const QString &stateEvent, Done done) const
 {
-    Q_UNUSED(project)
-    Q_UNUSED(iid)
-    Q_UNUSED(stateEvent)
-    Q_UNUSED(done)
+    put(issuePath(project, iid), QJsonDocument(QJsonObject{{QStringLiteral("state_event"), stateEvent}}),
+        std::move(done));
 }
 
 void GitLabClient::retryPipeline(const QString &project, qint64 pipelineId, Done done) const

@@ -1,0 +1,112 @@
+[
+  {
+    "id": 880005,
+    "type": null,
+    "body": "Fixed on the branch. Please check it on your side.",
+    "author": {
+      "id": 2002,
+      "username": "bruno.author",
+      "name": "Bruno Author",
+      "state": "active",
+      "web_url": "https://gitlab.example/bruno.author"
+    },
+    "created_at": "2026-10-26T12:00:00.000Z",
+    "updated_at": "2026-10-26T12:00:00.000Z",
+    "system": false,
+    "noteable_id": 500007,
+    "noteable_type": "Issue",
+    "noteable_iid": 7,
+    "project_id": 77,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false
+  },
+  {
+    "id": 880004,
+    "type": null,
+    "body": "added ~bug label",
+    "author": {
+      "id": 1001,
+      "username": "ana.reviewer",
+      "name": "Ana Reviewer",
+      "state": "active",
+      "web_url": "https://gitlab.example/ana.reviewer"
+    },
+    "created_at": "2026-10-24T09:30:00.000Z",
+    "updated_at": "2026-10-24T09:30:00.000Z",
+    "system": true,
+    "noteable_id": 500007,
+    "noteable_type": "Issue",
+    "noteable_iid": 7,
+    "project_id": 77,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false
+  },
+  {
+    "id": 880003,
+    "type": null,
+    "body": "It happens with every manual job, in any stage.",
+    "author": {
+      "id": 1001,
+      "username": "ana.reviewer",
+      "name": "Ana Reviewer",
+      "state": "active",
+      "web_url": "https://gitlab.example/ana.reviewer"
+    },
+    "created_at": "2026-10-24T09:29:00.000Z",
+    "updated_at": "2026-10-24T09:29:00.000Z",
+    "system": false,
+    "noteable_id": 500007,
+    "noteable_type": "Issue",
+    "noteable_iid": 7,
+    "project_id": 77,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false
+  },
+  {
+    "id": 880002,
+    "type": null,
+    "body": "assigned to @ana.reviewer",
+    "author": {
+      "id": 2002,
+      "username": "bruno.author",
+      "name": "Bruno Author",
+      "state": "active",
+      "web_url": "https://gitlab.example/bruno.author"
+    },
+    "created_at": "2026-10-11T08:00:00.000Z",
+    "updated_at": "2026-10-11T08:00:00.000Z",
+    "system": true,
+    "noteable_id": 500007,
+    "noteable_type": "Issue",
+    "noteable_iid": 7,
+    "project_id": 77,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false
+  },
+  {
+    "id": 880001,
+    "type": null,
+    "body": "Which stage were you looking at?",
+    "author": {
+      "id": 2002,
+      "username": "bruno.author",
+      "name": "Bruno Author",
+      "state": "active",
+      "web_url": "https://gitlab.example/bruno.author"
+    },
+    "created_at": "2026-10-10T08:15:00.000Z",
+    "updated_at": "2026-10-10T08:15:00.000Z",
+    "system": false,
+    "noteable_id": 500007,
+    "noteable_type": "Issue",
+    "noteable_iid": 7,
+    "project_id": 77,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false
+  }
+]
