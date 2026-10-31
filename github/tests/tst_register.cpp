@@ -27,6 +27,15 @@ QStringList choicesOf(const mirante::ItemType &type, const QString &key)
     return {};
 }
 
+mirante::Field fieldOf(const mirante::ItemType &type, const QString &key)
+{
+    for (const mirante::Field &field : type.fields()) {
+        if (field.key == key)
+            return field;
+    }
+    return {};
+}
+
 } // namespace
 
 class TestRegister : public QObject
@@ -266,6 +275,127 @@ private slots:
         QVERIFY(!registry.moduleDescription(QStringLiteral("github")).isEmpty());
         for (const mirante::ItemType *type : registry.types())
             QVERIFY2(!type->description().isEmpty(), qPrintable(type->id()));
+    }
+
+    // The texts of the plan's identity and item type tables.
+    void descriptions()
+    {
+        mirante::ItemTypeRegistry registry;
+        registerGitHub(registry);
+
+        QCOMPARE(registry.moduleDescription(QStringLiteral("github")),
+                 QStringLiteral("Pull requests, Actions runs and issues from GitHub or GitHub Enterprise Server. "
+                                "Each profile sets its server and token in the module's General Configuration."));
+        QMap<QString, QString> expected;
+        expected.insert(QStringLiteral("github.pr.summary"),
+                        QStringLiteral("A summary of one pull request: its state, branches, checks, reviews and "
+                                       "people."));
+        expected.insert(QStringLiteral("github.pr.page"),
+                        QStringLiteral("The web page of one pull request, on the GitHub server of the item's "
+                                       "profile."));
+        expected.insert(QStringLiteral("github.pr.list"),
+                        QStringLiteral("A table of pull requests in a repository, an owner or everywhere, such as "
+                                       "those that wait for your review."));
+        expected.insert(QStringLiteral("github.run"),
+                        QStringLiteral("The Actions runs of a branch's newest commit, one per workflow, with their "
+                                       "jobs. The branch is a fixed one, the main folder's current branch or a pull "
+                                       "request's branch."));
+        expected.insert(QStringLiteral("github.run.list"),
+                        QStringLiteral("A table of a repository's Actions runs: all of them, those you started, or "
+                                       "those of a branch or a pull request."));
+        expected.insert(QStringLiteral("github.issue.summary"),
+                        QStringLiteral("A summary of one issue: its state, assignees, labels, milestone and latest "
+                                       "comments."));
+        expected.insert(QStringLiteral("github.issue.page"),
+                        QStringLiteral("The web page of one issue, on the GitHub server of the item's profile."));
+        expected.insert(QStringLiteral("github.issue.list"),
+                        QStringLiteral("A table of issues in a repository, an owner or everywhere, such as those "
+                                       "assigned to you."));
+        for (auto it = expected.cbegin(); it != expected.cend(); ++it)
+            QCOMPARE(registry.type(it.key()).description(), it.value());
+    }
+
+    // The labels of each choice, in the order of the choices.
+    void choiceLabels()
+    {
+        mirante::ItemTypeRegistry registry;
+        registerGitHub(registry);
+
+        const QStringList scopes{QStringLiteral("One repository"), QStringLiteral("One owner"), QStringLiteral("All")};
+        const mirante::ItemType &prList = registry.type(QStringLiteral("github.pr.list"));
+        const mirante::ItemType &issueList = registry.type(QStringLiteral("github.issue.list"));
+        QCOMPARE(fieldOf(prList, QStringLiteral("scope")).choiceLabels, scopes);
+        QCOMPARE(fieldOf(issueList, QStringLiteral("scope")).choiceLabels, scopes);
+        QCOMPARE(fieldOf(prList, QStringLiteral("preset")).choiceLabels,
+                 (QStringList{QStringLiteral("Created by me"), QStringLiteral("Review requested from me"),
+                              QStringLiteral("Assigned to me"), QStringLiteral("All open")}));
+        QCOMPARE(fieldOf(issueList, QStringLiteral("preset")).choiceLabels,
+                 (QStringList{QStringLiteral("Assigned to me"), QStringLiteral("Created by me"),
+                              QStringLiteral("All open")}));
+        QCOMPARE(fieldOf(registry.type(QStringLiteral("github.run")), QStringLiteral("branchSource")).choiceLabels,
+                 (QStringList{QStringLiteral("Fixed branch"), QStringLiteral("Current branch of the main folder"),
+                              QStringLiteral("Branch of a linked pull request")}));
+        QCOMPARE(fieldOf(registry.type(QStringLiteral("github.run.list")), QStringLiteral("source")).choiceLabels,
+                 (QStringList{QStringLiteral("All runs"), QStringLiteral("Started by me"),
+                              QStringLiteral("Of a branch"), QStringLiteral("Of a pull request")}));
+    }
+
+    // Each section switch is a boolean that is on by default.
+    void sectionsDefaultOn()
+    {
+        mirante::ItemTypeRegistry registry;
+        registerGitHub(registry);
+
+        QMap<QString, QStringList> sections;
+        sections.insert(QStringLiteral("github.pr.summary"),
+                        {QStringLiteral("showChecks"), QStringLiteral("showReviews"), QStringLiteral("showPeople"),
+                         QStringLiteral("showLabels")});
+        sections.insert(QStringLiteral("github.pr.list"), {QStringLiteral("showChecks"), QStringLiteral("showReviews")});
+        sections.insert(QStringLiteral("github.issue.summary"),
+                        {QStringLiteral("showDetails"), QStringLiteral("showLabels"), QStringLiteral("showComments")});
+        for (auto it = sections.cbegin(); it != sections.cend(); ++it) {
+            const QJsonObject defaults = mirante::defaultConfig(registry.type(it.key()).fields());
+            for (const QString &key : it.value()) {
+                const mirante::Field field = fieldOf(registry.type(it.key()), key);
+                const QString where = it.key() + QLatin1Char(' ') + key;
+                QVERIFY2(field.type == mirante::Field::Type::Bool, qPrintable(where));
+                QVERIFY2(!field.required, qPrintable(where));
+                QVERIFY2(defaults.value(key).toBool(), qPrintable(where));
+            }
+        }
+    }
+
+    // The text fields that may stay empty, with their types and placeholders.
+    void optionalTextFields()
+    {
+        mirante::ItemTypeRegistry registry;
+        registerGitHub(registry);
+
+        for (const mirante::ItemType *type : registry.types()) {
+            const mirante::Field repository = fieldOf(*type, QStringLiteral("repository"));
+            QCOMPARE(repository.type, mirante::Field::Type::Text);
+            QVERIFY2(!repository.required, qPrintable(type->id()));
+            QCOMPARE(repository.placeholder, QStringLiteral("owner/repo"));
+            const mirante::Field number = fieldOf(*type, QStringLiteral("number"));
+            if (!number.key.isEmpty())
+                QCOMPARE(number.type, mirante::Field::Type::Integer);
+        }
+
+        const mirante::ItemType &prList = registry.type(QStringLiteral("github.pr.list"));
+        QCOMPARE(fieldOf(prList, QStringLiteral("owner")).type, mirante::Field::Type::Text);
+        QVERIFY(!fieldOf(prList, QStringLiteral("owner")).required);
+        QCOMPARE(fieldOf(prList, QStringLiteral("filter")).placeholder, QStringLiteral("label:bug base:main"));
+        QVERIFY(!fieldOf(prList, QStringLiteral("filter")).required);
+        for (const char *id : {"github.run", "github.run.list"}) {
+            const mirante::Field workflow = fieldOf(registry.type(QString::fromUtf8(id)), QStringLiteral("workflow"));
+            QCOMPARE(workflow.type, mirante::Field::Type::Text);
+            QVERIFY(!workflow.required);
+            QCOMPARE(workflow.placeholder, QStringLiteral("ci.yml"));
+        }
+        // A choice is required, with its first choice as default, so it is
+        // never empty.
+        QVERIFY(fieldOf(prList, QStringLiteral("scope")).required);
+        QCOMPARE(fieldOf(prList, QStringLiteral("scope")).defaultValue.toString(), QStringLiteral("repository"));
     }
 
     // The module gives its UUID, version, author and homepage, for Help >

@@ -134,6 +134,118 @@ private slots:
                                              QString(), QStringLiteral("acme/backend"), QStringLiteral("  ")}}};
         QCOMPARE(repositoryNames(values), (QStringList{QStringLiteral("acme/backend"), QStringLiteral("acme/web")}));
         QVERIFY(repositoryNames({}).isEmpty());
+        // A value that is not a list, or entries that are not text, give nothing.
+        QVERIFY(repositoryNames({{QStringLiteral("repositories"), QStringLiteral("acme/x")}}).isEmpty());
+        QCOMPARE(repositoryNames({{QStringLiteral("repositories"), QJsonArray{42, QStringLiteral("acme/x")}}}),
+                 QStringList{QStringLiteral("acme/x")});
+    }
+
+    // The labels and placeholders of the screen and the project setting.
+    void screenTexts()
+    {
+        const std::vector<mirante::Field> fields = mirante::modules::github::makeGeneralScreen()->fields();
+        QCOMPARE(fields[0].label, QStringLiteral("Base URL"));
+        QCOMPARE(fields[0].placeholder, QStringLiteral("https://github.com"));
+        QCOMPARE(fields[1].label, QStringLiteral("Token"));
+        QCOMPARE(fields[2].label, QStringLiteral("Repositories"));
+        for (const mirante::Field &field : fields)
+            QVERIFY2(!field.required, qPrintable(field.key));
+
+        const mirante::Field setting = mirante::modules::github::makeProjectSetting();
+        QCOMPARE(setting.type, mirante::Field::Type::Text);
+        QCOMPARE(setting.placeholder, QStringLiteral("owner/repo"));
+        QVERIFY(!setting.required);
+    }
+
+    // The server's address follows the screen's values; the headers do not
+    // depend on them, and the token field is the screen's Secret field.
+    void serverOfEnterprise()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
+        const mirante::ServerType *server = registry.serverType(QStringLiteral("github"));
+        QVERIFY(server);
+
+        const QJsonObject values = withBase(QStringLiteral("https://example.org/github"));
+        QCOMPARE(server->baseUrl(values), QUrl(QStringLiteral("https://example.org/github/api/v3/")));
+        QVERIFY(server->problem(values).isEmpty());
+        QVERIFY(server->baseUrl(withBase(QStringLiteral("ftp://example.org"))).isEmpty());
+
+        QNetworkRequest request(QUrl(QStringLiteral("https://example.org/github/api/v3/user")));
+        server->authorize(request, QStringLiteral("ghp_x"), values);
+        QCOMPARE(request.rawHeader("Authorization"), QByteArray("Bearer ghp_x"));
+        QCOMPARE(request.rawHeader("User-Agent"), QByteArray("Mirante"));
+        QVERIFY(!request.hasRawHeader("PRIVATE-TOKEN"));
+
+        bool found = false;
+        for (const mirante::Field &field : registry.settingsScreens(QStringLiteral("github")).front()->fields())
+            found = found || (field.key == server->tokenKey() && field.type == mirante::Field::Type::Secret);
+        QVERIFY(found);
+    }
+
+    // The web address keeps a path and a port, and the API address is built
+    // from it without doubling a slash.
+    void webBaseWithPath()
+    {
+        const QJsonObject values = withBase(QStringLiteral("http://example.org:8080/tools/github"));
+        QCOMPARE(webBaseOf(values), QUrl(QStringLiteral("http://example.org:8080/tools/github")));
+        QCOMPARE(apiBaseOf(values), QUrl(QStringLiteral("http://example.org:8080/tools/github/api/v3/")));
+        // A query or a fragment of the web address is not kept in the API's.
+        QCOMPARE(apiBaseOf(withBase(QStringLiteral("https://github.example.com/?a=1#b"))),
+                 QUrl(QStringLiteral("https://github.example.com/api/v3/")));
+        // github.com with a path is still github.com.
+        QCOMPARE(apiBaseOf(withBase(QStringLiteral("https://github.com/acme"))),
+                 QUrl(QStringLiteral("https://api.github.com/")));
+    }
+
+    // Every type's "repository" field offers the repositories configured in
+    // the profile the item uses, read when the fields are asked for, so a
+    // change shows in the next form. fields() alone, without a profile,
+    // offers none.
+    void repositoryFieldsOfferTheConfiguredRepositories()
+    {
+        mirante::ItemTypeRegistry registry;
+        registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
+
+        QJsonObject work;
+        QJsonObject standard;
+        registry.setSettingsReader([&](const QString &profileId, const QString &moduleId, const QString &screenId) {
+            if (moduleId != QLatin1String("github") || screenId != QLatin1String("general"))
+                return QJsonObject();
+            if (profileId == QLatin1String("work"))
+                return work;
+            return profileId == QLatin1String("default") ? standard : QJsonObject();
+        });
+
+        const auto suggestionsOf = [&registry](const QString &typeId, const QString &profileId) {
+            for (const mirante::Field &field : registry.type(typeId).fieldsForProfile(profileId)) {
+                if (field.key == QLatin1String("repository"))
+                    return field.suggestions;
+            }
+            return QStringList{QStringLiteral("no repository field")};
+        };
+
+        for (const mirante::ItemType *type : registry.types())
+            QVERIFY2(suggestionsOf(type->id(), QStringLiteral("work")).isEmpty(), qPrintable(type->id()));
+
+        work.insert(QStringLiteral("repositories"),
+                    QJsonArray{QStringLiteral("acme/backend"), QStringLiteral(" acme/web/ ")});
+        standard.insert(QStringLiteral("repositories"), QJsonArray{QStringLiteral("me/dotfiles")});
+        const QStringList expected{QStringLiteral("acme/backend"), QStringLiteral("acme/web")};
+        for (const mirante::ItemType *type : registry.types()) {
+            QCOMPARE(suggestionsOf(type->id(), QStringLiteral("work")), expected);
+            QCOMPARE(suggestionsOf(type->id(), QStringLiteral("default")), QStringList{QStringLiteral("me/dotfiles")});
+            QVERIFY(suggestionsOf(type->id(), QStringLiteral("other")).isEmpty());
+            for (const mirante::Field &field : type->fields())
+                QVERIFY2(field.suggestions.isEmpty(), qPrintable(type->id()));
+        }
+
+        // Other fields offer nothing.
+        for (const mirante::Field &field :
+             registry.type(QStringLiteral("github.pr.list")).fieldsForProfile(QStringLiteral("work"))) {
+            if (field.key != QLatin1String("repository"))
+                QVERIFY2(field.suggestions.isEmpty(), qPrintable(field.key));
+        }
     }
 };
 

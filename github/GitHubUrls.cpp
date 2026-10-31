@@ -2,6 +2,7 @@
 
 #include "GitHubSettings.h"
 
+#include <QCoreApplication>
 #include <QJsonValue>
 #include <QString>
 #include <QStringList>
@@ -166,7 +167,7 @@ std::optional<PageAddress> readPageAddress(const QUrl &url, const QList<QUrl> &w
         if (!rest.isEmpty())
             return std::nullopt;
     } else if (address.kind == QLatin1String("actions")) {
-        if (rest.size() >= 2 && rest.first() == QLatin1String("workflows")) {
+        if (rest.size() == 2 && rest.first() == QLatin1String("workflows")) {
             address.workflow = rest.at(1);
         } else if (rest.size() >= 2 && rest.first() == QLatin1String("runs")) {
             address.number = numberIn(rest.at(1));
@@ -176,8 +177,9 @@ std::optional<PageAddress> readPageAddress(const QUrl &url, const QList<QUrl> &w
             return std::nullopt;
         }
     } else if (address.kind == QLatin1String("tree")) {
-        // A branch with a slash is taken whole.
-        address.branch = QUrl::fromPercentEncoding(rest.join(QLatin1Char('/')).toUtf8());
+        // A branch with a slash is taken whole. QUrl::path() has already
+        // decoded it, so it is not decoded again.
+        address.branch = rest.join(QLatin1Char('/'));
         if (address.branch.isEmpty())
             return std::nullopt;
     } else {
@@ -188,12 +190,96 @@ std::optional<PageAddress> readPageAddress(const QUrl &url, const QList<QUrl> &w
 
 std::optional<UrlMatch> matchUrl(const QString &typeId, const QUrl &url, const QList<QUrl> &webBases)
 {
-    // Stub until task T2 of the M11 plan fills the table of
-    // README.md#items-from-a-link.
-    Q_UNUSED(typeId)
-    Q_UNUSED(url)
-    Q_UNUSED(webBases)
-    return std::nullopt;
+    const std::optional<PageAddress> address = readPageAddress(url, webBases);
+    if (!address)
+        return std::nullopt;
+
+    const QString &repository = address->repository;
+    const QString &kind = address->kind;
+    const bool own = repository.isEmpty();
+    const bool pullRequest = kind == QLatin1String("pull");
+    const bool issue = kind == QLatin1String("issues") && address->number > 0;
+    const bool actions = kind == QLatin1String("actions");
+    const bool oneRun = actions && address->number > 0;
+    const QString number = QString::number(address->number);
+    // " <file>" in the names of a workflow's run and run list.
+    const QString workflow = address->workflow.isEmpty() ? QString() : QLatin1Char(' ') + address->workflow;
+
+    UrlMatch match;
+    match.baseUrl = address->webBase;
+    if (!own)
+        match.config.insert(QStringLiteral("repository"), repository);
+
+    if (typeId == QLatin1String("github.pr.summary") || typeId == QLatin1String("github.pr.page")) {
+        if (!pullRequest)
+            return std::nullopt;
+        match.config.insert(QStringLiteral("number"), address->number);
+        match.name = repository + QLatin1Char('#') + number;
+    } else if (typeId == QLatin1String("github.issue.summary") || typeId == QLatin1String("github.issue.page")) {
+        if (!issue)
+            return std::nullopt;
+        match.config.insert(QStringLiteral("number"), address->number);
+        match.name = repository + QLatin1Char('#') + number;
+    } else if (typeId == QLatin1String("github.pr.list") || typeId == QLatin1String("github.issue.list")) {
+        const bool pulls = typeId == QLatin1String("github.pr.list");
+        if (kind != (pulls ? QLatin1String("pulls") : QLatin1String("issues")) || address->number > 0)
+            return std::nullopt;
+        if (own) {
+            // On the web base itself: the user's own pull requests or issues,
+            // in all repositories.
+            QString preset = QStringLiteral("createdByMe");
+            if (address->filter == QLatin1String("assigned")) {
+                preset = QStringLiteral("assignedToMe");
+                match.name = pulls ? QCoreApplication::translate("github", "PRs assigned to me")
+                                   : QCoreApplication::translate("github", "Issues assigned to me");
+            } else if (address->filter == QLatin1String("review-requested")) {
+                preset = QStringLiteral("reviewRequested");
+                match.name = QCoreApplication::translate("github", "PRs to review");
+            } else {
+                match.name = pulls ? QCoreApplication::translate("github", "My PRs")
+                                   : QCoreApplication::translate("github", "My issues");
+            }
+            match.config.insert(QStringLiteral("scope"), QStringLiteral("all"));
+            match.config.insert(QStringLiteral("preset"), preset);
+        } else {
+            match.config.insert(QStringLiteral("scope"), QStringLiteral("repository"));
+            match.config.insert(QStringLiteral("preset"), QStringLiteral("allOpen"));
+            match.name = repository + (pulls ? QStringLiteral(" PRs") : QStringLiteral(" issues"));
+        }
+    } else if (typeId == QLatin1String("github.run")) {
+        // The type follows a branch, not one run, so the page of one run is
+        // not taken. A pull request's page follows that pull request.
+        if (pullRequest) {
+            match.config.insert(QStringLiteral("branchSource"), QStringLiteral("pullRequest"));
+            match.config.insert(QStringLiteral("number"), address->number);
+            match.name = repository + QLatin1Char('#') + number + QStringLiteral(" CI");
+        } else if (actions && !oneRun) {
+            // The default branch, of all workflows or of one.
+            match.config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
+            match.config.insert(QStringLiteral("branch"), QString());
+            if (!address->workflow.isEmpty())
+                match.config.insert(QStringLiteral("workflow"), address->workflow);
+            match.name = repository + workflow + QStringLiteral(" CI");
+        } else if (kind == QLatin1String("tree")) {
+            match.config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
+            match.config.insert(QStringLiteral("branch"), address->branch);
+            match.name = repository + QLatin1Char(' ') + address->branch + QStringLiteral(" CI");
+        } else {
+            return std::nullopt;
+        }
+    } else if (typeId == QLatin1String("github.run.list")) {
+        // The page of one run shows the repository's runs, so it gives the
+        // list of all of them; the run's id is not kept.
+        if (!actions)
+            return std::nullopt;
+        match.config.insert(QStringLiteral("source"), QStringLiteral("all"));
+        if (!address->workflow.isEmpty())
+            match.config.insert(QStringLiteral("workflow"), address->workflow);
+        match.name = repository + workflow + QStringLiteral(" runs");
+    } else {
+        return std::nullopt;
+    }
+    return match;
 }
 
 } // namespace mirante::modules::github
