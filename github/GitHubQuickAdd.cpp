@@ -71,16 +71,21 @@ QString headRef(const QJsonObject &pullRequest)
 
 void GitHubQuickAddHandler::propose(QuickAddRequest &request) const
 {
-    // A pull request's page below the profile's web address, or on
-    // github.com, which readPageAddress() always reads.
+    // A pull request's page below the profile's web address.
     const QUrl base = webBaseOf(request.moduleSettings(kGeneralScreen));
     QList<QUrl> bases;
     if (base.isValid() && !base.host().isEmpty())
         bases << base;
     ApiClient *server = request.server();
     const std::optional<PageAddress> address = readPageAddress(QUrl(request.text().trimmed()), bases);
-    if (!server || !address || address->kind != QLatin1String("pull") || address->number <= 0
-        || address->repository.isEmpty()) {
+    // readPageAddress() also reads github.com, but the request goes to the
+    // profile's server, so an address on another server proposes nothing.
+    const auto hostOf = [](const QUrl &url) {
+        const QString host = url.host().toLower();
+        return host == QLatin1String("www.github.com") ? QStringLiteral("github.com") : host;
+    };
+    if (!server || !address || hostOf(address->webBase) != hostOf(base) || address->kind != QLatin1String("pull")
+        || address->number <= 0 || address->repository.isEmpty()) {
         request.finish(std::nullopt);
         return;
     }

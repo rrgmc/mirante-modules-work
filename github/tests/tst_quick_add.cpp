@@ -131,18 +131,18 @@ private slots:
         }
     }
 
-    // github.com is read whatever the profile's web address is.
+    // A github.com address proposes nothing for a profile on another server,
+    // since the request would go to that server.
     void gitHubComWithAnEnterpriseProfile()
     {
         FakeQuickAddRequest request;
         request.pasted = QStringLiteral("https://www.github.com/acme/backend/pull/42");
         request.screens.insert(QStringLiteral("general"), general(QStringLiteral("https://github.example.com")));
-        QVERIFY(request.client.setJsonFile(kPullRequest, dataFile(QStringLiteral("quick_add_pull_request.json"))));
 
         GitHubQuickAddHandler().propose(request);
         WAIT_FOR_FINISH(request);
-        QCOMPARE(request.client.requestKeys(), QStringList{kPullRequest});
-        QVERIFY(request.finished);
+        QVERIFY(request.client.requestKeys().isEmpty());
+        QVERIFY(!request.finished);
     }
 
     void addressOnAnotherHost()
