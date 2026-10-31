@@ -1,0 +1,38 @@
+{
+  "total_count": 4,
+  "incomplete_results": false,
+  "items": [
+    {
+      "number": 51,
+      "title": "ABC-123 Log in with SSO",
+      "html_url": "https://github.com/acme/backend/pull/51",
+      "repository_url": "https://api.github.com/repos/acme/backend",
+      "state": "open",
+      "pull_request": { "url": "https://api.github.com/repos/acme/backend/pulls/51" }
+    },
+    {
+      "number": 12,
+      "title": "Notes for ABC 123",
+      "html_url": "https://github.com/acme/backend/pull/12",
+      "repository_url": "https://api.github.com/repos/acme/backend",
+      "state": "open",
+      "pull_request": { "url": "https://api.github.com/repos/acme/backend/pulls/12" }
+    },
+    {
+      "number": 9,
+      "title": "Document abc-124 and ABC-123",
+      "html_url": "https://github.com/acme/website/pull/9",
+      "repository_url": "https://api.github.com/repos/acme/website",
+      "state": "open",
+      "pull_request": { "url": "https://api.github.com/repos/acme/website/pulls/9" }
+    },
+    {
+      "number": 7,
+      "title": "Cache the ABC-124 answers",
+      "html_url": "https://github.com/acme/website/pull/7",
+      "repository_url": "https://api.github.com/repos/acme/website",
+      "state": "open",
+      "pull_request": { "url": "https://api.github.com/repos/acme/website/pulls/7" }
+    }
+  ]
+}

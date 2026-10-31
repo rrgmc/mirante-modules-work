@@ -243,21 +243,21 @@ The tests are in `tests/tst_urls.cpp` and `tests/tst_from_url.cpp`.
 
 ## Quick add
 
-`GitHubQuickAdd.cpp` holds the module's [quick add](../../../docs/modules.md#quick-add) handler and finder. The tests are in `tests/tst_quick_add.cpp`, on `quick_add_*.json`, written by hand in the shape of GitHub's API.
+`GitHubQuickAdd.cpp` holds the module's [quick add](../../../docs/modules.md#quick-add) handler and finder. The tests are in `tests/tst_quick_add.cpp`, on `quick_add_pull_request.json`, `quick_add_open.json` and `quick_add_search.json`, which were written by hand in the shape of GitHub's API.
 
-**`GitHubQuickAddHandler`** takes a pull request's address below the web address of the dialog's profile, or on `github.com`. Any other text finishes with nothing at once, without a request. Otherwise it asks for the pull request, and a failed reply finishes with nothing. It proposes:
+**`GitHubQuickAddHandler`** takes a pull request's address, `<web>/<owner>/<repo>/pull/<number>[/<tab>]`, read by `readPageAddress()` as [items from a link](#items-from-a-link) does. The address must be below the web address of the General Configuration screen in the dialog's profile, because the request goes to that server. `readPageAddress()` also reads `github.com`, so such an address proposes nothing for a profile on a GitHub Enterprise Server. Any other text, an address on another host, or no server finishes with nothing at once, without a request. Otherwise it asks for the pull request with `pullRequest()`, and a failed reply finishes with nothing. It proposes:
 
-- **Title:** the pull request's `title`.
+- **Title:** the pull request's `title`, trimmed.
 - **Items:** `github.pr.summary` named `#42`, with `repository` and `number`; `github.run` named `#42 CI`, with `repository`, `branchSource` = `pullRequest` and `number`.
-- **Project:** the project whose setting `repository` is the address's repository, compared without case.
+- **Project:** the project whose setting `repository` is the address's repository, compared without case. The repository keeps the address's case.
 - **Texts:** the title and `head.ref`.
 
-**`GitHubRelatedItemFinder`** reads Jira-style keys in the texts, as GitLab's finder does. Without keys it finishes at once, without a request.
+**`GitHubRelatedItemFinder`** reads Jira-style keys in the texts, as GitLab's finder does: `[A-Za-z][A-Za-z0-9_]+-\d+`, in upper case, at most five distinct ones in the order they appear. Without keys it finishes at once, without a request.
 
 - **With the project setting `repository`:** one `repositoryPullRequests()` with `state=open&sort=updated&direction=desc`, up to 100. A pull request matches a key when its `title` or `head.ref` holds it, without case.
-- **Without it:** one `searchIssues()` with `is:pr is:open in:title (<key1> OR <key2> …)` and a `repo:` qualifier for each repository of the profile's General Configuration, up to 100. The title is checked for the key again. Without listed repositories it finds nothing, because a search without `repo:` would cover all of GitHub.
+- **Without it:** one `searchIssues()` with `is:pr is:open in:title (<key1> OR <key2> …)` and a `repo:` qualifier for each repository of the profile's General Configuration, up to 100. GitHub's search also matches the key's words apart, so the title is checked for the key again. The repository of a row comes from its `repository_url`. Without listed repositories it finds nothing, without a request, because a search without `repo:` would cover all of GitHub.
 
-Each match is a `github.pr.summary` named `#42` in the setting's repository, else `owner/repo#42`.
+Each match is a `github.pr.summary` with `repository` and `number`. It is named `#42` in the setting's repository, else `owner/repo#42`. A failed request finds nothing. The finder finishes once, after the reply, with each pull request once, in the order of the keys.
 
 ## Configuration
 
