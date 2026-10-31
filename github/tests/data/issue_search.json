@@ -1,0 +1,58 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "url": "https://api.github.com/repos/acme/backend/issues/51",
+      "repository_url": "https://api.github.com/repos/acme/backend",
+      "html_url": "https://github.com/acme/backend/issues/51",
+      "id": 3100000051,
+      "node_id": "I_kwDOAAAAAc6AAAAz",
+      "number": 51,
+      "title": "Uploads stop after the token expires",
+      "user": {"login": "carla-ops", "id": 1003, "type": "User", "html_url": "https://github.com/carla-ops"},
+      "labels": [
+        {"id": 601, "name": "bug", "color": "d73a4a", "description": "Something isn't working"},
+        {"id": 602, "name": "priority: high", "color": "b60205", "description": ""}
+      ],
+      "state": "open",
+      "state_reason": null,
+      "locked": false,
+      "assignees": [{"login": "ana-dev", "id": 1001, "type": "User"}],
+      "milestone": {"id": 71, "number": 4, "title": "1.4", "state": "open"},
+      "comments": 2,
+      "created_at": "2026-10-22T11:30:00Z",
+      "updated_at": "2026-10-29T10:15:43Z",
+      "closed_at": null,
+      "author_association": "MEMBER",
+      "body": "After an hour every upload fails with 401.",
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/acme/website/issues/12",
+      "repository_url": "https://api.github.com/repos/acme/website",
+      "html_url": "https://github.com/acme/website/issues/12",
+      "id": 3100000012,
+      "node_id": "I_kwDOAAAAAc6AAAAM",
+      "number": 12,
+      "title": "Document the release steps",
+      "user": {"login": "ana-dev", "id": 1001, "type": "User", "html_url": "https://github.com/ana-dev"},
+      "labels": [{"id": 603, "name": "documentation", "color": "0075ca", "description": "Improvements or additions to documentation"}],
+      "state": "open",
+      "state_reason": "reopened",
+      "locked": false,
+      "assignees": [
+        {"login": "ana-dev", "id": 1001, "type": "User"},
+        {"login": "bruno-ux", "id": 1002, "type": "User"}
+      ],
+      "milestone": null,
+      "comments": 0,
+      "created_at": "2026-09-30T15:48:21Z",
+      "updated_at": "2026-10-21T09:02:11Z",
+      "closed_at": null,
+      "author_association": "MEMBER",
+      "body": "",
+      "score": 1.0
+    }
+  ]
+}
