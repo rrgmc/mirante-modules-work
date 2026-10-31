@@ -41,7 +41,7 @@ The screen holds one address, the web address. `webBaseOf()` reads it: the scree
 | `https://github.com` or `https://www.github.com` | `https://api.github.com/` |
 | any other, such as `https://github.example.com` | `<web address>/api/v3/`, without doubling a slash, as GitHub Enterprise Server has it |
 
-So `ApiClient` paths are `repos/...`, `search/issues` and `user`. Pages, pasted links and Web links use the web address. A web address that is not an `http` or `https` address gives neither.
+A path in the web address is kept, so `http://example.org:8080/github` gives `http://example.org:8080/github/api/v3/`. A query or fragment in it is not. So `ApiClient` paths are `repos/...`, `search/issues` and `user`. Pages, pasted links and Web links use the web address. A web address that is not an `http` or `https` address gives neither. The tests are in `tests/tst_settings.cpp`.
 
 The module never reads the token itself. It makes every request through the `ApiClient` of the item's profile, which adds the headers. See [servers and tokens](../../../docs/modules.md#servers-and-tokens).
 
@@ -200,9 +200,11 @@ An empty `repository` uses the project's `github.repository` setting. When somet
 - with a base URL that is not an `http` or `https` address: "Set the GitHub base URL in this profile's Modules > GitHub > General Configuration, in the Profiles menu.";
 - without a repository or a number: "Set the repository and number in the item's settings."
 
+The tests are in `tests/tst_urls.cpp`.
+
 ## Items from a link
 
-Every type implements `fromUrl()`, through `matchUrl()` in `GitHubUrls.cpp`. `readPageAddress()` reads `<web>/<owner>/<repo>/<kind>[/<rest>]` when the address is below the web address of the profile the new item would use, or on `github.com` whatever the profile. A query and a fragment are ignored. A repository's name keeps its case. See [decision 0049](../../../docs/decisions/0049-items-from-a-pasted-link.md).
+Every type implements `fromUrl()`, through `matchUrl()` in `GitHubUrls.cpp`. `readPageAddress()` reads `<web>/<owner>/<repo>/<kind>[/<rest>]` when the address is below the web address of the profile the new item would use, or on `github.com` or `www.github.com` whatever the profile. Of several web addresses, the longest that the address is below wins, so a server at a path does not take the path for an owner. Any other server is refused, because nothing in a GitHub address tells it apart from another site. A query and a fragment are ignored. A repository's name keeps its case. The match's `baseUrl` is the web address it was read with. See [decision 0049](../../../docs/decisions/0049-items-from-a-pasted-link.md).
 
 | Page | Types | Configuration | Name |
 |---|---|---|---|
@@ -226,7 +228,18 @@ On the web address itself, without an owner:
 | `issues` | `github.issue.list` | `scope` = `all`, `preset` = `createdByMe` | My issues |
 | `issues/assigned` | `github.issue.list` | `scope` = `all`, `preset` = `assignedToMe` | Issues assigned to me |
 
-Other pages, such as a repository's home page, `compare/...` or `pull/new/...`, are refused. A branch with a slash in `tree/<branch>` is taken whole. The tests are in `tests/tst_urls.cpp` and `tests/tst_from_url.cpp`.
+These items have no `repository`. Their names are translated; the names of a repository's items are not, as in the gitlab module.
+
+Details:
+
+- The item dialog lists types by name, so "GitHub Actions Run" comes before "GitHub Actions Run List".
+- `github.run` follows a branch, not one run, so it does not take `actions/runs/<id>`. The run list does not keep the run's id.
+- `actions/workflows/<file>` takes the file alone. A longer path, such as the workflow's `badge.svg`, is refused.
+- A branch with a slash in `tree/<branch>` is taken whole. The path is decoded once, so `tree/fix%2Fa` gives `fix/a`.
+- A number must be positive, so `pull/0` and `issues/new` are refused.
+- Other pages, such as a repository's home page, an owner's page, `blob/...`, `commit/...`, `compare/...`, `pull/new/...`, `issues/review-requested` or `pulls/mentioned`, are refused.
+
+The tests are in `tests/tst_urls.cpp` and `tests/tst_from_url.cpp`.
 
 ## Quick add
 
@@ -294,4 +307,4 @@ The module calls itself "GitHub", so each profile's Modules submenu shows Profil
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.github.general`, and synced. They hold no token.
 
-The `repository` field of every type offers the repositories of the profile the item uses, in an editable drop-down list, through `fieldsForProfile(profileId)` and `withRepositories()`. Each is trimmed, slashes at its start and end are removed, and empty or repeated ones are left out, by `repositoryNames()`. Any other repository can still be typed.
+The `repository` field of every type offers the repositories of the profile the item uses, in an editable drop-down list, through `fieldsForProfile(profileId)` and `withRepositories()`. Each is trimmed, slashes at its start and end are removed, and empty or repeated ones are left out, by `repositoryNames()`. Any other repository can still be typed. The tests are in `tests/tst_settings.cpp`.
