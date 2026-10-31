@@ -209,14 +209,34 @@ The tests are in `tests/tst_list_query.cpp`, on `pr_search.json`, `issue_search.
 
 ## List views
 
-`GitHubPullRequestListView.cpp`, `GitHubIssueListView.cpp` and `GitHubRunListView.cpp` each hold one class, a subclass of `GitHubList` in `GitHubListSupport.h`, as GitLab's lists. The first two go through `NumberedList`. The columns and rules are in [item types](../../../docs/item-types.md#github).
+`GitHubPullRequestListView.cpp`, `GitHubIssueListView.cpp` and `GitHubRunListView.cpp` each hold one class, a subclass of `GitHubList` in `GitHubListSupport.h`, which is private to the module. It is an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit), as GitLab's lists are. The first two go through `NumberedList`, which reads a row's repository and number. The columns and rules are in [item types](../../../docs/item-types.md#github). `GitHubList` holds what they share:
 
-- **Rows.** A search row's repository comes from its `repository_url` (`.../repos/<owner>/<repo>`), with `rowRepository()`. Its key is `owner/repo#42`, because a list can span repositories. A run's repository is the item's.
-- **Links:** "Web", "Open" and "Add", and the row menu, as GitLab's. "Add" adds a GitHub PR (summary) named `owner/repo#42`, a GitHub Issue (summary) named `owner/repo#7`, or a GitHub Actions Run. For a run row whose `event` is `pull_request` with an entry in `pull_requests`, the run follows that pull request (`branchSource` `pullRequest`), named `owner/repo#42 CI`; otherwise it follows `head_branch` (`fixed`), named `owner/repo <branch> CI`. The item's `workflow` is kept in the added run, if set.
-- **Checks and Reviews.** The PR List fills these columns for the first 25 visible rows, as GitLab's Pipeline and Approvals. Checks asks `pullRequest()` and then `checkRuns()` and `combinedStatus()` of its `head.sha`; Reviews asks `pullRequestReviews()`. The rules of GitLab's view for pages, sorts, receivers and kept answers apply unchanged.
-- **Empty lines:** "No pull requests", "No issues", "No runs".
+- **Drawing.** `follow()` draws the item's status now and at each change. Without data it shows "Loading…" or the status's message instead of the table. Old data stays through an error. An empty list shows the table and a line of its own: "No pull requests", "No issues" or "No runs".
+- **Rows.** A search row's repository comes from its `repository_url` (`.../repos/<owner>/<repo>`), with `rowRepository()`, never from the item's configuration. Its key is `owner/repo#42`, because a list can span repositories, and the Ref column reads `repo#42` and sorts by the whole repository, then by the number. A row without a repository still draws, as `#42`, without requests, links or "Add". A run's key is its id, and its repository is the item's, or the project's setting. There is no preview, and a click on a row only selects it.
+- **Addresses.** "Web" and "Open" use the row's `html_url`. Without it, the address is built from the profile's web address: `<web>/<repository>/pull/<n>`, `/issues/<n>` or `/actions/runs/<id>`.
+- **Pages and dates.** The constructor calls `setPageSize()` with the `pageSize` field. `dateCell()` draws a date with `compactDate()` and sorts by the date itself. A missing date is a dash, and sorts as the oldest.
+- **Links.** `linksCell()` makes the last column, whose ids are `web`, `open` and `add`, in that order. The link "Open" has the disambiguation "link that opens a row", because "Open" is also a pull request's state. A link goes when the row cannot do it. The cell's `sortKey` is the row's, so the order of equal rows stays stable.
+- **The row menu** is a `QMenu` that belongs to the view and uses `popup()`. It offers "Web", "Open page", "Add to task as item" and "Copy link". Shift on "Open" or "Open page" opens the external browser.
+- **The line above the table** is `listDescription()` or `runListDescription()`, and the Web link is `listWebUrl()` or `runListWebUrl()`. The Web link hides without a web address.
 
-The tests are in `tests/tst_list_views.cpp`.
+"Add" adds:
+
+- from the PR List, a GitHub PR (summary) named `owner/repo#42`, with `repository` and `number`;
+- from the Issue List, a GitHub Issue (summary) named `owner/repo#7`, with `repository` and `number`;
+- from the Run List, a GitHub Actions Run. A row whose `event` is `pull_request` with an entry in `pull_requests` follows that pull request: `branchSource` `pullRequest` and its `number`, named `owner/repo#42 CI`. Any other row follows its `head_branch`: `branchSource` `fixed` and `branch`, named `owner/repo <branch> CI`. A pull request run from a fork has no entry, so it follows its branch. A row without a branch has no "Add". The item's `workflow` is kept in the added run, if set.
+
+`GitHubPullRequestListView.cpp` also fills the Checks and Reviews columns, with the rules of GitLab's merge request list for its Pipeline and Approvals columns:
+
+- **Requests.** `askForCells()` runs while the view is visible, after each new status and each time the view shows. It asks for the first 25 of `visibleKeys()`. For Checks, it asks `pullRequest()`, then, at once, `checkRuns()` and `combinedStatus()` of its `head.sha`. For Reviews, it asks `pullRequestReviews()`. A column with its field off, `showChecks` or `showReviews`, asks for nothing. A column hidden only because the cell is narrow still asks.
+- **A new page, sort or filter.** `askForNewKeys()` asks only for rows that have not been asked for since the latest status, and a row that stays keeps what is on the way. An answer that moves its row does not ask again.
+- **Receivers.** Each row's requests, the head commit's included, use a child `QObject` of the view as their receiver. A row leaving the first 25 deletes its own. A new status, or hiding the view, deletes them all, and the answers on the way are dropped.
+- **Answers.** The latest answers are kept by row, and new rows draw with them, so the cells do not flicker at each poll. A failed request puts the dash back, and so does a row leaving the first 25.
+- **Checks** is a pill from `checksState()`: Good "Passed", Bad "Failed" or Waiting "Running". `None` is a dash. A failed `checkRuns()` or `combinedStatus()` leaves its part out. When both fail, or the pull request fails or has no `head.sha`, the cell is a dash.
+- **Reviews** reads `reviewState()`: "changes requested" when a latest review requests changes, else "2 approved" with the approvals, else a dash. It sorts by the approvals, with changes requested below none, and a row without an answer last.
+
+The Run List makes no further requests. Its Run column reads `#<run_number>`, but sorts by the run's `id`, because run numbers count per workflow and ids grow across them. Status is a pill, as in the [run view](#status-pills). Started is `run_started_at`, else `created_at`. The filters are Status and Workflow.
+
+The table's cells draw text from a server as plain text. The tests are in `tests/tst_list_views.cpp`, with a fake context and a fake status source, on `pr_search.json`, `issue_search.json`, `run_list.json`, the status tests' data, and `listview_*.json`.
 
 ## Pages
 
