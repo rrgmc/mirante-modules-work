@@ -1,0 +1,55 @@
+[
+  {
+    "id": 710001,
+    "user": {"login": "carla-dev", "id": 3003, "type": "User"},
+    "body": "",
+    "state": "APPROVED",
+    "submitted_at": "2026-10-28T10:00:00Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-710001",
+    "commit_id": "856786ce5925a1cc05dd91ea5712b59b33e36458"
+  },
+  {
+    "id": 710002,
+    "user": {"login": "dario-dev", "id": 4004, "type": "User"},
+    "body": "",
+    "state": "APPROVED",
+    "submitted_at": "2026-10-28T10:05:00Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-710002",
+    "commit_id": "856786ce5925a1cc05dd91ea5712b59b33e36458"
+  },
+  {
+    "id": 710003,
+    "user": {"login": "erin-user", "id": 5005, "type": "User"},
+    "body": "Please split this.",
+    "state": "DISMISSED",
+    "submitted_at": "2026-10-28T10:10:00Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-710003",
+    "commit_id": "856786ce5925a1cc05dd91ea5712b59b33e36458"
+  },
+  {
+    "id": 710006,
+    "user": {"login": "frank-user", "id": 6006, "type": "User"},
+    "body": "",
+    "state": "PENDING",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-710006",
+    "commit_id": "04c4ebf52e7033a83eb38e9741c8ace05bf8617b"
+  },
+  {
+    "id": 710005,
+    "user": {"login": "dario-dev", "id": 4004, "type": "User"},
+    "body": "One more note.",
+    "state": "COMMENTED",
+    "submitted_at": "2026-10-28T11:30:00Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-710005",
+    "commit_id": "04c4ebf52e7033a83eb38e9741c8ace05bf8617b"
+  },
+  {
+    "id": 710004,
+    "user": {"login": "carla-dev", "id": 3003, "type": "User"},
+    "body": "The retry loses the token's scopes.",
+    "state": "CHANGES_REQUESTED",
+    "submitted_at": "2026-10-28T11:00:00Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-710004",
+    "commit_id": "04c4ebf52e7033a83eb38e9741c8ace05bf8617b"
+  }
+]

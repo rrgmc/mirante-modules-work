@@ -1,0 +1,44 @@
+[
+  {
+    "id": 700001,
+    "user": {
+      "login": "review-bot[bot]",
+      "id": 9009,
+      "type": "Bot",
+      "html_url": "https://github.com/review-bot[bot]"
+    },
+    "body": "Overview of the changes.",
+    "state": "COMMENTED",
+    "submitted_at": "2026-10-28T19:34:27Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-700001",
+    "commit_id": "04c4ebf52e7033a83eb38e9741c8ace05bf8617b"
+  },
+  {
+    "id": 700002,
+    "user": {
+      "login": "carla-dev",
+      "id": 3003,
+      "type": "User",
+      "html_url": "https://github.com/carla-dev"
+    },
+    "body": "Looks right to me.",
+    "state": "COMMENTED",
+    "submitted_at": "2026-10-28T22:45:08Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-700002",
+    "commit_id": "04c4ebf52e7033a83eb38e9741c8ace05bf8617b"
+  },
+  {
+    "id": 700003,
+    "user": {
+      "login": "dario-dev",
+      "id": 4004,
+      "type": "User",
+      "html_url": "https://github.com/dario-dev"
+    },
+    "body": "",
+    "state": "APPROVED",
+    "submitted_at": "2026-10-29T16:21:54Z",
+    "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-700003",
+    "commit_id": "04c4ebf52e7033a83eb38e9741c8ace05bf8617b"
+  }
+]

@@ -1,0 +1,64 @@
+{
+  "url": "https://api.github.com/repos/acme/widgets/issues/7",
+  "id": 1368888911,
+  "html_url": "https://github.com/acme/widgets/issues/7",
+  "number": 7,
+  "title": "Unable to assign issues to myself via `--add-assignee @me` or `--add-assignee USERNAME`",
+  "state": "open",
+  "state_reason": null,
+  "locked": false,
+  "comments": 21,
+  "created_at": "2022-09-11T09:36:07Z",
+  "updated_at": "2026-04-07T16:47:06Z",
+  "closed_at": null,
+  "author_association": "NONE",
+  "repository_url": "https://api.github.com/repos/acme/widgets",
+  "body": "The command fails when the token has expired.",
+  "user": {
+    "login": "erin-user",
+    "id": 5005,
+    "type": "User",
+    "html_url": "https://github.com/erin-user"
+  },
+  "assignees": [
+    {
+      "login": "carla-dev",
+      "id": 3003,
+      "type": "User",
+      "html_url": "https://github.com/carla-dev"
+    }
+  ],
+  "assignee": {
+    "login": "carla-dev",
+    "id": 3003,
+    "type": "User",
+    "html_url": "https://github.com/carla-dev"
+  },
+  "labels": [
+    {
+      "id": 1593484620,
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
+    },
+    {
+      "id": 1825079134,
+      "name": "priority-1",
+      "color": "e00808",
+      "description": "Affects a large population and inhibits work"
+    },
+    {
+      "id": 2385858909,
+      "name": "core",
+      "color": "e25944",
+      "description": "This issue is not accepting PRs from outside contributors"
+    },
+    {
+      "id": 5976576269,
+      "name": "gh-issue",
+      "color": "430568",
+      "description": "relating to the gh issue command"
+    }
+  ],
+  "milestone": null
+}
