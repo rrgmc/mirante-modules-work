@@ -1,0 +1,57 @@
+{
+  "url": "https://api.github.com/repos/acme/widgets/pulls/42",
+  "id": 5038405753,
+  "html_url": "https://github.com/acme/widgets/pull/42",
+  "number": 42,
+  "state": "open",
+  "locked": false,
+  "title": "Skip token refresh when gh's state directory is not writable",
+  "body": "Skips the token refresh when the state directory is read-only.",
+  "created_at": "2026-10-27T17:35:19Z",
+  "updated_at": "2026-10-28T09:14:33Z",
+  "closed_at": null,
+  "merged_at": null,
+  "draft": false,
+  "merged": false,
+  "mergeable": true,
+  "mergeable_state": "blocked",
+  "comments": 0,
+  "review_comments": 2,
+  "commits": 3,
+  "additions": 251,
+  "deletions": 28,
+  "changed_files": 9,
+  "user": {
+    "login": "bruno-author",
+    "id": 2002,
+    "type": "User",
+    "html_url": "https://github.com/bruno-author"
+  },
+  "assignees": [],
+  "requested_reviewers": [
+    {
+      "login": "ana-reviewer",
+      "id": 1001,
+      "type": "User",
+      "html_url": "https://github.com/ana-reviewer"
+    },
+    {
+      "login": "carla-dev",
+      "id": 3003,
+      "type": "User",
+      "html_url": "https://github.com/carla-dev"
+    }
+  ],
+  "labels": [],
+  "milestone": null,
+  "head": {
+    "label": "acme:feature/skip-refresh",
+    "ref": "feature/skip-refresh",
+    "sha": "04c4ebf52e7033a83eb38e9741c8ace05bf8617b"
+  },
+  "base": {
+    "label": "acme:trunk",
+    "ref": "trunk",
+    "sha": "93d24ce9ffefb6cc86bde89b50271457bb0ef9cb"
+  }
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "id": 4200732790,
+    "created_at": "2026-04-07T16:46:43Z",
+    "updated_at": "2026-04-07T16:47:06Z",
+    "author_association": "MEMBER",
+    "html_url": "https://github.com/acme/widgets/issues/7#issuecomment-4200732790",
+    "user": {
+      "login": "erin-user",
+      "id": 5005,
+      "type": "User"
+    },
+    "body": "Comment 21."
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "total_count": 2,
+  "jobs": [
+    {
+      "id": 91031,
+      "run_id": 9103,
+      "workflow_name": "CI",
+      "head_branch": "main",
+      "run_attempt": 2,
+      "head_sha": "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111",
+      "html_url": "https://github.com/acme/widgets/actions/runs/9103/job/91031",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-29T09:30:00Z",
+      "started_at": "2026-10-29T09:30:05Z",
+      "completed_at": "2026-10-29T09:35:00Z",
+      "name": "build"
+    },
+    {
+      "id": 91032,
+      "run_id": 9103,
+      "workflow_name": "CI",
+      "head_branch": "main",
+      "run_attempt": 2,
+      "head_sha": "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111",
+      "html_url": "https://github.com/acme/widgets/actions/runs/9103/job/91032",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-29T09:30:00Z",
+      "started_at": "2026-10-29T09:35:05Z",
+      "completed_at": "2026-10-29T09:40:00Z",
+      "name": "test"
+    }
+  ]
+}
