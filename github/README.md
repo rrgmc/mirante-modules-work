@@ -147,9 +147,10 @@ Text from a server is plain text in every label. The tests are in `tests/tst_sum
 `github.pr.list`, `github.issue.list` and `github.run.list` report status from `GitHubLists.cpp`, as GitLab's lists do. See decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md).
 
 - **Sizes.** `listLimit()` and `listPageSize()` read `limit` (100 by default) and `pageSize` (50 by default); an absent value or one below 1 uses the default.
-- **Status.** The state is `Ok`, and the summary reads "12 pull requests", "12 issues" or "12 runs", with singular forms, and "100+ pull requests" when the rows reach `limit`. A list reports no attention and leaves `closed` unset.
-- **Data.** `rows` holds GitHub's rows, unchanged, and `total` their number.
-- **Errors.** A failed reply becomes its state with `statusFromReply()`.
+- **Status.** The state is `Ok`, and the summary reads "12 pull requests", "12 issues" or "12 runs", with singular forms, and "100+ pull requests" when the rows reach `limit`. The texts use `%n` plurals, such as "%n pull request(s)" and "%n+ pull request(s)", so the English forms come from `mirante_en.ts`. A list reports no attention and leaves `closed` unset.
+- **Data.** `rows` holds GitHub's rows, unchanged: the search's `items`, or the run list's `workflow_runs`. `total` is their number, not GitHub's `total_count`.
+- **Errors.** A failed reply becomes its state with `statusFromReply()`, and `data` stays empty.
+- **Descriptions.** `listDescription()` gives the line above the table: the preset ("Created by me", "Review requested from me", "Assigned to me", "All open"), the repository, "owner acme" or "all repositories", and the trimmed filter, joined by " · ", such as "Assigned to me · acme/backend". `runListDescription()` gives the source ("All runs", "Started by me", "Of branch main", "Of the default branch", "Of pull request #42"), the workflow and the repository, such as "Of pull request #42 · acme/backend".
 
 The REST API lists the pull requests and issues of one repository only, so the pull request and issue lists use the search API, `searchIssues()`. `searchQuery()` builds the query from these parts, joined by spaces, in this order:
 
@@ -158,7 +159,7 @@ The REST API lists the pull requests and issues of one repository only, so the p
 3. the preset: `author:@me` (`createdByMe`), `review-requested:@me` (`reviewRequested`), `assignee:@me` (`assignedToMe`), or nothing for `allOpen`, except `involves:@me` for `allOpen` with scope `all`, because all of GitHub is not a useful list;
 4. the trimmed `filter`, as typed: extra search qualifiers, such as `label:bug base:main`.
 
-A preset the type does not have counts as its first one. An incomplete scope reports `State::None` with "Set the repository in the item's settings." or "Set the owner in the item's settings.", without a request; `scopeProblem()` gives the message. An empty `repository` uses the project's `github.repository` setting.
+A preset the type does not have counts as its first one: `createdByMe` for pull requests, `assignedToMe` for issues. An absent `scope` is `repository`. An incomplete scope reports `State::None` with "Set the repository in the item's settings." or "Set the owner in the item's settings.", and an unknown scope with "Set the scope in the item's settings.", without a request; `scopeProblem()` gives the message. An empty `repository` uses the project's `github.repository` setting. The repository and the owner lose spaces and slashes at their ends. `searchIssues()` asks for up to `limit` rows, newest update first.
 
 `listWebUrl()` builds the list's page on the site: `<web>/<repository>/pulls?q=<query>` for the repository scope, `<web>/pulls?q=<query>` otherwise, and `issues` for issues. The query is the same as the search's, percent-encoded. It is empty when the scope is incomplete.
 
@@ -170,6 +171,8 @@ A preset the type does not have counts as its first one. An incomplete scope rep
 | `mine` | `currentUser()`, then `actor=<login>`. If the first fails, the list is not asked for. |
 | `branch` | `branch=<branch>`; an empty branch first reads the repository's `default_branch` |
 | `pullRequest` | `pullRequest()`, then `branch=<head.ref>&event=pull_request` |
+
+Values in the query, the login and the branches, are encoded with `GitHubClient::encode()`, so that "+" and "&" in a branch reach GitHub whole. A run list without a repository reports `State::None` with "Set the repository in the item's settings.", `pullRequest` without a number "Set the pull request number in the item's settings.", and an unknown source "Set the source in the item's settings.", each without a request. A repository answer without `default_branch` is an `Error`, "The repository's default branch could not be read.".
 
 `runListWebUrl()` gives its Web link, `<web>/<repository>/actions`, or `<web>/<repository>/actions/workflows/<file>` with a workflow.
 
