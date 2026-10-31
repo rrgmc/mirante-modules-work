@@ -1,0 +1,22 @@
+{
+  "url": "https://api.github.com/repos/acme/backend/pulls/42",
+  "html_url": "https://github.com/acme/backend/pull/42",
+  "number": 42,
+  "state": "open",
+  "draft": false,
+  "title": "  Add the retry button to the run panel ",
+  "user": { "login": "octocat" },
+  "head": {
+    "label": "acme:feature/ABC-123-retry-button",
+    "ref": "feature/ABC-123-retry-button",
+    "sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"
+  },
+  "base": {
+    "label": "acme:main",
+    "ref": "main",
+    "sha": "9c48853fa3dc5c1c3d6f1f1cd1f2743e72652840",
+    "repo": { "full_name": "acme/backend" }
+  },
+  "merged": false,
+  "mergeable_state": "clean"
+}
