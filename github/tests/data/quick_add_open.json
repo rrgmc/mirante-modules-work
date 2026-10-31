@@ -1,0 +1,30 @@
+[
+  {
+    "number": 51,
+    "title": "Log in with SSO",
+    "html_url": "https://github.com/acme/backend/pull/51",
+    "head": { "ref": "feature/abc-123-login" },
+    "base": { "ref": "main", "repo": { "full_name": "acme/backend" } }
+  },
+  {
+    "number": 50,
+    "title": "ABC-124: Refresh the token before it expires",
+    "html_url": "https://github.com/acme/backend/pull/50",
+    "head": { "ref": "fix/token-refresh" },
+    "base": { "ref": "main", "repo": { "full_name": "acme/backend" } }
+  },
+  {
+    "number": 49,
+    "title": "Bump the Qt version",
+    "html_url": "https://github.com/acme/backend/pull/49",
+    "head": { "ref": "chore/qt-6.8" },
+    "base": { "ref": "main", "repo": { "full_name": "acme/backend" } }
+  },
+  {
+    "number": 48,
+    "title": "Follow-up to Abc-123: remember the last provider",
+    "html_url": "https://github.com/acme/backend/pull/48",
+    "head": { "ref": "feature/sso-remember" },
+    "base": { "ref": "main", "repo": { "full_name": "acme/backend" } }
+  }
+]
