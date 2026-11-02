@@ -3,7 +3,7 @@
 // Server, and the pages that are refused.
 #include "../GitHubUrls.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/ItemType.h>
 
@@ -322,7 +322,7 @@ private slots:
     // which lists types by name, offers the run before the run list.
     void registeredTypes()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
         const auto taking = [&registry](const QUrl &address) {
             QStringList ids;
@@ -346,7 +346,7 @@ private slots:
     // fromUrl() reads the web base of the profile the new item would use.
     void fromUrlReadsTheProfilesServer()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
         registry.setSettingsReader([](const QString &profileId, const QString &, const QString &) {
             if (profileId == QLatin1String("work"))

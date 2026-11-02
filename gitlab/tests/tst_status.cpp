@@ -2,7 +2,7 @@
 // trimmed by hand, in tests/data/. "Me" is the user in data/user.json, id 1001.
 #include "../GitLabStatus.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/testing/FakeStatusJob.h>
 
@@ -418,7 +418,7 @@ private slots:
     // asked for in M5, even with a failed pipeline.
     void pagesAskForLessThanSummaries()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         const auto runMergeRequest = [&registry](const QString &typeId, FakeStatusJob &job) {
@@ -891,7 +891,7 @@ private slots:
     // type runs the module's fetch.
     void typesReportStatus()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
         const QStringList withStatus{QStringLiteral("gitlab.mr.summary"), QStringLiteral("gitlab.mr.page"),
                                      QStringLiteral("gitlab.mr.list"),    QStringLiteral("gitlab.pipeline"),

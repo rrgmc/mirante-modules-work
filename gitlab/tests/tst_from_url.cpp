@@ -2,7 +2,7 @@
 // it, servers of the profile and others, and addresses that are refused.
 #include "../GitLabUrls.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/ItemType.h>
 
@@ -191,7 +191,7 @@ private slots:
     // The registered types answer through fromUrl().
     void registeredTypes()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
         const QUrl page = url("https://gitlab.com/acme/backend/-/merge_requests/42");
         QStringList taking;

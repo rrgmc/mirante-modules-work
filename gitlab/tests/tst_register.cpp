@@ -1,6 +1,6 @@
 // Registers the gitlab module into a fresh registry and checks its types.
-#include "items/FieldValidation.h"
-#include "items/ItemTypeRegistry.h"
+#include <mirante/FieldValidation.h>
+#include <mirante/testing/TestRegistrar.h>
 
 #include <QIcon>
 #include <QMap>
@@ -18,7 +18,7 @@ class TestRegister : public QObject
 private slots:
     void registersTypes()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         // Expected id and name of each type. QMap keeps the ids sorted.
@@ -46,7 +46,7 @@ private slots:
 
     void iconsRender()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -58,7 +58,7 @@ private slots:
 
     void fieldKeys()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         const QStringList single{QStringLiteral("project"), QStringLiteral("iid")};
@@ -110,7 +110,7 @@ private slots:
     void pipelineBranchDefaultsToMaster()
     {
         QFETCH(QString, typeId);
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         for (const mirante::Field &field : registry.type(typeId).fields()) {
@@ -134,7 +134,7 @@ private slots:
     void listsHaveSizes()
     {
         QFETCH(QString, typeId);
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         const QJsonObject defaults = mirante::defaultConfig(registry.type(typeId).fields());
@@ -144,7 +144,7 @@ private slots:
 
     void pipelineListStartsWithAllPipelines()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         const mirante::ItemType &type = registry.type(QStringLiteral("gitlab.pipeline.list"));
@@ -163,7 +163,7 @@ private slots:
     // validate, except that each required field without a default is reported.
     void fieldsValidateTheirDefaults()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -195,7 +195,7 @@ private slots:
     // Help > Modules. See docs/decisions/0056-modules-window.md.
     void namesAndDescriptions()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         QCOMPARE(registry.moduleName(QStringLiteral("gitlab")), QStringLiteral("GitLab"));
@@ -208,7 +208,7 @@ private slots:
     // Modules. See docs/decisions/0089-module-identity.md.
     void identity()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         const QString id = QStringLiteral("gitlab");

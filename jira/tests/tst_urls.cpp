@@ -1,9 +1,9 @@
 // The address of the Jira issue page type, and the messages it shows instead.
 #include "../JiraUrls.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
-#include <mirante/ItemContext.h>
+#include <mirante/testing/FakeItemContext.h>
 #include <mirante/ItemType.h>
 
 #include <QJsonObject>
@@ -24,41 +24,22 @@ namespace {
 // An item context with a configuration and the values of the Jira General
 // Configuration of the item's profile. Each view it makes is a plain widget
 // with the address or the message in a property.
-class FakeContext : public mirante::ItemContext
+class FakeContext : public mirante::testing::FakeItemContext
 {
 public:
-    QJsonObject itemConfig;
     QJsonObject general;
     mutable QStringList askedScreens;
 
-    QString itemName() const override { return QStringLiteral("Item"); }
-    QJsonObject config() const override { return itemConfig; }
-    QJsonValue projectSetting(const QString &) const override { return {}; }
     QJsonObject moduleSettings(const QString &screenId) const override
     {
         askedScreens << screenId;
         return screenId == QLatin1String("general") ? general : QJsonObject();
     }
 
-    QString folderPath(const QString &) const override { return {}; }
 
-    QWidget *createWebView(const QUrl &url, QWidget *parent) override
-    {
-        auto *view = new QWidget(parent);
-        view->setProperty("url", url);
-        return view;
-    }
 
-    QWebEngineProfile *profile() override { return nullptr; }
 
-    QWidget *createMessageView(const QString &text, QWidget *parent) override
-    {
-        auto *view = new QWidget(parent);
-        view->setProperty("message", text);
-        return view;
-    }
 
-    void updateConfig(const QJsonObject &config) override { itemConfig = config; }
 };
 
 QJsonObject site(const QString &baseUrl)
@@ -104,13 +85,13 @@ private slots:
 
     void typesDeclareRendering()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
 
         for (const mirante::ItemType *type : registry.types()) {
             const bool isWeb = type->id() == QStringLiteral("jira.issue.page");
             QVERIFY2((type->rendering() == mirante::Rendering::Web) == isWeb, qPrintable(type->id()));
-            QVERIFY2(registry.usesProfile(type->id()), qPrintable(type->id()));
+            QVERIFY2(!registry.settingsScreens(QStringLiteral("jira")).empty(), qPrintable(type->id()));
         }
     }
 
@@ -142,7 +123,7 @@ private slots:
         QFETCH(QUrl, url);
         QFETCH(QString, message);
 
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
 
         FakeContext context;
@@ -163,7 +144,7 @@ private slots:
     // servers. tst_views covers what the views show.
     void nativeTypesMakeAView()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
 
         FakeContext context;

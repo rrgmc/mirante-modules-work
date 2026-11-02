@@ -2,8 +2,10 @@
 // offers in the "project" field of every type.
 #include "../GitLabSettings.h"
 
-#include "items/FieldValidation.h"
-#include "items/ItemTypeRegistry.h"
+#include <mirante/FieldValidation.h>
+#include <mirante/testing/TestRegistrar.h>
+
+#include <mirante/ItemEditor.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -24,7 +26,7 @@ class TestSettings : public QObject
 private slots:
     void registersTheGeneralScreen()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         QCOMPARE(registry.moduleName(QStringLiteral("gitlab")), QStringLiteral("GitLab"));
@@ -33,7 +35,7 @@ private slots:
         QCOMPARE(screens.size(), std::size_t(1));
         QCOMPARE(screens.front()->id(), QStringLiteral("general"));
         QCOMPARE(screens.front()->name(), QStringLiteral("General Configuration"));
-        QVERIFY(!screens.front()->createEditor(nullptr));
+        QVERIFY(!screens.front()->createEditor(mirante::EditorContext(), nullptr));
 
         const std::vector<mirante::Field> fields = screens.front()->fields();
         QCOMPARE(fields.size(), std::size_t(3));
@@ -62,7 +64,7 @@ private slots:
     // URL of the profile the new item would use.
     void fromUrlReadsTheProfilesServer()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
         registry.setSettingsReader([](const QString &profileId, const QString &, const QString &) {
             if (profileId == QLatin1String("work"))
@@ -84,7 +86,7 @@ private slots:
     // in the PRIVATE-TOKEN header.
     void serverType()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
         const mirante::ServerType *server = registry.serverType(QStringLiteral("gitlab"));
         QVERIFY(server);
@@ -134,7 +136,7 @@ private slots:
     // shows in the next form. fields() alone, without a profile, offers none.
     void projectFieldsOfferTheConfiguredPaths()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         QJsonObject work;

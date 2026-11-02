@@ -3,7 +3,7 @@
 // that are refused.
 #include "../JiraUrls.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/ItemType.h>
 
@@ -117,7 +117,7 @@ private slots:
 
     void registeredTypes()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
         const QUrl page = url("https://acme.atlassian.net/browse/PROJ-1");
         QStringList taking;

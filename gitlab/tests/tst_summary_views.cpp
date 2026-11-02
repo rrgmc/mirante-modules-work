@@ -6,7 +6,7 @@
 #include "../GitLabPipelineView.h"
 #include "../GitLabStatus.h"
 
-#include <mirante/ItemContext.h>
+#include <mirante/testing/FakeItemContext.h>
 #include <mirante/testing/FakeApiClient.h>
 #include <mirante/widgets/ActionRow.h>
 #include <mirante/widgets/StatusPill.h>
@@ -97,28 +97,24 @@ private:
     std::vector<Subscriber> m_subscribers;
 };
 
-class FakeContext : public mirante::ItemContext
+class FakeContext : public mirante::testing::FakeItemContext
 {
 public:
-    QJsonObject itemConfig{{QStringLiteral("project"), QStringLiteral("acme/backend")}, {QStringLiteral("iid"), 42}};
+    FakeContext()
+    {
+        itemConfig = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}, {QStringLiteral("iid"), 42}};
+    }
+
     QJsonObject general{{QStringLiteral("baseUrl"), QStringLiteral("https://built.example")}};
     QList<QUrl> pages;
     FakeApiClient client{QUrl(QStringLiteral("https://built.example"))};
     FakeStatusSource source;
     bool hasStatus = true;
 
-    QString itemName() const override { return QStringLiteral("Item"); }
-    QJsonObject config() const override { return itemConfig; }
-    QJsonValue projectSetting(const QString &) const override { return {}; }
     QJsonObject moduleSettings(const QString &screenId) const override
     {
         return screenId == QLatin1String("general") ? general : QJsonObject();
     }
-    QString folderPath(const QString &) const override { return {}; }
-    QWidget *createWebView(const QUrl &, QWidget *) override { return nullptr; }
-    QWebEngineProfile *profile() override { return nullptr; }
-    QWidget *createMessageView(const QString &, QWidget *) override { return nullptr; }
-    void updateConfig(const QJsonObject &config) override { itemConfig = config; }
     void showPage(const QUrl &url) override { pages << url; }
     mirante::ApiClient *server() override { return &client; }
     mirante::ItemStatusSource *status() override { return hasStatus ? &source : nullptr; }

@@ -1,9 +1,9 @@
 // The address of the Claude web session type, and the message it shows instead.
 #include "../ClaudeUrls.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
-#include <mirante/ItemContext.h>
+#include <mirante/testing/FakeItemContext.h>
 #include <mirante/ItemType.h>
 
 #include <QJsonObject>
@@ -23,34 +23,14 @@ namespace {
 
 // An item context with a configuration and no connection. Each view it makes
 // is a plain widget with the address or the message in a property.
-class FakeContext : public mirante::ItemContext
+class FakeContext : public mirante::testing::FakeItemContext
 {
 public:
-    QJsonObject itemConfig;
 
-    QString itemName() const override { return QStringLiteral("Item"); }
-    QJsonObject config() const override { return itemConfig; }
-    QJsonValue projectSetting(const QString &) const override { return {}; }
-    QJsonObject moduleSettings(const QString &) const override { return {}; }
-    QString folderPath(const QString &) const override { return {}; }
 
-    QWidget *createWebView(const QUrl &url, QWidget *parent) override
-    {
-        auto *view = new QWidget(parent);
-        view->setProperty("url", url);
-        return view;
-    }
 
-    QWebEngineProfile *profile() override { return nullptr; }
 
-    QWidget *createMessageView(const QString &text, QWidget *parent) override
-    {
-        auto *view = new QWidget(parent);
-        view->setProperty("message", text);
-        return view;
-    }
 
-    void updateConfig(const QJsonObject &config) override { itemConfig = config; }
 };
 
 QJsonObject urlConfig(const QString &url)
@@ -91,7 +71,7 @@ private slots:
 
     void typesDeclareRenderingAndConnection()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         QVERIFY(registry.type(QStringLiteral("claude.session.web")).rendering() == mirante::Rendering::Web);
@@ -116,7 +96,7 @@ private slots:
         QFETCH(QUrl, url);
         QFETCH(QString, message);
 
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         FakeContext context;

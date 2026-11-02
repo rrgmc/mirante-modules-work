@@ -3,8 +3,10 @@
 // field of every type.
 #include "../GitHubSettings.h"
 
-#include "items/FieldValidation.h"
-#include "items/ItemTypeRegistry.h"
+#include <mirante/FieldValidation.h>
+#include <mirante/testing/TestRegistrar.h>
+
+#include <mirante/ItemEditor.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -36,7 +38,7 @@ class TestSettings : public QObject
 private slots:
     void registersTheGeneralScreen()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
 
         const std::vector<const mirante::SettingsScreen *> screens =
@@ -44,7 +46,7 @@ private slots:
         QCOMPARE(screens.size(), std::size_t(1));
         QCOMPARE(screens.front()->id(), QStringLiteral("general"));
         QCOMPARE(screens.front()->name(), QStringLiteral("General Configuration"));
-        QVERIFY(!screens.front()->createEditor(nullptr));
+        QVERIFY(!screens.front()->createEditor(mirante::EditorContext(), nullptr));
 
         const std::vector<mirante::Field> fields = screens.front()->fields();
         QCOMPARE(fields.size(), std::size_t(3));
@@ -61,7 +63,7 @@ private slots:
 
     void registersServerAndProjectSetting()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
 
         const mirante::ServerType *server = registry.serverType(QStringLiteral("github"));
@@ -161,7 +163,7 @@ private slots:
     // depend on them, and the token field is the screen's Secret field.
     void serverOfEnterprise()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
         const mirante::ServerType *server = registry.serverType(QStringLiteral("github"));
         QVERIFY(server);
@@ -204,7 +206,7 @@ private slots:
     // offers none.
     void repositoryFieldsOfferTheConfiguredRepositories()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
 
         QJsonObject work;
