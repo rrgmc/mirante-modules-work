@@ -7,7 +7,7 @@
 // source forms, such as "1 approval(s)".
 #include "../GitHubStatus.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/testing/FakeStatusJob.h>
 
@@ -727,7 +727,7 @@ private slots:
     // an issue page asks for no comments.
     void pagesAndSummaries()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
 
         for (const QString &typeId : {QStringLiteral("github.pr.summary"), QStringLiteral("github.pr.page")}) {

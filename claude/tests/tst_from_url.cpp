@@ -1,7 +1,7 @@
 // Reading a pasted claude.ai address as a Claude session (web).
 #include "../ClaudeUrls.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/ItemType.h>
 
@@ -42,7 +42,7 @@ private slots:
     // The registered web session type takes the link.
     void registeredTypes()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
         const QUrl address(QStringLiteral("https://claude.ai/chat/abc"));
         QVERIFY(registry.type(QStringLiteral("claude.session.web")).fromUrl(address, {}));

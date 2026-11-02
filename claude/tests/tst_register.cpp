@@ -1,6 +1,6 @@
 // Registers the claude module into a fresh registry and checks its types.
 #include <mirante/FieldValidation.h>
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <QIcon>
 #include <QMap>
@@ -18,7 +18,7 @@ class TestRegister : public QObject
 private slots:
     void registersTypes()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         // Expected id and name of each type. QMap keeps the ids sorted.
@@ -39,7 +39,7 @@ private slots:
 
     void iconsRender()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -50,7 +50,7 @@ private slots:
     }
     void fieldKeys()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         QMap<QString, QStringList> expected;
@@ -70,7 +70,7 @@ private slots:
     // validate, except that each required field without a default is reported.
     void fieldsValidateTheirDefaults()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -102,7 +102,7 @@ private slots:
     // Help > Modules. See docs/decisions/0056-modules-window.md.
     void namesAndDescriptions()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         QCOMPARE(registry.moduleName(QStringLiteral("claude")), QStringLiteral("Claude"));
@@ -115,7 +115,7 @@ private slots:
     // Modules. See docs/decisions/0089-module-identity.md.
     void identity()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("claude"), &mirante::modules::claude::registerModule);
 
         const QString id = QStringLiteral("claude");

@@ -6,7 +6,7 @@
 #include "../JiraSettings.h"
 
 #include <mirante/FieldValidation.h>
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/QuickAdd.h>
 
@@ -31,7 +31,7 @@ class TestSettings : public QObject
 private slots:
     void registersTheGeneralScreen()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
 
         QCOMPARE(registry.moduleName(QStringLiteral("jira")), QStringLiteral("Jira"));
@@ -69,7 +69,7 @@ private slots:
 
         // Every Jira type uses a profile, through the screen.
         for (const mirante::ItemType *type : registry.types())
-            QVERIFY2(registry.usesProfile(type->id()), qPrintable(type->id()));
+            QVERIFY2(!registry.settingsScreens(QStringLiteral("jira")).empty(), qPrintable(type->id()));
     }
 
     void extraFields()
@@ -96,7 +96,7 @@ private slots:
     // profile the new item would use.
     void fromUrlReadsTheProfilesSite()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
         registry.setSettingsReader([](const QString &profileId, const QString &moduleId, const QString &screenId) {
             if (profileId == QLatin1String("work") && moduleId == QLatin1String("jira")
@@ -184,52 +184,17 @@ private slots:
     // The module gives projects one setting, the Jira project key.
     void projectSetting()
     {
-        RecordingRegistrar registrar;
-        mirante::modules::jira::registerModule(registrar);
-        QCOMPARE(registrar.projectSettings.size(), std::size_t(1));
-        const mirante::Field &field = registrar.projectSettings.front();
+        mirante::testing::TestRegistrar registrar;
+        registrar.registerModule(QStringLiteral("jira"), &mirante::modules::jira::registerModule);
+        const std::vector<mirante::Field> settings = registrar.projectSettings(QStringLiteral("jira"));
+        QCOMPARE(settings.size(), std::size_t(1));
+        const mirante::Field &field = settings.front();
         QCOMPARE(field.key, QStringLiteral("projectKey"));
         QCOMPARE(field.label, QStringLiteral("Jira project key"));
         QCOMPARE(field.type, mirante::Field::Type::Text);
         QVERIFY(!field.required);
-        QVERIFY(registrar.server);
+        QVERIFY(registrar.serverType(QStringLiteral("jira")));
     }
-
-private:
-    // Keeps what a module registers, for what the registry does not give
-    // back yet.
-    class RecordingRegistrar : public mirante::ModuleRegistrar
-    {
-    public:
-        class NoSettings : public mirante::ModuleSettings
-        {
-        public:
-            QJsonObject values(const QString &, const QString &) const override { return {}; }
-        };
-
-        void addItemType(std::unique_ptr<mirante::ItemType>) override {}
-        void setModuleName(const QString &) override {}
-        void setModuleDescription(const QString &) override {}
-        void setModuleUuid(const QUuid &) override {}
-        void setModuleVersion(const QString &) override {}
-        void setModuleAuthor(const QString &) override {}
-        void setModuleHomepage(const QUrl &) override {}
-        void addSettingsScreen(std::unique_ptr<mirante::SettingsScreen>) override {}
-        const mirante::ModuleSettings &settings() const override { return m_settings; }
-        void setServerType(std::unique_ptr<mirante::ServerType> type) override { server = std::move(type); }
-        void addProjectSetting(const mirante::Field &field) override { projectSettings.push_back(field); }
-        void addQuickAddHandler(std::unique_ptr<mirante::QuickAddHandler>) override {}
-        void addRelatedItemFinder(std::unique_ptr<mirante::RelatedItemFinder>) override {}
-        void addDeviceSetting(const mirante::Field &) override {}
-        void setProjectEditor(mirante::EditorFactory) override {}
-        void setDeviceEditor(mirante::EditorFactory) override {}
-
-        std::unique_ptr<mirante::ServerType> server;
-        std::vector<mirante::Field> projectSettings;
-
-    private:
-        NoSettings m_settings;
-    };
 };
 
 QTEST_MAIN(TestSettings)

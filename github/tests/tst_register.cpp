@@ -1,6 +1,6 @@
 // Registers the github module into a fresh registry and checks its types.
 #include <mirante/FieldValidation.h>
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <QIcon>
 #include <QMap>
@@ -13,7 +13,7 @@ void registerModule(mirante::ModuleRegistrar &registrar);
 
 namespace {
 
-void registerGitHub(mirante::ItemTypeRegistry &registry)
+void registerGitHub(mirante::testing::TestRegistrar &registry)
 {
     registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
 }
@@ -45,7 +45,7 @@ class TestRegister : public QObject
 private slots:
     void registersTypes()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         // Expected id, name and short name of each type. QMap keeps the ids sorted.
@@ -83,7 +83,7 @@ private slots:
 
     void iconsRender()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -95,7 +95,7 @@ private slots:
 
     void fieldKeys()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         const QStringList single{QStringLiteral("repository"), QStringLiteral("number")};
@@ -139,7 +139,7 @@ private slots:
     // The choices of each choice field, in form order; the first is the default.
     void choices()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         const QStringList scopes{QStringLiteral("repository"), QStringLiteral("owner"), QStringLiteral("all")};
@@ -183,7 +183,7 @@ private slots:
     void branchDefaultsToTheDefaultBranch()
     {
         QFETCH(QString, typeId);
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         for (const mirante::Field &field : registry.type(typeId).fields()) {
@@ -200,7 +200,7 @@ private slots:
     // names a linked pull request.
     void numberRequired()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -224,7 +224,7 @@ private slots:
     void listsHaveSizes()
     {
         QFETCH(QString, typeId);
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         const QJsonObject defaults = mirante::defaultConfig(registry.type(typeId).fields());
@@ -236,7 +236,7 @@ private slots:
     // validate, except that each required field without a default is reported.
     void fieldsValidateTheirDefaults()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -268,7 +268,7 @@ private slots:
     // Help > Modules. See docs/decisions/0056-modules-window.md.
     void namesAndDescriptions()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         QCOMPARE(registry.moduleName(QStringLiteral("github")), QStringLiteral("GitHub"));
@@ -280,7 +280,7 @@ private slots:
     // The texts of the plan's identity and item type tables.
     void descriptions()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         QCOMPARE(registry.moduleDescription(QStringLiteral("github")),
@@ -318,7 +318,7 @@ private slots:
     // The labels of each choice, in the order of the choices.
     void choiceLabels()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         const QStringList scopes{QStringLiteral("One repository"), QStringLiteral("One owner"), QStringLiteral("All")};
@@ -343,7 +343,7 @@ private slots:
     // Each section switch is a boolean that is on by default.
     void sectionsDefaultOn()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         QMap<QString, QStringList> sections;
@@ -368,7 +368,7 @@ private slots:
     // The text fields that may stay empty, with their types and placeholders.
     void optionalTextFields()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         for (const mirante::ItemType *type : registry.types()) {
@@ -402,7 +402,7 @@ private slots:
     // Modules. See docs/decisions/0089-module-identity.md.
     void identity()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
         const QString id = QStringLiteral("github");

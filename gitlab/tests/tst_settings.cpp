@@ -3,7 +3,7 @@
 #include "../GitLabSettings.h"
 
 #include <mirante/FieldValidation.h>
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/ItemEditor.h>
 
@@ -26,7 +26,7 @@ class TestSettings : public QObject
 private slots:
     void registersTheGeneralScreen()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         QCOMPARE(registry.moduleName(QStringLiteral("gitlab")), QStringLiteral("GitLab"));
@@ -64,7 +64,7 @@ private slots:
     // URL of the profile the new item would use.
     void fromUrlReadsTheProfilesServer()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
         registry.setSettingsReader([](const QString &profileId, const QString &, const QString &) {
             if (profileId == QLatin1String("work"))
@@ -86,7 +86,7 @@ private slots:
     // in the PRIVATE-TOKEN header.
     void serverType()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
         const mirante::ServerType *server = registry.serverType(QStringLiteral("gitlab"));
         QVERIFY(server);
@@ -136,7 +136,7 @@ private slots:
     // shows in the next form. fields() alone, without a profile, offers none.
     void projectFieldsOfferTheConfiguredPaths()
     {
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
 
         QJsonObject work;

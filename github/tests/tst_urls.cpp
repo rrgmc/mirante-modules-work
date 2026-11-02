@@ -2,9 +2,9 @@
 // reading of a pasted address.
 #include "../GitHubUrls.h"
 
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
-#include <mirante/ItemContext.h>
+#include <mirante/testing/FakeItemContext.h>
 #include <mirante/ItemType.h>
 
 #include <QJsonObject>
@@ -19,17 +19,14 @@ using namespace mirante::modules::github;
 namespace {
 
 // Records what a page type asks the core to show.
-class PageContext : public mirante::ItemContext
+class PageContext : public mirante::testing::FakeItemContext
 {
 public:
-    QJsonObject itemConfig;
     QJsonObject general;
     QJsonValue repositorySetting;
     QUrl webPage;
     QString message;
 
-    QString itemName() const override { return QStringLiteral("Item"); }
-    QJsonObject config() const override { return itemConfig; }
     QJsonValue projectSetting(const QString &key) const override
     {
         return key == QLatin1String("repository") ? repositorySetting : QJsonValue();
@@ -38,19 +35,16 @@ public:
     {
         return screenId == QLatin1String("general") ? general : QJsonObject();
     }
-    QString folderPath(const QString &) const override { return {}; }
     QWidget *createWebView(const QUrl &url, QWidget *) override
     {
         webPage = url;
         return nullptr;
     }
-    QWebEngineProfile *profile() override { return nullptr; }
     QWidget *createMessageView(const QString &text, QWidget *) override
     {
         message = text;
         return nullptr;
     }
-    void updateConfig(const QJsonObject &config) override { itemConfig = config; }
 };
 
 const QUrl kGitHub(QStringLiteral("https://github.com"));
@@ -212,7 +206,7 @@ private slots:
     {
         QFETCH(QString, typeId);
         QFETCH(QString, kind);
-        mirante::ItemTypeRegistry registry;
+        mirante::testing::TestRegistrar registry;
         registry.registerModule(QStringLiteral("github"), &registerModule);
         const mirante::ItemType &type = registry.type(typeId);
 

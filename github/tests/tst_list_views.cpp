@@ -6,7 +6,7 @@
 #include "../GitHubPullRequestListView.h"
 #include "../GitHubRunListView.h"
 
-#include <mirante/ItemContext.h>
+#include <mirante/testing/FakeItemContext.h>
 #include <mirante/Status.h>
 #include <mirante/testing/FakeApiClient.h>
 #include <mirante/widgets/CompactDate.h>
@@ -187,11 +187,15 @@ struct AddedItem
     QJsonObject config;
 };
 
-class FakeContext : public mirante::ItemContext
+class FakeContext : public mirante::testing::FakeItemContext
 {
 public:
-    QJsonObject itemConfig{{QStringLiteral("scope"), QStringLiteral("repository")},
-                           {QStringLiteral("repository"), QStringLiteral("own/config")}};
+    FakeContext()
+    {
+        itemConfig = QJsonObject{{QStringLiteral("scope"), QStringLiteral("repository")},
+                     {QStringLiteral("repository"), QStringLiteral("own/config")}};
+    }
+
     QJsonObject general{{QStringLiteral("baseUrl"), kBase}};
     QJsonValue repositorySetting;
     QList<QUrl> pages;
@@ -200,8 +204,6 @@ public:
     FakeStatusSource source;
     bool hasStatus = true;
 
-    QString itemName() const override { return QStringLiteral("Item"); }
-    QJsonObject config() const override { return itemConfig; }
     QJsonValue projectSetting(const QString &key) const override
     {
         return key == QLatin1String("repository") ? repositorySetting : QJsonValue();
@@ -210,11 +212,6 @@ public:
     {
         return screenId == QLatin1String("general") ? general : QJsonObject();
     }
-    QString folderPath(const QString &) const override { return {}; }
-    QWidget *createWebView(const QUrl &, QWidget *) override { return nullptr; }
-    QWebEngineProfile *profile() override { return nullptr; }
-    QWidget *createMessageView(const QString &, QWidget *) override { return nullptr; }
-    void updateConfig(const QJsonObject &config) override { itemConfig = config; }
     void showPage(const QUrl &url) override { pages << url; }
     QString addItemToTask(const QString &typeId, const QString &name, const QJsonObject &config) override
     {

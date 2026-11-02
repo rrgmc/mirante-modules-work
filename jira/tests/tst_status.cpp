@@ -2,7 +2,7 @@
 // Data Center in tests/data/. See README.md#status.
 #include "../JiraFields.h"
 #include "../JiraStatus.h"
-#include "items/ItemTypeRegistry.h"
+#include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/testing/FakeStatusJob.h>
 
@@ -105,7 +105,7 @@ class TestStatus : public QObject
     Q_OBJECT
 
 private:
-    mirante::ItemTypeRegistry m_registry;
+    mirante::testing::TestRegistrar m_registry;
 
     const mirante::ItemType &type(const QString &id) { return m_registry.type(id); }
 
