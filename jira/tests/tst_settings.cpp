@@ -5,7 +5,7 @@
 #include "../JiraServerType.h"
 #include "../JiraSettings.h"
 
-#include "items/FieldValidation.h"
+#include <mirante/FieldValidation.h>
 #include "items/ItemTypeRegistry.h"
 
 #include <mirante/QuickAdd.h>
@@ -221,6 +221,8 @@ private:
         void addQuickAddHandler(std::unique_ptr<mirante::QuickAddHandler>) override {}
         void addRelatedItemFinder(std::unique_ptr<mirante::RelatedItemFinder>) override {}
         void addDeviceSetting(const mirante::Field &) override {}
+        void setProjectEditor(mirante::EditorFactory) override {}
+        void setDeviceEditor(mirante::EditorFactory) override {}
 
         std::unique_ptr<mirante::ServerType> server;
         std::vector<mirante::Field> projectSettings;

@@ -3,8 +3,10 @@
 // field of every type.
 #include "../GitHubSettings.h"
 
-#include "items/FieldValidation.h"
+#include <mirante/FieldValidation.h>
 #include "items/ItemTypeRegistry.h"
+
+#include <mirante/ItemEditor.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -44,7 +46,7 @@ private slots:
         QCOMPARE(screens.size(), std::size_t(1));
         QCOMPARE(screens.front()->id(), QStringLiteral("general"));
         QCOMPARE(screens.front()->name(), QStringLiteral("General Configuration"));
-        QVERIFY(!screens.front()->createEditor(nullptr));
+        QVERIFY(!screens.front()->createEditor(mirante::EditorContext(), nullptr));
 
         const std::vector<mirante::Field> fields = screens.front()->fields();
         QCOMPARE(fields.size(), std::size_t(3));

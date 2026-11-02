@@ -1,5 +1,5 @@
 // Registers the github module into a fresh registry and checks its types.
-#include "items/FieldValidation.h"
+#include <mirante/FieldValidation.h>
 #include "items/ItemTypeRegistry.h"
 
 #include <QIcon>
