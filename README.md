@@ -19,7 +19,7 @@ List this repository in the app's `mirante.json`, with the folders you want:
 {
   "name": "mirante_modules_work",
   "repo": "https://github.com/rrgmc/mirante-modules-work",
-  "ref": "<a commit of this repository>",
+  "ref": "<a release tag, such as v0.8.0>",
   "folders": ["claude", "github", "gitlab", "jira"]
 }
 ```
