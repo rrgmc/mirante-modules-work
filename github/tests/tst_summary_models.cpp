@@ -2,8 +2,11 @@
 // whichever layouts the build compiled in, so an app's layout keeps them. The
 // default layouts' own tests are in tst_summary_views.cpp.
 #include "../GitHubIssueLayout.h"
+#include "../GitHubIssueView.h"
 #include "../GitHubPullRequestLayout.h"
+#include "../GitHubPullRequestView.h"
 #include "../GitHubRunLayout.h"
+#include "../GitHubRunView.h"
 #include "SummaryTestSupport.h"
 
 #include <QSet>
@@ -13,6 +16,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <memory>
 
 using mirante::widgets::StatusRole;
 using namespace summarytest;
@@ -358,6 +362,44 @@ private slots:
         QCOMPARE(model.title(), context.source.status.summary);
         QVERIFY(model.pageAddress().isEmpty());
         QVERIFY(!model.canRerun() && !model.canCancel() && !model.canRerunFailed());
+    }
+
+    // Whichever layouts the build compiled in: each view is made, draws every
+    // kind of status, shows and hides, and goes.
+    void everyLayoutDrawsEveryState()
+    {
+        FakeContext context;
+        ItemStatus none;
+        none.message = QStringLiteral("Nothing to show");
+
+        std::unique_ptr<QWidget> issueView(createIssueView(context, nullptr));
+        QVERIFY(issueView);
+        issueView->show();
+        context.source.change(issue({comment(QStringLiteral("A comment"))}));
+        context.source.change(none);
+        context.source.change(issue());
+        issueView.reset();
+
+        std::unique_ptr<QWidget> pullRequestView(createPullRequestView(context, nullptr));
+        QVERIFY(pullRequestView);
+        pullRequestView->show();
+        context.source.change(pullRequest());
+        context.source.change(none);
+        pullRequestView.reset();
+
+        std::unique_ptr<QWidget> runView(createRunView(context, nullptr));
+        QVERIFY(runView);
+        runView->show();
+        context.source.change(failedGroup(false));
+        context.source.change(passedGroup());
+        context.source.change(runStatus(QStringLiteral("main"), {}, {}));
+        context.source.change(singleRun(QStringLiteral("in_progress"), {}));
+        context.source.change(none);
+        QCoreApplication::processEvents();
+        runView->hide();
+        runView.reset();
+        // Answers that come after the view is gone are dropped.
+        QCoreApplication::processEvents();
     }
 
     void openPageShowsItInMirante()
