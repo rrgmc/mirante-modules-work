@@ -1,10 +1,14 @@
-// The three GitLab summaries, drawn from responses recorded from a GitLab
-// server or written in their shape, in tests/data/. "Me" is the user in data/user.json, id 1001. A handler
-// stands in for the external browser, so nothing is opened.
+// The default layouts of the three GitLab summaries, drawn from responses
+// recorded from a GitLab server or written in their shape, in tests/data/. "Me"
+// is the user in data/user.json, id 1001. A build whose app replaces a layout
+// skips them; tst_summary_models.cpp still runs. A handler stands in for the
+// external browser, so nothing is opened.
 #include "../GitLabIssueView.h"
 #include "../GitLabMergeRequestView.h"
 #include "../GitLabPipelineView.h"
 #include "../GitLabStatus.h"
+#include "../GitLabViewSupport.h"
+#include "SummaryTestSupport.h"
 
 #include <mirante/testing/FakeItemContext.h>
 #include <mirante/testing/FakeApiClient.h>
@@ -40,85 +44,9 @@ using mirante::widgets::StatusPill;
 using mirante::widgets::StatusRole;
 using mirante::widgets::SummaryView;
 using namespace mirante::modules::gitlab;
+using namespace summarytest;
 
 namespace {
-
-const QString kProject = QStringLiteral("api/v4/projects/acme%2Fbackend");
-const QString kMergeRequest = kProject + QStringLiteral("/merge_requests/42");
-const QString kIssue = kProject + QStringLiteral("/issues/7");
-const QString kPipeline = kProject + QStringLiteral("/pipelines/9001");
-const QString kMrAddress = QStringLiteral("https://gitlab.example/acme/backend/-/merge_requests/42");
-const QString kIssueAddress = QStringLiteral("https://gitlab.example/acme/backend/-/issues/7");
-const QString kPipelineAddress = QStringLiteral("https://gitlab.example/acme/backend/-/pipelines/9001");
-const QString kScopeMessage = QStringLiteral("The token cannot do this. It needs the api scope.");
-
-QJsonDocument readJson(const QString &name)
-{
-    QFile file(QFINDTESTDATA(QStringLiteral("tests/data/") + name));
-    if (!file.open(QIODevice::ReadOnly))
-        qFatal("Cannot read %s", qPrintable(name));
-    return QJsonDocument::fromJson(file.readAll());
-}
-
-QJsonObject readObject(const QString &name)
-{
-    return readJson(name).object();
-}
-
-// A status source that a test drives by hand.
-class FakeStatusSource : public mirante::ItemStatusSource
-{
-public:
-    ItemStatus status;
-    int refreshes = 0;
-
-    ItemStatus current() const override { return status; }
-    void refresh() override { ++refreshes; }
-    void subscribe(QObject *receiver, std::function<void(const ItemStatus &)> changed) override
-    {
-        m_subscribers.push_back({receiver, std::move(changed)});
-    }
-
-    void change(const ItemStatus &next)
-    {
-        status = next;
-        for (const Subscriber &subscriber : m_subscribers) {
-            if (subscriber.receiver)
-                subscriber.changed(next);
-        }
-    }
-
-private:
-    struct Subscriber
-    {
-        QPointer<QObject> receiver;
-        std::function<void(const ItemStatus &)> changed;
-    };
-    std::vector<Subscriber> m_subscribers;
-};
-
-class FakeContext : public mirante::testing::FakeItemContext
-{
-public:
-    FakeContext()
-    {
-        itemConfig = QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")}, {QStringLiteral("iid"), 42}};
-    }
-
-    QJsonObject general{{QStringLiteral("baseUrl"), QStringLiteral("https://built.example")}};
-    QList<QUrl> pages;
-    FakeApiClient client{QUrl(QStringLiteral("https://built.example"))};
-    FakeStatusSource source;
-    bool hasStatus = true;
-
-    QJsonObject moduleSettings(const QString &screenId) const override
-    {
-        return screenId == QLatin1String("general") ? general : QJsonObject();
-    }
-    void showPage(const QUrl &url) override { pages << url; }
-    mirante::ApiClient *server() override { return &client; }
-    mirante::ItemStatusSource *status() override { return hasStatus ? &source : nullptr; }
-};
 
 using View = std::unique_ptr<QWidget>;
 
@@ -163,85 +91,6 @@ QString errorOf(const View &view)
     return summary(view)->actions()->error();
 }
 
-ItemStatus mergeRequestWith(const QJsonObject &mergeRequest, const QJsonObject &approvals, const QJsonObject &user)
-{
-    return mergeRequestStatus(mergeRequest, approvals, user);
-}
-
-// acme/backend!42 with a failed head pipeline, approved by others.
-ItemStatus failedMergeRequest()
-{
-    ItemStatus status = mergeRequestWith(readObject(QStringLiteral("merge_request.json")),
-                                         readObject(QStringLiteral("approvals.json")),
-                                         readObject(QStringLiteral("user.json")));
-    status.data.insert(QStringLiteral("jobs"), readJson(QStringLiteral("pipeline_jobs.json")).array());
-    return status;
-}
-
-// A merge request whose head pipeline has this status.
-ItemStatus mergeRequestWithPipeline(const QString &pipelineStatus)
-{
-    QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
-    QJsonObject pipeline = mergeRequest.value(QStringLiteral("head_pipeline")).toObject();
-    pipeline.insert(QStringLiteral("status"), pipelineStatus);
-    mergeRequest.insert(QStringLiteral("head_pipeline"), pipeline);
-    return mergeRequestWith(mergeRequest, readObject(QStringLiteral("approvals.json")),
-                            readObject(QStringLiteral("user.json")));
-}
-
-// acme/backend#7 with the notes, leaving them out if notes is null.
-ItemStatus openIssue(const QJsonValue &notes = QJsonValue(QJsonValue::Undefined))
-{
-    ItemStatus status = issueStatus(readObject(QStringLiteral("issue.json")));
-    if (!notes.isUndefined())
-        status.data.insert(QStringLiteral("notes"), notes);
-    return status;
-}
-
-ItemStatus pipelineWithStatus(const QString &state)
-{
-    QJsonObject pipeline = readObject(QStringLiteral("pipeline_latest.json"));
-    pipeline.insert(QStringLiteral("status"), state);
-    return pipelineStatus(QStringLiteral("feature/retry-button"), pipeline,
-                          readJson(QStringLiteral("pipeline_jobs.json")).array());
-}
-
-// 9001 failed, with 9000 failed and 8999 running in its group, and 8990 and
-// 8950 before it, as the status makes it from data/pipelines.json.
-ItemStatus groupStatus()
-{
-    const QJsonArray recent = readJson(QStringLiteral("pipelines.json")).array();
-    const PipelineGroup group = pipelineGroup(readObject(QStringLiteral("pipeline_latest.json")), recent);
-    QJsonArray siblings;
-    const QStringList files{QStringLiteral("pipeline_jobs_sibling.json"), QStringLiteral("pipeline_jobs_running.json")};
-    for (qsizetype i = 0; i < group.siblings.size(); ++i) {
-        siblings.append(QJsonObject{{QStringLiteral("pipeline"), group.siblings.at(i)},
-                                    {QStringLiteral("jobs"), readJson(files.at(i)).array()}});
-    }
-    return pipelineStatus(QStringLiteral("feature/retry-button"), group.latest,
-                          readJson(QStringLiteral("pipeline_jobs.json")).array(), siblings, group.older);
-}
-
-QJsonObject note(const QString &body)
-{
-    return QJsonObject{{QStringLiteral("body"), body},
-                       {QStringLiteral("author"), QJsonObject{{QStringLiteral("name"), QStringLiteral("Bruno")}}},
-                       {QStringLiteral("created_at"), QStringLiteral("2026-10-26T12:00:00.000Z")}};
-}
-
-ApiReply failure(ApiReply::Error error, int httpStatus, const QString &message)
-{
-    ApiReply reply;
-    reply.error = error;
-    reply.httpStatus = httpStatus;
-    reply.message = message;
-    return reply;
-}
-
-void succeed(FakeContext &context, const QString &key)
-{
-    context.client.setJson(key, QJsonDocument(QJsonObject()));
-}
 
 // Runs while a dialog started by click is open, with that dialog.
 void withDialog(QPushButton *start, const std::function<void(QDialog *)> &answer)
@@ -274,6 +123,19 @@ public slots:
     void openUrl(const QUrl &url) { m_opened << url; }
 
 private slots:
+    // These tests know the default layouts' widgets.
+    void initTestCase()
+    {
+        FakeContext context;
+        const View issueView(createIssueView(context, nullptr));
+        const View mergeRequestView(createMergeRequestView(context, nullptr));
+        const View pipelineView(createPipelineView(context, nullptr));
+        if (issueView->objectName() != defaultLayoutName(QStringLiteral("issue"))
+            || mergeRequestView->objectName() != defaultLayoutName(QStringLiteral("merge-request"))
+            || pipelineView->objectName() != defaultLayoutName(QStringLiteral("pipeline")))
+            QSKIP("The app replaces a layout of the GitLab summaries.");
+    }
+
     void init()
     {
         m_opened.clear();
