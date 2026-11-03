@@ -1,0 +1,19 @@
+# Changelog
+
+All notable changes to these modules are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the version is 0.x, a minor version may break apps.
+
+A release is tagged when a merged pull request raises `VERSION`. See [decision 0134](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0134-release-tags-from-a-version-file.md) in the core.
+
+## [Unreleased]
+
+## [0.8.0] - 2026-11-03
+
+The first release of the work modules on their own.
+
+### Added
+
+- The modules `claude`, `github`, `gitlab` and `jira`, which moved from [`mirante-modules`](https://github.com/rrgmc/mirante-modules) with their history. See [decision 0133](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0133-work-modules-in-their-own-repository.md) in the core.
+- The repository builds alone, as an app of its own folders, with CI on Windows, macOS and Linux that checks the modules' includes and translations.
+
+[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/rrgmc/mirante-modules-work/tree/v0.8.0
