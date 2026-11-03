@@ -130,11 +130,11 @@ The tests are in `tests/tst_status.cpp`, on answers in `tests/data/`. They are r
 
 ## Summary views
 
-`GitHubPullRequestView.cpp`, `GitHubRunView.cpp` and `GitHubIssueView.cpp` each hold one class, a subclass of `GitHubSummary` in `GitHubViewSupport.h`, which is private to the module. The layouts, fields and rules are in [item types](../../../docs/item-types.md#github). `GitHubSummary` does what `GitLabSummary` does:
+Each summary has two parts: a **model**, which the module keeps, and a **layout**, which draws the model and which an app can replace. See [layouts](#layouts). `GitHubIssueView.cpp`, `GitHubPullRequestView.cpp` and `GitHubRunView.cpp` hold the models; `GitHub*LayoutDefault.cpp` hold the default layouts, which this section describes. The layouts, fields and rules are in [item types](../../../docs/item-types.md#github). `SummaryModel`, the models' base in `GitHubSummaryModel.h`, does what `GitLabSummary` does:
 
-- **Drawing.** `follow()` draws the item's status now and at each change. With no data it shows "Loading…" or the status's message. With old data it keeps drawing that data through an error. A status without data, with `State::None` and a message, replaces the old data.
-- **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status. A failure shows the reply's message in the action row, and a `403` shows "The token cannot do this. It needs write access to Actions."
-- **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
+- **Drawing.** `follow()` reads the item's status now and at each change, and says `changed()`. With no data, `hasData()` is false and `message()` says "Loading…" or the status's message. With old data it keeps that data through an error. A status without data, with `State::None` and a message, replaces the old data.
+- **Actions.** `runAction()` clears the last error, marks the action busy and makes the request. After a success it refreshes the status. A failure sets `error()` to the reply's message, and a `403` to "The token cannot do this. It needs write access to Actions." A default layout shows these in its action row.
+- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address.
 - **Dialogs** are on the heap, as in the gitlab module.
 
 The pull request summary offers "Open page" and "Web", and no re-run: a check run can be re-run only by the GitHub App that made it. See decision 0102. Its sections:
@@ -152,7 +152,7 @@ The issue summary shows the title and `statePill()`, Details (the assignees and 
 - **Jobs.** One table of the shown run's jobs, in the order of the answer, each with its pill, its name, its duration from `started_at` to `completed_at`, "Log" (`log-<id>`, its `html_url` in the external browser) when it has a `started_at`, and "Re-run" (`rerun-job-<id>`) when it is completed. A run without jobs in the data, an older run or a sibling whose jobs could not be read, reads them with `runJobs()` when shown, as GitLab's pipeline view does: "Loading…", or what was read before, until the answer comes, and "The jobs could not be read." if it fails. Only the answer for the run shown draws.
 - **Actions.** "Re-run failed jobs" (`rerun-failed`) when the shown run is completed with a failed conclusion; "Re-run" (`rerun-run`) when it is completed; "Cancel run" (`cancel-run`) while `queued`, `in_progress`, `waiting`, `requested` or `pending`, after a confirmation in a `QMessageBox` on the heap, "Cancel CI #812?"; "Pull request" (`pull-request`), in the external browser, hidden without one; "Open page" (`open-page`) and "Web" on the run's `html_url`. For `branchSource` `pullRequest` the pull request is `pullRequest.html_url` of the data, else the address built from the configuration. For a fixed or main-folder branch it is `<web>/<repository>/pull/<number>` of the shown run's first entry in `pull_requests`, which holds no web address. Showing another run clears the action row's error.
 - **Without runs** the title is the status's summary, "No runs on <branch>", and the head, the jobs, every action and the Web link hide.
-- **The refresh.** A `QTimer` named `run-refresh` asks for a refresh every 15 seconds while the shown run is not `completed` and the view is visible.
+- **The refresh.** The model's `QTimer`, named `run-refresh`, asks for a refresh every 15 seconds while the shown run is not `completed` and the view is visible, whatever the layout.
 
 ### Status pills
 
@@ -169,7 +169,49 @@ The pills of runs, jobs and check runs, from `statusText()` and `statusRole()`:
 
 A commit status of the combined status has a `state` instead: `success` Good "Passed", `failure` Bad "Failed", `error` Bad "Error", `pending` Waiting "Pending". `commitStatusPill()` draws it.
 
-Text from a server is plain text in every label. The tests are in `tests/tst_summary_views.cpp`, with a fake context and a fake status source, on the status tests' data.
+Text from a server is plain text in every label. The tests of the models are in `tests/tst_summary_models.cpp`, and those of the default layouts in `tests/tst_summary_views.cpp`, with a fake context and a fake status source from `tests/SummaryTestSupport.h`, on the status tests' data. The layouts' tests skip when an app replaces a layout; the models' tests run in every build.
+
+## Layouts
+
+An app can replace the whole layout of each summary when it builds Mirante: its widgets, buttons, colours and tables. Each summary is an [extension point](https://github.com/rrgmc/mirante-core/blob/master/docs/modules.md#extension-points). The module keeps the model, which reads the status and runs the actions, so a layout only draws.
+
+| Point | Interface | Model | Default |
+|---|---|---|---|
+| `issuelayout` | `makeIssueLayout()` in `GitHubIssueLayout.h` | `IssueModel` | `GitHubIssueLayoutDefault.cpp` |
+| `pullrequestlayout` | `makePullRequestLayout()` in `GitHubPullRequestLayout.h` | `PullRequestModel` | `GitHubPullRequestLayoutDefault.cpp` |
+| `runlayout` | `makeRunLayout()` in `GitHubRunLayout.h` | `RunModel` | `GitHubRunLayoutDefault.cpp` |
+
+**The contract.** `make<View>Layout(model, parent)` returns the view's widget, a child of `parent`. It draws the model at once, and again at each `changed()`. The model then becomes a child of that widget, so it lives as long as the view, and its refresh follows the widget's visibility. A layout may use the model, Qt and the module interface (`<mirante/...>`), such as `widgets::StatusPill` or `widgets::SummaryView`, and nothing else of the module.
+
+**What every model gives** (`SummaryModel`, in `GitHubSummaryModel.h`):
+
+- `hasData()` and `message()`: without data, show the message alone, such as "Loading…".
+- `config()` and `isSectionShown(section)`: the item's settings, and its `show<Section>` fields, on when absent.
+- `pageAddress()` and `openPage()`.
+- `isBusy(action)`, `error()` and `clearError()`, with the signals `busyChanged(action)` and `errorChanged()`.
+- `refresh()`, to read the status again.
+- `Pill` values, a text and a `widgets::StatusRole`, for every state, so a layout words and colours states as the module does.
+
+**What each model adds:**
+
+- `IssueModel`: `issue()`, GitHub's issue object; `state()`; `comments()`, newest first; and `commentsState()`: `Shown`, `None` or `Unreadable`.
+- `PullRequestModel`: `pullRequest()`, GitHub's object; `state()` and `isDraft()`; `checks()`, the overall state; `checkList()`, each check run and commit status with its state, whether it passed and its details address; and `reviewers()`, each with a state, the requested reviewers last.
+- `RunModel`: `runs()`, newest first, each with its title, state, branch, start and duration, and whether it is of the group; `shownIndex()`, `shownRun()` and `showRun(index)`; `jobs()` and `jobsState()`: `Loading`, `Shown` or `Unreadable`; `canRerunFailed()`, `canRerun()`, `canCancel()` and `pullRequestAddress()`; and the actions `rerunFailed()`, `rerun()`, `cancel()` and `rerunJob(id)`. `cancel()` does not ask first: a layout that wants a confirmation asks before it calls it, as the default does.
+
+**An extension.** An app names a folder of its own repository for the point, in the module's folder entry of its manifest:
+
+```json
+{
+  "folder": "github",
+  "extensions": { "runlayout": { "local": "extensions/github-run-layout" } }
+}
+```
+
+The core compiles every `.cpp` and `.h` file of that folder into the module, in place of the default, with the module's folder on the include path. The extension includes the point's header by name, such as `#include "GitHubRunLayout.h"`, and defines its make function in the namespace `mirante::modules::github`. A folder in another repository is named with `name`, `repo`, `ref` and `folder` instead of `local`. An app may replace one point and keep the defaults of the others.
+
+[`examples/extensions/github-run-table`](../examples/extensions/github-run-table) is an example for `runlayout`: the runs and the jobs as two tables in tabs, with coloured buttons. This repository's own build does not compile it, because its CI tests the defaults.
+
+**Stability.** The point headers and `GitHubSummaryModel.h` are an interface that apps build against. A change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md), and while the version is 0.x a minor version may change them. Texts in an extension are not in the module's translations.
 
 ## Lists
 
