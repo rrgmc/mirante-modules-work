@@ -9,8 +9,10 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 | `gitlab.mr.summary` | GitLab MR (summary) | native | A summary of one merge request: its state, branches, people, pipeline and approvals. |
 | `gitlab.mr.page` | GitLab MR (page) | web | The web page of one merge request, on the GitLab server of the item's profile. |
 | `gitlab.mr.list` | GitLab MR List | native | A table of merge requests in a project, a group or everywhere, such as those that wait for your review. |
+| `gitlab.mr.multilist` | GitLab MR List (several projects) | native | A table of the merge requests of the projects you name, such as those that wait for your review, with a filter on the project. |
 | `gitlab.pipeline` | GitLab CI Pipeline | native | The latest pipeline of a branch and those started with it, with their stages and jobs. The branch is a fixed one, the main folder's current branch or a merge request's branch. |
 | `gitlab.pipeline.list` | GitLab CI Pipeline List | native | A table of a project's pipelines: all of them, those you started, or those of a branch or a merge request. |
+| `gitlab.pipeline.multilist` | GitLab CI Pipeline List (several projects) | native | A table of the pipelines of the projects you name, newest first: all of them, those you started, or those of a branch, with a filter on the project. |
 | `gitlab.issue.summary` | GitLab Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `gitlab.issue.page` | GitLab Issue (page) | web | The web page of one issue, on the GitLab server of the item's profile. |
 | `gitlab.issue.list` | GitLab Issue List | native | A table of issues in a project, a group or everywhere, such as those assigned to you. |
@@ -184,6 +186,16 @@ The parameters of `filter` come last and replace those of the same name. A name 
 
 Without a project, without a number for `mergeRequest`, or with an unknown `source`, it reports `State::None` with a message, without a request. `pipelinesUrl()`, in `GitLabUrls.cpp`, builds the list's page, `<baseUrl>/<project>/-/pipelines`.
 
+### Several projects
+
+`gitlab.mr.multilist` and `gitlab.pipeline.multilist` list the projects of their `projects` field, one `group/project` per line. They are types of their own, so that their forms leave out what fits one project only: the scope, the group and a merge request number. `configuredProjects()` reads the field, tidied as `projectPath()` does, without empty and repeated values. Without any, the list reports `State::None` with "Set the projects in the item's settings.", without a request. The functions above take `ListSpan::Projects` for these types.
+
+GitLab has no request for the merge requests or pipelines of several projects, so each list asks once per project, each up to `limit`, with the query of one project. The rows are joined, sorted newest first, by `updated_at` for merge requests and `created_at` for pipelines, and cut to `limit`. `reviewRequested` and `mine` read the user once. The pipeline sources are `all`, `mine` and `branch`. A pipeline row also gets `project_path` (`kRowProjectKey`), the path of its project, since GitLab's row has only `project_id`. The first project that fails fails the list, with its path before the message, such as "acme/web: Forbidden (403)". The lists have no Web link, as GitLab has no page for several projects, and the description names the projects, joined by commas.
+
+### Filters at the start
+
+The filters above a table start with the values of the item's TextList fields `<column>Filter`: `statusFilter` for the pipeline lists, and `projectFilter` for the lists over several projects. `filterDefault()` reads them, trimmed, without empty values. The values are those that the drop-down shows, such as "Failed". A value that no row has is chosen once a row has it. Once the user chooses in the drop-down, the item's values no longer apply to that view. The form shows these fields in a group, "Filters at the start".
+
 The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`, written by hand in the shape of GitLab's API.
 
 ## List views
@@ -191,7 +203,7 @@ The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json`, `issu
 Each list has two parts: a **model**, which the module keeps, and a **layout**, which draws the model and which an app can replace. See [list layouts](#list-layouts). `GitLabMergeRequestListView.cpp`, `GitLabIssueListView.cpp` and `GitLabPipelineListView.cpp` hold the models; `GitLab*ListLayoutDefault.cpp` hold the default layouts, which draw an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit) through `DefaultListLayout` in `GitLabListSupport.h`. The columns and rules are in [item types](../../../docs/item-types.md#gitlab). `ListModel`, the models' base in `GitLabListModel.h`, and the default layouts hold what they share:
 
 - **Drawing.** `follow()` reads the item's status now and at each change, as a summary's model does, and says `changed()`. An empty list shows the table and a line of its own, `emptyText()`, because `setMessage()` shows instead of the table.
-- **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests or "Add". A pipeline's key is its id, and its project is the item's, because the list has one project. See [decision 0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md): there is no preview, and a click on a row only selects it.
+- **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests or "Add". A pipeline's key is its id, and its project is its `project_path` in a list over several projects, else the item's. See [decision 0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md): there is no preview, and a click on a row only selects it.
 - **Pages and dates.** `pageSize()` reads the `pageSize` field, and the default layout calls `setPageSize()` with it. `dateCell()` draws a date with `compactDate()` and sorts by the date itself. A missing date is a dash, and sorts as the oldest.
 - **Links.** The row actions are the model's: `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`, by the row's key. In the default layout, `linksCell()` makes the last column, whose ids are `web`, `open` and `add`, in that order. A link goes when the row cannot do it: without an address "Web" and "Open", without a project or a ref "Add". The cell's `sortKey` is the row's, because a cell with links has no text, and without it the order of equal rows would depend on the sort before.
 - **The row menu** is a `QMenu` that belongs to the view and uses `popup()`, so nothing waits on it if the view is made again. It offers the same as the links, and "Copy link".
@@ -205,6 +217,8 @@ The merge request model, `MergeRequestListModel`, also reads each row's head pip
 
 The pipeline model makes no further requests, so Author and Started show what the list's answer holds. GitLab leaves `user` and `started_at` out of its list answers, so Author usually shows a dash, and Started falls back to `created_at`. "Add" reads `refs/merge-requests/<iid>/head`, `/merge` and `/train` as that merge request, and any other ref as a branch.
 
+A list over several projects shows a Project column after the Title or Id column, with a filter on it before the others. A list of one project hides that column and has no such filter. Each filter starts with the item's values, as [filters at the start](#filters-at-the-start) says.
+
 The table's cells draw text from a server as plain text. The tests of the models are in `tests/tst_list_models.cpp`, and those of the default layouts in `tests/tst_list_views.cpp`, with a fake context and a fake status source from `tests/ListTestSupport.h`, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`. The layouts' tests skip when an app replaces a list layout; the models' tests run in every build.
 
 ## List layouts
@@ -217,13 +231,13 @@ An app can replace the whole layout of each list when it builds Mirante, as for 
 | `mergerequestlistlayout` | `makeMergeRequestListLayout()` in `GitLabMergeRequestListLayout.h` | `MergeRequestListModel` | `GitLabMergeRequestListLayoutDefault.cpp` |
 | `pipelinelistlayout` | `makePipelineListLayout()` in `GitLabPipelineListLayout.h` | `PipelineListModel` | `GitLabPipelineListLayoutDefault.cpp` |
 
-**What every list model gives** (`ListModel`, in `GitLabListModel.h`): `hasData()` and `message()`; `description()`, `pageAddress()`, `emptyText()` and `pageSize()`; `config()` and `isColumnShown(column)`, which reads the `show<Column>` fields; `keys()` and `row(key)`, with GitLab's row object, its page and whether it can be added; the row actions `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`; and `setVisibleRows(keys)`, which a layout calls after each `changed()` and whenever the rows it shows change.
+**What every list model gives** (`ListModel`, in `GitLabListModel.h`): `hasData()` and `message()`; `description()`, `pageAddress()`, `emptyText()` and `pageSize()`; `config()` and `isColumnShown(column)`, which reads the `show<Column>` fields; `spansProjects()`, whether the list is over several projects; `filterDefault(column)`, the values a filter on a column starts with, from the item's `<column>Filter` field; `keys()` and `row(key)`, with GitLab's row object, its page and whether it can be added; the row actions `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`; and `setVisibleRows(keys)`, which a layout calls after each `changed()` and whenever the rows it shows change.
 
 **What each model adds:**
 
 - `IssueListModel`: `issues()` and `issue(key)`, each with its project, iid, ref, title, assignees, labels and update time.
 - `MergeRequestListModel`: `mergeRequests()` and `mergeRequest(key)`, each with its project, iid, ref, title, author, update time, `pipeline` (a `Pill`, empty until the answer comes) and `approvals`: whether answered, those given and those required. Only the first 25 shown rows, `AskedRows`, get them, and each answer says `rowChanged(key)`.
-- `PipelineListModel`: `pipelines()` and `pipeline(key)`, each with its id, state (a `Pill`), ref, author and start time.
+- `PipelineListModel`: `pipelines()` and `pipeline(key)`, each with its id, project, state (a `Pill`), ref, author and start time.
 
 A layout that does not use `ItemListView` sorts, filters and pages the rows itself. The headers and `GitLabListModel.h` are an interface that apps build against; a change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md).
 
@@ -298,7 +312,9 @@ The keys of each type, in the order the form shows them:
 - `gitlab.mr.summary`, `gitlab.mr.page`, `gitlab.issue.summary`, `gitlab.issue.page`: `project`, `iid`.
 - `gitlab.mr.list`, `gitlab.issue.list`: `scope`, `project`, `group`, `preset`, `filter`, `limit`, `pageSize`.
 - `gitlab.pipeline`: `project`, `branchSource`, `branch`, `iid`.
-- `gitlab.pipeline.list`: `project`, `source`, `branch`, `iid`, `limit`, `pageSize`.
+- `gitlab.pipeline.list`: `project`, `source`, `branch`, `iid`, `limit`, `pageSize`, `statusFilter`.
+- `gitlab.mr.multilist`: `projects`, `preset`, `filter`, `limit`, `pageSize`, `showPipeline`, `showApprovals`, `projectFilter`.
+- `gitlab.pipeline.multilist`: `projects`, `source`, `branch`, `limit`, `pageSize`, `projectFilter`, `statusFilter`.
 
 ## Settings
 

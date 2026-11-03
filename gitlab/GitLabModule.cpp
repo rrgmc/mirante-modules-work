@@ -226,6 +226,42 @@ std::vector<Field> listFields(const QStringList &presets, const QStringList &pre
     return withSections(std::move(fields), listSizeFields());
 }
 
+// The projects of a list over several of them, one per line. Its forms leave
+// out what fits one project only, such as a merge request number. See
+// README.md#several-projects.
+Field projectsField()
+{
+    Field field = makeField(QStringLiteral("projects"), QCoreApplication::translate("gitlab", "Projects"),
+                            Field::Type::TextList, true);
+    field.help = QCoreApplication::translate("gitlab", "One per line, as group/project.");
+    return field;
+}
+
+// The values a view filter of a list chooses at the start, one per line, as
+// its drop-down shows them. Empty is "All". The key is <column>Filter; see
+// ListModel::filterDefault().
+Field filterDefaultField(const QString &column, const QString &label, const QString &help)
+{
+    Field field = makeField(column + QStringLiteral("Filter"), label, Field::Type::TextList);
+    field.help = help;
+    field.group = QCoreApplication::translate("gitlab", "Filters at the start");
+    return field;
+}
+
+Field projectFilterField()
+{
+    return filterDefaultField(QStringLiteral("project"), QCoreApplication::translate("gitlab", "Project"),
+                              QCoreApplication::translate("gitlab", "Projects to show, as group/project. Empty "
+                                                                    "shows all."));
+}
+
+Field statusFilterField()
+{
+    return filterDefaultField(QStringLiteral("status"), QCoreApplication::translate("gitlab", "Status"),
+                              QCoreApplication::translate("gitlab", "Such as Failed or Running, as the Status filter "
+                                                                    "shows them. Empty shows all."));
+}
+
 // Empty means kDefaultBranch, which the placeholder shows.
 Field branchField()
 {
@@ -265,7 +301,36 @@ std::vector<Field> pipelineListFields()
         makeField(QStringLiteral("iid"), QCoreApplication::translate("gitlab", "Merge request number"),
                   Field::Type::Integer),
     };
-    return withSections(std::move(fields), listSizeFields());
+    return withSections(withSections(std::move(fields), listSizeFields()), {statusFilterField()});
+}
+
+// Without a merge request number, which fits one project only.
+std::vector<Field> pipelineMultiListFields()
+{
+    std::vector<Field> fields{
+        projectsField(),
+        choiceField(QStringLiteral("source"), QCoreApplication::translate("gitlab", "Show"),
+                    {QStringLiteral("all"), QStringLiteral("mine"), QStringLiteral("branch")},
+                    {QCoreApplication::translate("gitlab", "All pipelines"),
+                     QCoreApplication::translate("gitlab", "Started by me"),
+                     QCoreApplication::translate("gitlab", "Of a branch")}),
+        branchField(),
+    };
+    return withSections(withSections(std::move(fields), listSizeFields()), {projectFilterField(), statusFilterField()});
+}
+
+// A merge request list's fields with projectsField() in place of the scope,
+// the project and the group.
+std::vector<Field> mergeRequestMultiListFields(const std::vector<Field> &listFields)
+{
+    std::vector<Field> fields{projectsField()};
+    for (const Field &field : listFields) {
+        if (field.key != QLatin1String("scope") && field.key != QLatin1String("project")
+            && field.key != QLatin1String("group"))
+            fields.push_back(field);
+    }
+    fields.push_back(projectFilterField());
+    return fields;
 }
 
 } // namespace
@@ -312,19 +377,28 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("gitlab", "The web page of one merge request, on the GitLab server of the "
                                               "item's profile."),
         mergeRequest, settings, &mergeRequestUrl, &fetchMergeRequestStatus));
-    registrar.addItemType(std::make_unique<GitLabItemType>(
-        QStringLiteral("gitlab.mr.list"), QCoreApplication::translate("gitlab", "GitLab MR List"),
-        QCoreApplication::translate("gitlab", "MRs"),
-        QCoreApplication::translate("gitlab", "A table of merge requests in a project, a group or everywhere, such "
-                                              "as those that wait for your review."),
+    const std::vector<Field> mergeRequestList =
         withSections(listFields({QStringLiteral("createdByMe"), QStringLiteral("reviewRequested"),
                                  QStringLiteral("assignedToMe"), QStringLiteral("allOpen")},
                                 {QCoreApplication::translate("gitlab", "Created by me"),
                                  QCoreApplication::translate("gitlab", "Review requested from me"),
                                  QCoreApplication::translate("gitlab", "Assigned to me"),
                                  QCoreApplication::translate("gitlab", "All open")}),
-                     {showPipeline, showApprovals}),
-        settings, &fetchMergeRequestListStatus, &createMergeRequestListView));
+                     {showPipeline, showApprovals});
+    registrar.addItemType(std::make_unique<GitLabItemType>(
+        QStringLiteral("gitlab.mr.list"), QCoreApplication::translate("gitlab", "GitLab MR List"),
+        QCoreApplication::translate("gitlab", "MRs"),
+        QCoreApplication::translate("gitlab", "A table of merge requests in a project, a group or everywhere, such "
+                                              "as those that wait for your review."),
+        mergeRequestList, settings, &fetchMergeRequestListStatus, &createMergeRequestListView));
+    registrar.addItemType(std::make_unique<GitLabItemType>(
+        QStringLiteral("gitlab.mr.multilist"),
+        QCoreApplication::translate("gitlab", "GitLab MR List (several projects)"),
+        QCoreApplication::translate("gitlab", "MRs"),
+        QCoreApplication::translate("gitlab", "A table of the merge requests of the projects you name, such as those "
+                                              "that wait for your review, with a filter on the project."),
+        mergeRequestMultiListFields(mergeRequestList), settings, &fetchMergeRequestMultiListStatus,
+        &createMergeRequestMultiListView));
     registrar.addItemType(std::make_unique<GitLabItemType>(
         QStringLiteral("gitlab.pipeline"), QCoreApplication::translate("gitlab", "GitLab CI Pipeline"),
         QCoreApplication::translate("gitlab", "CI"),
@@ -338,6 +412,14 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("gitlab", "A table of a project's pipelines: all of them, those you started, or "
                                               "those of a branch or a merge request."),
         pipelineListFields(), settings, &fetchPipelineListStatus, &createPipelineListView));
+    registrar.addItemType(std::make_unique<GitLabItemType>(
+        QStringLiteral("gitlab.pipeline.multilist"),
+        QCoreApplication::translate("gitlab", "GitLab CI Pipeline List (several projects)"),
+        QCoreApplication::translate("gitlab", "CI"),
+        QCoreApplication::translate("gitlab", "A table of the pipelines of the projects you name, newest first: all "
+                                              "of them, those you started, or those of a branch, with a filter on "
+                                              "the project."),
+        pipelineMultiListFields(), settings, &fetchPipelineMultiListStatus, &createPipelineMultiListView));
     registrar.addItemType(std::make_unique<GitLabItemType>(
         QStringLiteral("gitlab.issue.summary"), QCoreApplication::translate("gitlab", "GitLab Issue (summary)"),
         QCoreApplication::translate("gitlab", "Issue"),

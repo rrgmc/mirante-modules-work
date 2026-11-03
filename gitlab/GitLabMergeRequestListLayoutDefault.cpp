@@ -1,6 +1,7 @@
 // The default of the extension point "mergerequestlistlayout": the core's
-// table, with the columns Ref, Title, Author, Pipeline, Approvals, Updated and
-// Links. It is compiled only when the app names no extension for
+// table, with the columns Ref, Title, Project, Author, Pipeline, Approvals,
+// Updated and Links. Project, and a filter on it, show only in a list over
+// several projects. It is compiled only when the app names no extension for
 // "mergerequestlistlayout". See README.md#list-layouts.
 #include "GitLabListSupport.h"
 #include "GitLabMergeRequestListLayout.h"
@@ -13,7 +14,16 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
-enum Column { RefColumn, TitleColumn, AuthorColumn, PipelineColumn, ApprovalsColumn, UpdatedColumn, LinksColumn };
+enum Column {
+    RefColumn,
+    TitleColumn,
+    ProjectColumn,
+    AuthorColumn,
+    PipelineColumn,
+    ApprovalsColumn,
+    UpdatedColumn,
+    LinksColumn
+};
 
 // Such as "1/2", or just the count when none are required. Sorted by the
 // approvals given, and a row without an answer comes last.
@@ -38,6 +48,7 @@ public:
     {
         setColumns({{QCoreApplication::translate("gitlab", "Ref"), 1},
                     {QCoreApplication::translate("gitlab", "Title"), 0, true},
+                    {QCoreApplication::translate("gitlab", "Project"), 6},
                     {QCoreApplication::translate("gitlab", "Author"), 5},
                     {QCoreApplication::translate("gitlab", "Pipeline"), 2},
                     {QCoreApplication::translate("gitlab", "Approvals"), 4},
@@ -46,6 +57,11 @@ public:
                    UpdatedColumn);
         setColumnVisible(PipelineColumn, model.isColumnShown(QStringLiteral("pipeline")));
         setColumnVisible(ApprovalsColumn, model.isColumnShown(QStringLiteral("approvals")));
+        setColumnVisible(ProjectColumn, model.spansProjects());
+        if (model.spansProjects()) {
+            addFilter(ProjectColumn, QCoreApplication::translate("gitlab", "Project"));
+            setFilterDefault(ProjectColumn, model.filterDefault(QStringLiteral("project")));
+        }
         start();
     }
 
@@ -55,6 +71,7 @@ protected:
         const MergeRequestListModel::MergeRequest mergeRequest = m_model.mergeRequest(key);
         return {{mergeRequest.ref, mergeRequest.refSortKey, {}},
                 {mergeRequest.title, {}, {}},
+                textCell(mergeRequest.project),
                 {mergeRequest.author, {}, {}},
                 pillCell(mergeRequest.pipeline),
                 approvalsCell(mergeRequest.approvals),

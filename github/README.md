@@ -11,8 +11,10 @@ The module is built like the [gitlab module](../gitlab/README.md), and this READ
 | `github.pr.summary` | GitHub PR (summary) | native | A summary of one pull request: its state, branches, checks, reviews and people. |
 | `github.pr.page` | GitHub PR (page) | web | The web page of one pull request, on the GitHub server of the item's profile. |
 | `github.pr.list` | GitHub PR List | native | A table of pull requests in a repository, an owner or everywhere, such as those that wait for your review. |
+| `github.pr.multilist` | GitHub PR List (several repositories) | native | A table of the pull requests of the repositories you name, such as those that wait for your review, with a filter on the repository. |
 | `github.run` | GitHub Actions Run | native | The Actions runs of a branch's newest commit, one per workflow, with their jobs. The branch is a fixed one, the main folder's current branch or a pull request's branch. |
 | `github.run.list` | GitHub Actions Run List | native | A table of a repository's Actions runs: all of them, those you started, or those of a branch or a pull request. |
+| `github.run.multilist` | GitHub Actions Run List (several repositories) | native | A table of the Actions runs of the repositories you name, newest first: all of them, those you started, or those of a branch, with a filter on the repository. |
 | `github.issue.summary` | GitHub Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `github.issue.page` | GitHub Issue (page) | web | The web page of one issue, on the GitHub server of the item's profile. |
 | `github.issue.list` | GitHub Issue List | native | A table of issues in a repository, an owner or everywhere, such as those assigned to you. |
@@ -234,6 +236,17 @@ Values in the query, the login and the branches, are encoded with `GitHubClient:
 
 `runListWebUrl()` gives its Web link, `<web>/<repository>/actions`, or `<web>/<repository>/actions/workflows/<file>` with a workflow.
 
+### Several repositories
+
+`github.pr.multilist` and `github.run.multilist` list the repositories of their `repositories` field, one `owner/repo` per line. They are types of their own, so that their forms leave out what fits one repository only: the scope, the owner, a workflow file and a pull request number. `configuredRepositories()` reads the field: each value is trimmed and loses slashes at its ends, and empty and repeated ones are left out. Without any, the list reports `State::None` with "Set the repositories in the item's settings.", without a request. The functions above take `ListSpan::Repositories` for these types.
+
+- **Pull requests** come from one search, as for one repository: `searchQuery()` puts one `repo:<repository>` for each, which GitHub joins with OR. `allOpen` adds nothing, as the repositories already narrow the search. The Web link is `<web>/pulls?q=<query>`, and the description names the repositories, joined by commas.
+- **Runs** have no request for several repositories, so `fetchRunMultiListStatus()` asks `workflowRuns()` once per repository, each up to `limit`. The rows are joined, sorted by `created_at`, newest first, and cut to `limit`. Its sources are `all`, `mine` and `branch`; `mine` reads the user once, and an empty branch reads each repository's own `default_branch`. The first repository that fails fails the list, with its name before the message, such as "acme/web: Forbidden (403)". The list has no Web link, as GitHub has no page for the runs of several repositories.
+
+### Filters at the start
+
+The filters above a table start with the values of the item's TextList fields `<column>Filter`: `statusFilter` and `workflowFilter` for the run lists, and `repositoryFilter` for the lists over several repositories. `filterDefault()` reads them, trimmed, without empty values. The values are those that the drop-down shows, such as "Failed" or "CI". A value that no row has is chosen once a row has it. Once the user chooses in the drop-down, the item's values no longer apply to that view. The form shows these fields in a group, "Filters at the start".
+
 The tests are in `tests/tst_list_query.cpp`, on `pr_search.json`, `issue_search.json` and `run_list.json`, written by hand in the shape of GitHub's API.
 
 ## List views
@@ -241,7 +254,7 @@ The tests are in `tests/tst_list_query.cpp`, on `pr_search.json`, `issue_search.
 Each list has two parts: a **model**, which the module keeps, and a **layout**, which draws the model and which an app can replace. See [list layouts](#list-layouts). `GitHubPullRequestListView.cpp`, `GitHubIssueListView.cpp` and `GitHubRunListView.cpp` hold the models; `GitHub*ListLayoutDefault.cpp` hold the default layouts, which draw an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit), as GitLab's lists do, through `DefaultListLayout` in `GitHubListSupport.h`. The columns and rules are in [item types](../../../docs/item-types.md#github). `ListModel`, the models' base in `GitHubListModel.h`, and the default layouts hold what they share:
 
 - **Drawing.** `follow()` reads the item's status now and at each change, and says `changed()`. Without data, `hasData()` is false and `message()` says "Loading…" or the status's message, which the default layout shows instead of the table. Old data stays through an error. An empty list shows the table and a line of its own, `emptyText()`: "No pull requests", "No issues" or "No runs".
-- **Rows.** A search row's repository comes from its `repository_url` (`.../repos/<owner>/<repo>`), with `rowRepository()`, never from the item's configuration. Its key is `owner/repo#42`, because a list can span repositories, and the Ref column reads `repo#42` and sorts by the whole repository, then by the number. A row without a repository still draws, as `#42`, without requests, links or "Add". A run's key is its id, and its repository is the item's, or the project's setting. There is no preview, and a click on a row only selects it.
+- **Rows.** A search row's repository comes from its `repository_url` (`.../repos/<owner>/<repo>`), with `rowRepository()`, never from the item's configuration. Its key is `owner/repo#42`, because a list can span repositories, and the Ref column reads `repo#42` and sorts by the whole repository, then by the number. A row without a repository still draws, as `#42`, without requests, links or "Add". A run's key is its id, and its repository is its `repository.full_name`, else the item's, or the project's setting. There is no preview, and a click on a row only selects it.
 - **Addresses.** "Web" and "Open" use the row's `html_url`. Without it, the address is built from the profile's web address: `<web>/<repository>/pull/<n>`, `/issues/<n>` or `/actions/runs/<id>`.
 - **Pages and dates.** `pageSize()` reads the `pageSize` field, and the default layout calls `setPageSize()` with it. `dateCell()` draws a date with `compactDate()` and sorts by the date itself. A missing date is a dash, and sorts as the oldest.
 - **Links.** The row actions are the model's: `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`, by the row's key. In the default layout, `linksCell()` makes the last column, whose ids are `web`, `open` and `add`, in that order. The link "Open" has the disambiguation "link that opens a row", because "Open" is also a pull request's state. A link goes when the row cannot do it. The cell's `sortKey` is the row's, so the order of equal rows stays stable.
@@ -265,6 +278,8 @@ The pull request model, `PullRequestListModel`, also reads each row's checks and
 
 The Run List makes no further requests. Its Run column reads `#<run_number>`, but sorts by the run's `id`, because run numbers count per workflow and ids grow across them. Status is a pill, as in the [run view](#status-pills). Started is `run_started_at`, else `created_at`. The filters are Status and Workflow.
 
+A list over several repositories shows a Repository column after the Title or Run column, with a filter on it before the others. A list of one repository hides that column and has no such filter. Each filter starts with the item's values, as [filters at the start](#filters-at-the-start) says.
+
 The table's cells draw text from a server as plain text. The tests of the models are in `tests/tst_list_models.cpp`, and those of the default layouts in `tests/tst_list_views.cpp`, with a fake context and a fake status source from `tests/ListTestSupport.h`, on `pr_search.json`, `issue_search.json`, `run_list.json`, the status tests' data, and `listview_*.json`. The layouts' tests skip when an app replaces a list layout; the models' tests run in every build.
 
 ## List layouts
@@ -282,6 +297,8 @@ An app can replace the whole layout of each list when it builds Mirante, as for 
 - `hasData()` and `message()`: without data, show the message alone, such as "Loading…".
 - `description()`, `pageAddress()`, `emptyText()` and `pageSize()`: the line above the table, the list's page on the site, what an empty list says, and the rows a page shows.
 - `config()` and `isColumnShown(column)`: the item's settings, and its `show<Column>` fields, on when absent.
+- `spansRepositories()`: whether the list is over several repositories, so that the layout shows each row's repository.
+- `filterDefault(column)`: the values a filter on a column starts with, from the item's `<column>Filter` field. Empty means all rows.
 - `keys()` and `row(key)`: each row's key, GitHub's row object, its page and whether it can be added.
 - `openWeb(key)`, `openPage(key)`, `addToTask(key)` and `copyLink(key)`.
 - `setVisibleRows(keys)`, which a layout calls after each `changed()` and whenever the rows it shows change. Only the pull request model reads more for them; it says `rowChanged(key)` when an answer comes.
@@ -290,7 +307,7 @@ An app can replace the whole layout of each list when it builds Mirante, as for 
 
 - `IssueListModel`: `issues()` and `issue(key)`, each with its repository, number, ref, title, assignees, labels and update time.
 - `PullRequestListModel`: `pullRequests()` and `pullRequest(key)`, each with its repository, number, ref, title, author, update time, `checks` (a `Pill`, empty until the answer comes) and `reviews`. Only the first 25 shown rows, `AskedRows`, get checks and reviews.
-- `RunListModel`: `runs()` and `run(key)`, each with its id, number, workflow, state (a `Pill`), branch, actor and start time.
+- `RunListModel`: `runs()` and `run(key)`, each with its id, repository, number, workflow, state (a `Pill`), branch, actor and start time.
 
 A layout that does not use `ItemListView` sorts, filters and pages the rows itself. The headers and `GitHubListModel.h` are an interface that apps build against; a change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md).
 
@@ -397,7 +414,9 @@ The keys of each type, in the order the form shows them:
 - `github.pr.list`: `scope`, `repository`, `owner`, `preset`, `filter`, `limit`, `pageSize`, `showChecks`, `showReviews`.
 - `github.issue.list`: `scope`, `repository`, `owner`, `preset`, `filter`, `limit`, `pageSize`.
 - `github.run`: `repository`, `branchSource`, `branch`, `number`, `workflow`.
-- `github.run.list`: `repository`, `source`, `branch`, `number`, `workflow`, `limit`, `pageSize`.
+- `github.run.list`: `repository`, `source`, `branch`, `number`, `workflow`, `limit`, `pageSize`, `statusFilter`, `workflowFilter`.
+- `github.pr.multilist`: `repositories`, `preset`, `filter`, `limit`, `pageSize`, `showChecks`, `showReviews`, `repositoryFilter`.
+- `github.run.multilist`: `repositories`, `source`, `branch`, `limit`, `pageSize`, `repositoryFilter`, `statusFilter`, `workflowFilter`.
 
 ## Settings
 

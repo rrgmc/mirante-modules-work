@@ -7,9 +7,12 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QJsonArray>
+#include <QSet>
 #include <QStringList>
 #include <QUrlQuery>
 
+#include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace mirante::modules::github {
@@ -20,10 +23,11 @@ namespace {
 // what is missing, and is empty when the scope is complete.
 struct ListScope
 {
-    enum class Where { Repository, Owner, All };
+    enum class Where { Repository, Owner, All, Repositories };
 
     Where where = Where::All;
-    QString name;     // the repository, "owner/repo", or the owner
+    QString name;      // the repository, "owner/repo", or the owner
+    QStringList names; // Repositories: "owner/repo" each
     QString problem;
 };
 
@@ -37,10 +41,22 @@ QString withoutSlashes(QString text)
     return text;
 }
 
+QString severalRepositoriesProblem()
+{
+    return QCoreApplication::translate("github", "Set the repositories in the item's settings.");
+}
+
 // An absent scope is a repository, the first choice of the form.
-ListScope readScope(const QJsonObject &config, const QJsonValue &defaultRepository)
+ListScope readScope(const QJsonObject &config, const QJsonValue &defaultRepository, ListSpan span)
 {
     ListScope scope;
+    if (span == ListSpan::Repositories) {
+        scope.where = ListScope::Where::Repositories;
+        scope.names = configuredRepositories(config);
+        if (scope.names.isEmpty())
+            scope.problem = severalRepositoriesProblem();
+        return scope;
+    }
     const QString name = config.value(QStringLiteral("scope")).toString();
     if (name.isEmpty() || name == QLatin1String("repository")) {
         scope.where = ListScope::Where::Repository;
@@ -87,6 +103,10 @@ QString queryOf(ListKind kind, const ListScope &scope, const QJsonObject &config
         parts << QStringLiteral("user:") + scope.name;
         break;
     case ListScope::Where::All:
+        break;
+    case ListScope::Where::Repositories:
+        for (const QString &repository : scope.names)
+            parts << QStringLiteral("repo:") + repository;
         break;
     }
 
@@ -171,10 +191,10 @@ GitHubClient::Done finishWithRows(StatusJob *job, const QString &key, int limit,
     };
 }
 
-void fetchSearchList(StatusJob &job, ListKind kind)
+void fetchSearchList(StatusJob &job, ListKind kind, ListSpan span)
 {
     const QJsonObject config = job.config();
-    const ListScope scope = readScope(config, job.projectSetting(kProjectSettingKey));
+    const ListScope scope = readScope(config, job.projectSetting(kProjectSettingKey), span);
     if (!scope.problem.isEmpty()) {
         job.finish(incompleteList(scope.problem));
         return;
@@ -195,7 +215,64 @@ QUrlQuery queryWith(const QString &name, const QString &value)
     return query;
 }
 
+// The runs of several repositories, as they come. The first failure finishes
+// the job; the last answer joins the rows.
+struct RunAnswers
+{
+    int waiting = 0;
+    bool finished = false;
+    QJsonArray rows;
+};
+
+// created_at is an ISO date in UTC, so its text sorts as the date does.
+QJsonArray newestRuns(const QJsonArray &rows, int limit)
+{
+    QList<QJsonObject> runs;
+    for (const QJsonValue &row : rows)
+        runs << row.toObject();
+    std::stable_sort(runs.begin(), runs.end(), [](const QJsonObject &a, const QJsonObject &b) {
+        return a.value(QStringLiteral("created_at")).toString() > b.value(QStringLiteral("created_at")).toString();
+    });
+    QJsonArray newest;
+    for (int index = 0; index < runs.size() && index < limit; ++index)
+        newest << runs.at(index);
+    return newest;
+}
+
+// A status of one of several repositories, with the repository's name before
+// its message.
+ItemStatus ofRepository(const QString &repository, ItemStatus status)
+{
+    status.message = repository + QStringLiteral(": ") + status.message;
+    return status;
+}
+
 } // namespace
+
+QStringList configuredRepositories(const QJsonObject &config)
+{
+    QStringList repositories;
+    QSet<QString> seen;
+    for (const QJsonValue &value : config.value(QStringLiteral("repositories")).toArray()) {
+        const QString repository = withoutSlashes(value.toString());
+        if (repository.isEmpty() || seen.contains(repository))
+            continue;
+        seen.insert(repository);
+        repositories << repository;
+    }
+    return repositories;
+}
+
+QStringList filterDefault(const QJsonObject &config, const QString &column)
+{
+    QStringList values;
+    for (const QJsonValue &value : config.value(column + QStringLiteral("Filter")).toArray()) {
+        const QString text = value.toString().trimmed();
+        if (!text.isEmpty())
+            values << text;
+    }
+    return values;
+}
 
 int listLimit(const QJsonObject &config)
 {
@@ -207,22 +284,23 @@ int listPageSize(const QJsonObject &config)
     return positiveNumber(config.value(QStringLiteral("pageSize")), kDefaultListPageSize);
 }
 
-QString scopeProblem(const QJsonObject &config, const QJsonValue &defaultRepository)
+QString scopeProblem(const QJsonObject &config, const QJsonValue &defaultRepository, ListSpan span)
 {
-    return readScope(config, defaultRepository).problem;
+    return readScope(config, defaultRepository, span).problem;
 }
 
-QString searchQuery(ListKind kind, const QJsonObject &config, const QJsonValue &defaultRepository)
+QString searchQuery(ListKind kind, const QJsonObject &config, const QJsonValue &defaultRepository, ListSpan span)
 {
-    const ListScope scope = readScope(config, defaultRepository);
+    const ListScope scope = readScope(config, defaultRepository, span);
     if (!scope.problem.isEmpty())
         return {};
     return queryOf(kind, scope, config);
 }
 
-QUrl listWebUrl(ListKind kind, const QUrl &webBase, const QJsonObject &config, const QJsonValue &defaultRepository)
+QUrl listWebUrl(ListKind kind, const QUrl &webBase, const QJsonObject &config, const QJsonValue &defaultRepository,
+                ListSpan span)
 {
-    const ListScope scope = readScope(config, defaultRepository);
+    const ListScope scope = readScope(config, defaultRepository, span);
     if (!scope.problem.isEmpty() || webBase.isEmpty())
         return {};
 
@@ -233,8 +311,11 @@ QUrl listWebUrl(ListKind kind, const QUrl &webBase, const QJsonObject &config, c
     return url;
 }
 
-QUrl runListWebUrl(const QUrl &webBase, const QJsonObject &config, const QJsonValue &defaultRepository)
+QUrl runListWebUrl(const QUrl &webBase, const QJsonObject &config, const QJsonValue &defaultRepository,
+                   ListSpan span)
 {
+    if (span == ListSpan::Repositories)
+        return {};
     const QString repository = repositoryOf(config, defaultRepository);
     if (repository.isEmpty() || webBase.isEmpty())
         return {};
@@ -245,7 +326,8 @@ QUrl runListWebUrl(const QUrl &webBase, const QJsonObject &config, const QJsonVa
     return webPageUrl(webBase, path);
 }
 
-QString listDescription(ListKind kind, const QJsonObject &config, const QJsonValue &defaultRepository)
+QString listDescription(ListKind kind, const QJsonObject &config, const QJsonValue &defaultRepository,
+                        ListSpan span)
 {
     const QString preset = effectivePreset(kind, config);
     QStringList parts;
@@ -258,7 +340,7 @@ QString listDescription(ListKind kind, const QJsonObject &config, const QJsonVal
     else
         parts << QCoreApplication::translate("github", "Assigned to me");
 
-    const ListScope scope = readScope(config, defaultRepository);
+    const ListScope scope = readScope(config, defaultRepository, span);
     if (scope.problem.isEmpty()) {
         switch (scope.where) {
         case ListScope::Where::Repository:
@@ -270,6 +352,9 @@ QString listDescription(ListKind kind, const QJsonObject &config, const QJsonVal
         case ListScope::Where::All:
             parts << QCoreApplication::translate("github", "all repositories");
             break;
+        case ListScope::Where::Repositories:
+            parts << scope.names.join(QStringLiteral(", "));
+            break;
         }
     }
     const QString filter = config.value(QStringLiteral("filter")).toString().trimmed();
@@ -278,7 +363,7 @@ QString listDescription(ListKind kind, const QJsonObject &config, const QJsonVal
     return parts.join(QStringLiteral(" · "));
 }
 
-QString runListDescription(const QJsonObject &config, const QJsonValue &defaultRepository)
+QString runListDescription(const QJsonObject &config, const QJsonValue &defaultRepository, ListSpan span)
 {
     const QString source = config.value(QStringLiteral("source")).toString();
     QStringList parts;
@@ -293,6 +378,12 @@ QString runListDescription(const QJsonObject &config, const QJsonValue &defaultR
     } else {
         parts << QCoreApplication::translate("github", "All runs");
     }
+    if (span == ListSpan::Repositories) {
+        const QStringList repositories = configuredRepositories(config);
+        if (!repositories.isEmpty())
+            parts << repositories.join(QStringLiteral(", "));
+        return parts.join(QStringLiteral(" · "));
+    }
     const QString workflow = configuredWorkflow(config);
     if (!workflow.isEmpty())
         parts << workflow;
@@ -304,12 +395,17 @@ QString runListDescription(const QJsonObject &config, const QJsonValue &defaultR
 
 void fetchPullRequestListStatus(StatusJob &job)
 {
-    fetchSearchList(job, ListKind::PullRequests);
+    fetchSearchList(job, ListKind::PullRequests, ListSpan::Scope);
 }
 
 void fetchIssueListStatus(StatusJob &job)
 {
-    fetchSearchList(job, ListKind::Issues);
+    fetchSearchList(job, ListKind::Issues, ListSpan::Scope);
+}
+
+void fetchPullRequestMultiListStatus(StatusJob &job)
+{
+    fetchSearchList(job, ListKind::PullRequests, ListSpan::Repositories);
 }
 
 void fetchRunListStatus(StatusJob &job)
@@ -385,6 +481,94 @@ void fetchRunListStatus(StatusJob &job)
         });
     } else {
         job.finish(incompleteList(QCoreApplication::translate("github", "Set the source in the item's settings.")));
+    }
+}
+
+void fetchRunMultiListStatus(StatusJob &job)
+{
+    const QJsonObject config = job.config();
+    const QStringList repositories = configuredRepositories(config);
+    if (repositories.isEmpty()) {
+        job.finish(incompleteList(severalRepositoriesProblem()));
+        return;
+    }
+    // An absent source is the first choice of the form.
+    const QString source = config.value(QStringLiteral("source")).toString();
+    if (!source.isEmpty() && source != QLatin1String("all") && source != QLatin1String("mine")
+        && source != QLatin1String("branch")) {
+        job.finish(incompleteList(QCoreApplication::translate("github", "Set the source in the item's settings.")));
+        return;
+    }
+
+    const int limit = listLimit(config);
+    StatusJob *target = &job;
+    const GitHubClient client(job.server(), job.owner());
+    auto answers = std::make_shared<RunAnswers>();
+    answers->waiting = int(repositories.size());
+    const auto fail = [=](const ItemStatus &status) {
+        answers->finished = true;
+        target->finish(status);
+    };
+    // The runs of one repository, joined to the others' when the last comes.
+    const auto runs = [=](const QString &repository, const QUrlQuery &query) {
+        client.workflowRuns(repository, {}, query, limit, [=](const ApiReply &reply) {
+            if (answers->finished)
+                return;
+            if (!reply.ok()) {
+                fail(ofRepository(repository, statusFromReply(reply)));
+                return;
+            }
+            for (const QJsonValue &row : reply.json.object().value(QStringLiteral("workflow_runs")).toArray())
+                answers->rows << row;
+            if (--answers->waiting > 0)
+                return;
+            answers->finished = true;
+            const QJsonArray rows = newestRuns(answers->rows, limit);
+            target->finish(listStatus(runSummary(int(rows.size()), limit), rows));
+        });
+    };
+
+    if (source == QLatin1String("mine")) {
+        client.currentUser([=](const ApiReply &user) {
+            if (!user.ok()) {
+                fail(statusFromReply(user));
+                return;
+            }
+            const QUrlQuery query =
+                queryWith(QStringLiteral("actor"), user.json.object().value(QStringLiteral("login")).toString());
+            for (const QString &repository : repositories)
+                runs(repository, query);
+        });
+    } else if (source == QLatin1String("branch")) {
+        const QString branch = configuredBranch(config);
+        for (const QString &repository : repositories) {
+            if (!branch.isEmpty()) {
+                runs(repository, queryWith(QStringLiteral("branch"), branch));
+                continue;
+            }
+            // Each repository's own default branch.
+            client.repository(repository, [=](const ApiReply &reply) {
+                if (answers->finished)
+                    return;
+                if (!reply.ok()) {
+                    fail(ofRepository(repository, statusFromReply(reply)));
+                    return;
+                }
+                const QString defaultBranch = reply.json.object().value(QStringLiteral("default_branch")).toString();
+                if (defaultBranch.isEmpty()) {
+                    ItemStatus status;
+                    status.state = ItemStatus::State::Error;
+                    status.message =
+                        QCoreApplication::translate("github", "The repository's default branch could not be read.");
+                    fail(ofRepository(repository, status));
+                    return;
+                }
+                runs(repository, queryWith(QStringLiteral("branch"), defaultBranch));
+            });
+        }
+    } else {
+        for (const QString &repository : repositories)
+            runs(repository, {});
     }
 }
 

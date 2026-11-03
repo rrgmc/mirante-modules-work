@@ -6,6 +6,16 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Added
+
+- New list types over several repositories or projects: `github.pr.multilist`, `github.run.multilist`, `gitlab.mr.multilist` and `gitlab.pipeline.multilist`. Each has a list of repositories or projects in place of the scope, and leaves out the fields that fit one repository only, such as a pull request number. GitHub's pull requests come from one search; the others ask each repository or project and sort the rows by date. Their tables show each row's repository or project, with a filter on it. See [several repositories](github/README.md#several-repositories) and [several projects](gitlab/README.md#several-projects).
+- A list's filters start with values from the item's settings: `statusFilter`, `workflowFilter`, `repositoryFilter` and `projectFilter`. See [filters at the start](github/README.md#filters-at-the-start).
+
+### Changed
+
+- The list layouts' interface: `ListModel` has `spansRepositories()` (GitHub) or `spansProjects()` (GitLab) and `filterDefault()`; `RunListModel::Run` has `repository` and `PipelineListModel::Pipeline` has `project`; the models' constructors take a `ListSpan`. An app's own list layout keeps building, and shows the new types' rows without their repository or project until it reads them.
+- The default run, pipeline, pull request and merge request list layouts have a Repository or Project column, hidden for a list of one repository or project. The modules need the core's `ItemListView::setFilterDefault()`.
+
 ## [0.9.0] - 2026-11-03
 
 Apps can replace the layout of every native view of the `github`, `gitlab` and `jira` modules at build time: the summaries and the lists. The default layouts draw the views as before.

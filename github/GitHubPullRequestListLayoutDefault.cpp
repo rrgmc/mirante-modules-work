@@ -1,6 +1,8 @@
 // The default of the extension point "pullrequestlistlayout": the core's table,
-// with the columns Ref, Title, Author, Checks, Reviews, Updated and Links. It is
-// compiled only when the app names no extension for "pullrequestlistlayout".
+// with the columns Ref, Title, Repository, Author, Checks, Reviews, Updated and
+// Links. Repository, and a filter on it, show only in a list over several
+// repositories. It is compiled only when the app names no extension for
+// "pullrequestlistlayout".
 // See README.md#list-layouts.
 #include "GitHubListSupport.h"
 #include "GitHubPullRequestListLayout.h"
@@ -13,7 +15,16 @@ namespace mirante::modules::github {
 
 namespace {
 
-enum Column { RefColumn, TitleColumn, AuthorColumn, ChecksColumn, ReviewsColumn, UpdatedColumn, LinksColumn };
+enum Column {
+    RefColumn,
+    TitleColumn,
+    RepositoryColumn,
+    AuthorColumn,
+    ChecksColumn,
+    ReviewsColumn,
+    UpdatedColumn,
+    LinksColumn
+};
 
 // Such as "2 approved" or "changes requested". Sorted by the approvals, with
 // changes requested below none, and a row without an answer last.
@@ -42,6 +53,7 @@ public:
     {
         setColumns({{QCoreApplication::translate("github", "Ref"), 1},
                     {QCoreApplication::translate("github", "Title"), 0, true},
+                    {QCoreApplication::translate("github", "Repository"), 6},
                     {QCoreApplication::translate("github", "Author"), 5},
                     {QCoreApplication::translate("github", "Checks"), 2},
                     {QCoreApplication::translate("github", "Reviews"), 4},
@@ -50,6 +62,11 @@ public:
                    UpdatedColumn);
         setColumnVisible(ChecksColumn, model.isColumnShown(QStringLiteral("checks")));
         setColumnVisible(ReviewsColumn, model.isColumnShown(QStringLiteral("reviews")));
+        setColumnVisible(RepositoryColumn, model.spansRepositories());
+        if (model.spansRepositories()) {
+            addFilter(RepositoryColumn, QCoreApplication::translate("github", "Repository"));
+            setFilterDefault(RepositoryColumn, model.filterDefault(QStringLiteral("repository")));
+        }
         start();
     }
 
@@ -59,6 +76,7 @@ protected:
         const PullRequestListModel::PullRequest pullRequest = m_model.pullRequest(key);
         return {{pullRequest.ref, pullRequest.refSortKey, {}},
                 {pullRequest.title, {}, {}},
+                textCell(pullRequest.repository),
                 textCell(pullRequest.author),
                 pillCell(pullRequest.checks),
                 reviewsCell(pullRequest.reviews),

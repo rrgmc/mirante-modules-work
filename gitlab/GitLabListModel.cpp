@@ -15,8 +15,10 @@
 
 namespace mirante::modules::gitlab {
 
-ListModel::ListModel(ItemContext &context, const QString &emptyText, const QUrl &page, const QString &description)
+ListModel::ListModel(ItemContext &context, const QString &emptyText, const QUrl &page, const QString &description,
+                     ListSpan span)
     : m_context(&context)
+    , m_span(span)
     , m_emptyText(emptyText)
     , m_pageAddress(page.scheme() == QLatin1String("https") || page.scheme() == QLatin1String("http") ? page : QUrl())
     , m_description(description)
@@ -34,6 +36,11 @@ QJsonObject ListModel::config() const
 int ListModel::pageSize() const
 {
     return listPageSize(config());
+}
+
+QStringList ListModel::filterDefault(const QString &column) const
+{
+    return gitlab::filterDefault(config(), column);
 }
 
 bool ListModel::isColumnShown(const QString &column) const

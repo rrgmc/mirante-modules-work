@@ -50,9 +50,9 @@ using namespace listtest;
 
 namespace {
 
-enum PrColumn { PrRef, PrTitle, PrAuthor, PrChecks, PrReviews, PrUpdated, PrLinks };
+enum PrColumn { PrRef, PrTitle, PrRepository, PrAuthor, PrChecks, PrReviews, PrUpdated, PrLinks };
 enum IssueColumn { IssueRef, IssueTitle, IssueAssignees, IssueLabels, IssueUpdated, IssueLinks };
-enum RunColumn { RunNumber, RunWorkflow, RunStatus, RunBranch, RunActor, RunStarted, RunLinks };
+enum RunColumn { RunNumber, RunRepository, RunWorkflow, RunStatus, RunBranch, RunActor, RunStarted, RunLinks };
 
 using View = std::unique_ptr<QWidget>;
 
@@ -254,6 +254,41 @@ private slots:
         QCOMPARE(cellText(view, 2, PrAuthor), QStringLiteral("dependabot[bot]"));
     }
 
+    // A list over several repositories shows each row's repository, with a
+    // filter on it that starts with the item's values.
+    void pullRequestsOfSeveralRepositories()
+    {
+        FakeContext context;
+        context.itemConfig = QJsonObject{
+            {QStringLiteral("repositories"), QJsonArray{QStringLiteral("acme/backend"), QStringLiteral("acme/website")}},
+            {QStringLiteral("repositoryFilter"), QJsonArray{QStringLiteral("acme/website")}}};
+        context.source.status = pullRequests();
+        View view(createPullRequestMultiListView(context, nullptr));
+        // Wide enough for every column.
+        view->resize(1800, 700);
+        view->show();
+        QCoreApplication::processEvents();
+
+        QVERIFY(!table(view)->isColumnHidden(PrRepository));
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PrRepository)));
+        QVERIFY(filter);
+        QCOMPARE(rowCount(view), 1);
+        QCOMPARE(cellText(view, 0, PrRepository), QStringLiteral("acme/website"));
+        filter->setCurrentIndex(0);
+        QCOMPARE(rowCount(view), 3);
+        QCOMPARE(list(view)->webLink().path(), QStringLiteral("/pulls"));
+    }
+
+    void oneRepositoryHasNoRepositoryColumn()
+    {
+        FakeContext context;
+        context.source.status = pullRequests();
+        View view(createPullRequestListView(context, nullptr));
+        show(view);
+        QVERIFY(table(view)->isColumnHidden(PrRepository));
+        QVERIFY(!view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PrRepository))));
+    }
+
     void issueRowsDrawFromData()
     {
         FakeContext context;
@@ -388,8 +423,11 @@ private slots:
 
         view->resize(1400, 400);
         QCoreApplication::processEvents();
-        for (int column = PrRef; column <= PrUpdated; ++column)
-            QVERIFY(!table(view)->isColumnHidden(column));
+        for (int column = PrRef; column <= PrUpdated; ++column) {
+            // One repository or project has no column of its own.
+            if (column != PrRepository)
+                QVERIFY(!table(view)->isColumnHidden(column));
+        }
     }
 
     // Author goes first, then Reviews, Updated, Checks and Ref.
@@ -1119,6 +1157,68 @@ private slots:
         filter->setCurrentIndex(filter->findText(QStringLiteral("CI")));
         QCOMPARE(rowCount(view), 3);
         QCOMPARE(cellText(view, 2, RunNumber), QStringLiteral("#1205"));
+    }
+
+    // The filters start with the item's values, which a row must have.
+    void runFiltersStartWithTheItemsValues()
+    {
+        FakeContext context;
+        context.itemConfig = runConfig();
+        context.itemConfig.insert(QStringLiteral("statusFilter"),
+                                  QJsonArray{QStringLiteral("Failed"), QStringLiteral("Cancelled"),
+                                             QStringLiteral("Queued")});
+        context.itemConfig.insert(QStringLiteral("workflowFilter"), QJsonArray{QStringLiteral("CI")});
+        context.source.status = runs();
+        View view(createRunListView(context, nullptr));
+        show(view);
+
+        QCOMPARE(rowCount(view), 1);
+        QCOMPARE(cellText(view, 0, RunNumber), QStringLiteral("#1205"));
+        // One repository has no column or filter of its own.
+        QVERIFY(table(view)->isColumnHidden(RunRepository));
+        QVERIFY(!view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(RunRepository))));
+
+        // The user's choice replaces them.
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(RunStatus)));
+        filter->setCurrentIndex(0);
+        QCOMPARE(rowCount(view), 3);
+    }
+
+    // A list over several repositories shows each run's repository, with a
+    // filter on it, and builds addresses and items from it.
+    void runsOfSeveralRepositories()
+    {
+        QJsonArray rows = runRows();
+        for (int index = 0; index < rows.size(); ++index) {
+            QJsonObject row = rows.at(index).toObject();
+            row.remove(QStringLiteral("html_url"));
+            row.insert(QStringLiteral("repository"),
+                       QJsonObject{{QStringLiteral("full_name"),
+                                    index % 2 ? QStringLiteral("acme/web") : QStringLiteral("acme/backend")}});
+            rows[index] = row;
+        }
+        FakeContext context;
+        context.itemConfig = QJsonObject{
+            {QStringLiteral("repositories"), QJsonArray{QStringLiteral("acme/backend"), QStringLiteral("acme/web")}},
+            {QStringLiteral("repositoryFilter"), QJsonArray{QStringLiteral("acme/web")}}};
+        context.source.status = statusOfRows(rows);
+        View view(createRunMultiListView(context, nullptr));
+        show(view);
+
+        QVERIFY(!table(view)->isColumnHidden(RunRepository));
+        QVERIFY(list(view)->webLink().isEmpty());
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(RunRepository)));
+        QVERIFY(filter);
+        QCOMPARE(filter->count(), 3);
+        QCOMPARE(rowCount(view), 2);
+        QCOMPARE(cellText(view, 0, RunRepository), QStringLiteral("acme/web"));
+        QCOMPARE(cellText(view, 0, RunNumber), QStringLiteral("#1206"));
+
+        filter->setCurrentIndex(0);
+        QCOMPARE(rowCount(view), 4);
+        QCOMPARE(cellText(view, 0, RunRepository), QStringLiteral("acme/backend"));
+        emit list(view)->rowLinkActivated(QStringLiteral("18800000003"), QStringLiteral("web"));
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kBase + QStringLiteral("/acme/web/actions/runs/18800000003"))});
     }
 
     void runAdd_data()

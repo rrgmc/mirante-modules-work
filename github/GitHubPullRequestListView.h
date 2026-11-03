@@ -10,5 +10,7 @@ class ItemContext;
 namespace mirante::modules::github {
 
 QWidget *createPullRequestListView(ItemContext &context, QWidget *parent);
+// The view of github.pr.multilist.
+QWidget *createPullRequestMultiListView(ItemContext &context, QWidget *parent);
 
 } // namespace mirante::modules::github

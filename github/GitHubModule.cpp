@@ -266,6 +266,48 @@ std::vector<Field> runFields()
     };
 }
 
+// The repositories of a list over several of them, one per line. Its forms
+// leave out what fits one repository only, such as a workflow file or a pull
+// request number. See README.md#several-repositories.
+Field repositoriesField()
+{
+    Field field = makeField(QStringLiteral("repositories"), QCoreApplication::translate("github", "Repositories"),
+                            Field::Type::TextList, true);
+    field.help = QCoreApplication::translate("github", "One per line, as owner/repo.");
+    return field;
+}
+
+// The values a view filter of a list chooses at the start, one per line, as
+// its drop-down shows them. Empty is "All". The key is <column>Filter; see
+// ListModel::filterDefault().
+Field filterDefaultField(const QString &column, const QString &label, const QString &help)
+{
+    Field field = makeField(column + QStringLiteral("Filter"), label, Field::Type::TextList);
+    field.help = help;
+    field.group = QCoreApplication::translate("github", "Filters at the start");
+    return field;
+}
+
+Field repositoryFilterField()
+{
+    return filterDefaultField(QStringLiteral("repository"), QCoreApplication::translate("github", "Repository"),
+                              QCoreApplication::translate("github", "Repositories to show, as owner/repo. Empty "
+                                                                    "shows all."));
+}
+
+// A run list's filters at the start, after the Repository one of a list over
+// several repositories.
+std::vector<Field> runFilterDefaultFields()
+{
+    return {
+        filterDefaultField(QStringLiteral("status"), QCoreApplication::translate("github", "Status"),
+                           QCoreApplication::translate("github", "Such as Failed or Running, as the Status filter "
+                                                                 "shows them. Empty shows all.")),
+        filterDefaultField(QStringLiteral("workflow"), QCoreApplication::translate("github", "Workflow"),
+                           QCoreApplication::translate("github", "Workflow names, such as CI. Empty shows all.")),
+    };
+}
+
 std::vector<Field> runListFields()
 {
     std::vector<Field> fields{
@@ -281,7 +323,39 @@ std::vector<Field> runListFields()
         linkedPullRequestField(),
         workflowField(),
     };
-    return withSections(std::move(fields), listSizeFields());
+    return withSections(withSections(std::move(fields), listSizeFields()), runFilterDefaultFields());
+}
+
+// Without a pull request, a workflow file or a scope, which fit one
+// repository only. An empty branch is each repository's default branch.
+std::vector<Field> runMultiListFields()
+{
+    std::vector<Field> fields{
+        repositoriesField(),
+        choiceField(QStringLiteral("source"), QCoreApplication::translate("github", "Show"),
+                    {QStringLiteral("all"), QStringLiteral("mine"), QStringLiteral("branch")},
+                    {QCoreApplication::translate("github", "All runs"),
+                     QCoreApplication::translate("github", "Started by me"),
+                     QCoreApplication::translate("github", "Of a branch")}),
+        branchField(),
+    };
+    fields = withSections(std::move(fields), listSizeFields());
+    fields.push_back(repositoryFilterField());
+    return withSections(std::move(fields), runFilterDefaultFields());
+}
+
+// A pull request list's fields with repositoriesField() in place of the
+// scope, the repository and the owner.
+std::vector<Field> pullRequestMultiListFields(const std::vector<Field> &listFields)
+{
+    std::vector<Field> fields{repositoriesField()};
+    for (const Field &field : listFields) {
+        if (field.key != QLatin1String("scope") && field.key != QLatin1String("repository")
+            && field.key != QLatin1String("owner"))
+            fields.push_back(field);
+    }
+    fields.push_back(repositoryFilterField());
+    return fields;
 }
 
 } // namespace
@@ -328,19 +402,28 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("github", "The web page of one pull request, on the GitHub server of the item's "
                                               "profile."),
         pullRequest, settings, &pullRequestUrl, &fetchPullRequestStatus));
-    registrar.addItemType(std::make_unique<GitHubItemType>(
-        QStringLiteral("github.pr.list"), QCoreApplication::translate("github", "GitHub PR List"),
-        QCoreApplication::translate("github", "PRs"),
-        QCoreApplication::translate("github", "A table of pull requests in a repository, an owner or everywhere, "
-                                              "such as those that wait for your review."),
+    const std::vector<Field> pullRequestList =
         withSections(listFields({QStringLiteral("createdByMe"), QStringLiteral("reviewRequested"),
                                  QStringLiteral("assignedToMe"), QStringLiteral("allOpen")},
                                 {QCoreApplication::translate("github", "Created by me"),
                                  QCoreApplication::translate("github", "Review requested from me"),
                                  QCoreApplication::translate("github", "Assigned to me"),
                                  QCoreApplication::translate("github", "All open")}),
-                     {showChecks, showReviews}),
-        settings, &fetchPullRequestListStatus, &createPullRequestListView));
+                     {showChecks, showReviews});
+    registrar.addItemType(std::make_unique<GitHubItemType>(
+        QStringLiteral("github.pr.list"), QCoreApplication::translate("github", "GitHub PR List"),
+        QCoreApplication::translate("github", "PRs"),
+        QCoreApplication::translate("github", "A table of pull requests in a repository, an owner or everywhere, "
+                                              "such as those that wait for your review."),
+        pullRequestList, settings, &fetchPullRequestListStatus, &createPullRequestListView));
+    registrar.addItemType(std::make_unique<GitHubItemType>(
+        QStringLiteral("github.pr.multilist"),
+        QCoreApplication::translate("github", "GitHub PR List (several repositories)"),
+        QCoreApplication::translate("github", "PRs"),
+        QCoreApplication::translate("github", "A table of the pull requests of the repositories you name, such as "
+                                              "those that wait for your review, with a filter on the repository."),
+        pullRequestMultiListFields(pullRequestList), settings, &fetchPullRequestMultiListStatus,
+        &createPullRequestMultiListView));
     registrar.addItemType(std::make_unique<GitHubItemType>(
         QStringLiteral("github.run"), QCoreApplication::translate("github", "GitHub Actions Run"),
         QCoreApplication::translate("github", "Run"),
@@ -354,6 +437,14 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("github", "A table of a repository's Actions runs: all of them, those you "
                                               "started, or those of a branch or a pull request."),
         runListFields(), settings, &fetchRunListStatus, &createRunListView));
+    registrar.addItemType(std::make_unique<GitHubItemType>(
+        QStringLiteral("github.run.multilist"),
+        QCoreApplication::translate("github", "GitHub Actions Run List (several repositories)"),
+        QCoreApplication::translate("github", "Runs"),
+        QCoreApplication::translate("github", "A table of the Actions runs of the repositories you name, newest "
+                                              "first: all of them, those you started, or those of a branch, with a "
+                                              "filter on the repository."),
+        runMultiListFields(), settings, &fetchRunMultiListStatus, &createRunMultiListView));
     registrar.addItemType(std::make_unique<GitHubItemType>(
         QStringLiteral("github.issue.summary"), QCoreApplication::translate("github", "GitHub Issue (summary)"),
         QCoreApplication::translate("github", "Issue"),

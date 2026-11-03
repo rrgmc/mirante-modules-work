@@ -30,13 +30,16 @@ qint64 pullRequestOfRun(const QJsonObject &run)
 
 } // namespace
 
-RunListModel::RunListModel(ItemContext &context)
+RunListModel::RunListModel(ItemContext &context, ListSpan span)
     : ListModel(context, QCoreApplication::translate("github", "No runs"),
                 runListWebUrl(webBaseOf(context.moduleSettings(kGeneralScreen)), context.config(),
-                              context.projectSetting(kProjectSettingKey)),
-                runListDescription(context.config(), context.projectSetting(kProjectSettingKey)))
-    , m_repository(repositoryOf(context.config(), context.projectSetting(kProjectSettingKey)))
-    , m_workflow(configuredWorkflow(context.config()))
+                              context.projectSetting(kProjectSettingKey), span),
+                runListDescription(context.config(), context.projectSetting(kProjectSettingKey), span), span)
+    // A list over several repositories reads each row's repository instead.
+    , m_repository(span == ListSpan::Repositories
+                       ? QString()
+                       : repositoryOf(context.config(), context.projectSetting(kProjectSettingKey)))
+    , m_workflow(span == ListSpan::Repositories ? QString() : configuredWorkflow(context.config()))
 {
 }
 
@@ -54,13 +57,16 @@ void RunListModel::read(const QJsonArray &rows, const QUrl &webBase)
     for (int index = 0; index < rows.size(); ++index) {
         const QJsonObject row = rows.at(index).toObject();
         const qint64 id = row.value(QStringLiteral("id")).toInteger();
+        const QString ofRow =
+            row.value(QStringLiteral("repository")).toObject().value(QStringLiteral("full_name")).toString();
+        const QString repository = ofRow.isEmpty() ? m_repository : ofRow;
 
         ListRow listRow;
         listRow.key = id > 0 ? QString::number(id) : QStringLiteral("row-%1").arg(index);
         listRow.data = row;
         QUrl built;
-        if (id > 0 && !m_repository.isEmpty())
-            built = webPageUrl(webBase, m_repository + QStringLiteral("/actions/runs/") + QString::number(id));
+        if (id > 0 && !repository.isEmpty())
+            built = webPageUrl(webBase, repository + QStringLiteral("/actions/runs/") + QString::number(id));
         const QUrl address = webAddress(row, built);
         listRow.address = isWebAddress(address) ? address : QUrl();
 
@@ -69,14 +75,14 @@ void RunListModel::read(const QJsonArray &rows, const QUrl &webBase)
         AddTarget add;
         const qint64 number = pullRequestOfRun(row);
         const QString branch = row.value(QStringLiteral("head_branch")).toString();
-        if (!m_repository.isEmpty() && (number > 0 || !branch.isEmpty())) {
-            QJsonObject config{{QStringLiteral("repository"), m_repository}};
+        if (!repository.isEmpty() && (number > 0 || !branch.isEmpty())) {
+            QJsonObject config{{QStringLiteral("repository"), repository}};
             if (number > 0) {
-                add.name = m_repository + QLatin1Char('#') + QString::number(number) + QStringLiteral(" CI");
+                add.name = repository + QLatin1Char('#') + QString::number(number) + QStringLiteral(" CI");
                 config.insert(QStringLiteral("branchSource"), QStringLiteral("pullRequest"));
                 config.insert(QStringLiteral("number"), number);
             } else {
-                add.name = m_repository + QLatin1Char(' ') + branch + QStringLiteral(" CI");
+                add.name = repository + QLatin1Char(' ') + branch + QStringLiteral(" CI");
                 config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
                 config.insert(QStringLiteral("branch"), branch);
             }
@@ -90,6 +96,7 @@ void RunListModel::read(const QJsonArray &rows, const QUrl &webBase)
         Run run;
         static_cast<ListRow &>(run) = this->row(listRow.key);
         run.id = id;
+        run.repository = repository;
         run.number = row.value(QStringLiteral("run_number")).toInteger();
         run.workflow = row.value(QStringLiteral("name")).toString();
         const QString status = row.value(QStringLiteral("status")).toString();
@@ -104,13 +111,27 @@ void RunListModel::read(const QJsonArray &rows, const QUrl &webBase)
     }
 }
 
-QWidget *createRunListView(ItemContext &context, QWidget *parent)
+namespace {
+
+QWidget *createView(ItemContext &context, QWidget *parent, ListSpan span)
 {
-    auto *model = new RunListModel(context);
+    auto *model = new RunListModel(context, span);
     model->follow(context.status());
     QWidget *view = makeRunListLayout(*model, parent);
     model->attach(view);
     return view;
+}
+
+} // namespace
+
+QWidget *createRunListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Scope);
+}
+
+QWidget *createRunMultiListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Repositories);
 }
 
 } // namespace mirante::modules::github

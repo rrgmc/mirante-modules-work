@@ -1,6 +1,8 @@
 // The default of the extension point "runlistlayout": the core's table, with
-// the columns Run, Workflow, Status, Branch, Actor, Started and Links, and
-// filters on Status and Workflow. It is compiled only when the app names no
+// the columns Run, Repository, Workflow, Status, Branch, Actor, Started and
+// Links, and filters on Status and Workflow, which start with the item's
+// statusFilter and workflowFilter. Repository, and a filter on it, show only in
+// a list over several repositories. It is compiled only when the app names no
 // extension for "runlistlayout". See README.md#list-layouts.
 #include "GitHubListSupport.h"
 #include "GitHubRunListLayout.h"
@@ -13,7 +15,16 @@ namespace mirante::modules::github {
 
 namespace {
 
-enum Column { RunColumn, WorkflowColumn, StatusColumn, BranchColumn, ActorColumn, StartedColumn, LinksColumn };
+enum Column {
+    RunColumn,
+    RepositoryColumn,
+    WorkflowColumn,
+    StatusColumn,
+    BranchColumn,
+    ActorColumn,
+    StartedColumn,
+    LinksColumn
+};
 
 class RunListLayout : public DefaultListLayout
 {
@@ -23,6 +34,7 @@ public:
         , m_model(model)
     {
         setColumns({{QCoreApplication::translate("github", "Run"), 2},
+                    {QCoreApplication::translate("github", "Repository"), 6},
                     {QCoreApplication::translate("github", "Workflow"), 3},
                     {QCoreApplication::translate("github", "Status"), 1},
                     {QCoreApplication::translate("github", "Branch"), 0, true},
@@ -30,8 +42,15 @@ public:
                     {QCoreApplication::translate("github", "Started"), 4},
                     {QCoreApplication::translate("github", "Links"), 0}},
                    RunColumn);
+        setColumnVisible(RepositoryColumn, model.spansRepositories());
+        if (model.spansRepositories()) {
+            addFilter(RepositoryColumn, QCoreApplication::translate("github", "Repository"));
+            setFilterDefault(RepositoryColumn, model.filterDefault(QStringLiteral("repository")));
+        }
         addFilter(StatusColumn, QCoreApplication::translate("github", "Status"));
+        setFilterDefault(StatusColumn, model.filterDefault(QStringLiteral("status")));
         addFilter(WorkflowColumn, QCoreApplication::translate("github", "Workflow"));
+        setFilterDefault(WorkflowColumn, model.filterDefault(QStringLiteral("workflow")));
         start();
     }
 
@@ -43,6 +62,7 @@ protected:
         // sorts the runs by age.
         const QJsonValue started = run.data.value(QStringLiteral("run_started_at"));
         return {{run.number > 0 ? QStringLiteral("#%1").arg(run.number) : dashCell().text, run.id, {}},
+                textCell(run.repository),
                 textCell(run.workflow),
                 pillCell(run.state),
                 textCell(run.branch),

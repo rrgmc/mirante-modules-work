@@ -10,5 +10,7 @@ class ItemContext;
 namespace mirante::modules::gitlab {
 
 QWidget *createPipelineListView(ItemContext &context, QWidget *parent);
+// The view of gitlab.pipeline.multilist.
+QWidget *createPipelineMultiListView(ItemContext &context, QWidget *parent);
 
 } // namespace mirante::modules::gitlab

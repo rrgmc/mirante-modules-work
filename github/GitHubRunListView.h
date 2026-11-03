@@ -10,5 +10,7 @@ class ItemContext;
 namespace mirante::modules::github {
 
 QWidget *createRunListView(ItemContext &context, QWidget *parent);
+// The view of github.run.multilist.
+QWidget *createRunMultiListView(ItemContext &context, QWidget *parent);
 
 } // namespace mirante::modules::github

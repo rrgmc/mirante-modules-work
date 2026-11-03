@@ -28,11 +28,13 @@ Pill pipelineOf(const QJsonObject &mergeRequest)
 
 } // namespace
 
-MergeRequestListModel::MergeRequestListModel(ItemContext &context)
+MergeRequestListModel::MergeRequestListModel(ItemContext &context, ListSpan span)
     : ListModel(context, QCoreApplication::translate("gitlab", "No merge requests"),
                 listWebUrl(ListKind::MergeRequests, baseUrlOf(context.moduleSettings(kGeneralScreen)),
-                           context.config(), context.projectSetting(kProjectSettingKey)),
-                listDescription(ListKind::MergeRequests, context.config(), context.projectSetting(kProjectSettingKey)))
+                           context.config(), context.projectSetting(kProjectSettingKey), span),
+                listDescription(ListKind::MergeRequests, context.config(), context.projectSetting(kProjectSettingKey),
+                                span),
+                span)
 {
 }
 
@@ -186,13 +188,27 @@ void MergeRequestListModel::forgetOthers(const QStringList &asked)
         answer(key);
 }
 
-QWidget *createMergeRequestListView(ItemContext &context, QWidget *parent)
+namespace {
+
+QWidget *createView(ItemContext &context, QWidget *parent, ListSpan span)
 {
-    auto *model = new MergeRequestListModel(context);
+    auto *model = new MergeRequestListModel(context, span);
     model->follow(context.status());
     QWidget *view = makeMergeRequestListLayout(*model, parent);
     model->attach(view);
     return view;
+}
+
+} // namespace
+
+QWidget *createMergeRequestListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Scope);
+}
+
+QWidget *createMergeRequestMultiListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Projects);
 }
 
 } // namespace mirante::modules::gitlab

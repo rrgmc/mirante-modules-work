@@ -1,7 +1,8 @@
 // The default of the extension point "pipelinelistlayout": the core's table,
-// with the columns Id, Status, Ref, Author, Started and Links, and a filter on
-// Status. It is compiled only when the app names no extension for
-// "pipelinelistlayout". See README.md#list-layouts.
+// with the columns Id, Project, Status, Ref, Author, Started and Links, and a
+// filter on Status, which starts with the item's statusFilter. Project, and a
+// filter on it, show only in a list over several projects. It is compiled only
+// when the app names no extension for "pipelinelistlayout". See README.md#list-layouts.
 #include "GitLabListSupport.h"
 #include "GitLabPipelineListLayout.h"
 
@@ -13,7 +14,7 @@ namespace mirante::modules::gitlab {
 
 namespace {
 
-enum Column { IdColumn, StatusColumn, RefColumn, AuthorColumn, StartedColumn, LinksColumn };
+enum Column { IdColumn, ProjectColumn, StatusColumn, RefColumn, AuthorColumn, StartedColumn, LinksColumn };
 
 class PipelineListLayout : public DefaultListLayout
 {
@@ -23,13 +24,20 @@ public:
         , m_model(model)
     {
         setColumns({{QCoreApplication::translate("gitlab", "Id"), 2},
+                    {QCoreApplication::translate("gitlab", "Project"), 5},
                     {QCoreApplication::translate("gitlab", "Status"), 1},
                     {QCoreApplication::translate("gitlab", "Ref"), 0, true},
                     {QCoreApplication::translate("gitlab", "Author"), 4},
                     {QCoreApplication::translate("gitlab", "Started"), 3},
                     {QCoreApplication::translate("gitlab", "Links"), 0}},
                    IdColumn);
+        setColumnVisible(ProjectColumn, model.spansProjects());
+        if (model.spansProjects()) {
+            addFilter(ProjectColumn, QCoreApplication::translate("gitlab", "Project"));
+            setFilterDefault(ProjectColumn, model.filterDefault(QStringLiteral("project")));
+        }
         addFilter(StatusColumn, QCoreApplication::translate("gitlab", "Status"));
+        setFilterDefault(StatusColumn, model.filterDefault(QStringLiteral("status")));
         start();
     }
 
@@ -39,6 +47,7 @@ protected:
         const PipelineListModel::Pipeline pipeline = m_model.pipeline(key);
         const QJsonValue started = pipeline.data.value(QStringLiteral("started_at"));
         return {{pipeline.data.value(QStringLiteral("id")).toVariant().toString(), pipeline.id, {}},
+                textCell(pipeline.project),
                 pillCell(pipeline.state),
                 {pipeline.ref, {}, {}},
                 textCell(pipeline.author),

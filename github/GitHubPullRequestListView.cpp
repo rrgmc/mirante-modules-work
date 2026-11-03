@@ -49,11 +49,13 @@ struct ChecksAnswers
 
 } // namespace
 
-PullRequestListModel::PullRequestListModel(ItemContext &context)
+PullRequestListModel::PullRequestListModel(ItemContext &context, ListSpan span)
     : ListModel(context, QCoreApplication::translate("github", "No pull requests"),
                 listWebUrl(ListKind::PullRequests, webBaseOf(context.moduleSettings(kGeneralScreen)), context.config(),
-                           context.projectSetting(kProjectSettingKey)),
-                listDescription(ListKind::PullRequests, context.config(), context.projectSetting(kProjectSettingKey)))
+                           context.projectSetting(kProjectSettingKey), span),
+                listDescription(ListKind::PullRequests, context.config(), context.projectSetting(kProjectSettingKey),
+                                span),
+                span)
 {
 }
 
@@ -242,13 +244,27 @@ void PullRequestListModel::forgetOthers(const QStringList &asked)
         answer(key);
 }
 
-QWidget *createPullRequestListView(ItemContext &context, QWidget *parent)
+namespace {
+
+QWidget *createView(ItemContext &context, QWidget *parent, ListSpan span)
 {
-    auto *model = new PullRequestListModel(context);
+    auto *model = new PullRequestListModel(context, span);
     model->follow(context.status());
     QWidget *view = makePullRequestListLayout(*model, parent);
     model->attach(view);
     return view;
+}
+
+} // namespace
+
+QWidget *createPullRequestListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Scope);
+}
+
+QWidget *createPullRequestMultiListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Repositories);
 }
 
 } // namespace mirante::modules::github
