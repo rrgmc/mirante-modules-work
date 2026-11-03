@@ -129,25 +129,45 @@ QLabel *plainWord(const QString &text)
     return label;
 }
 
-StatusPill *statePill(const QString &state)
+Pill statusPillOf(const QString &status)
+{
+    return {statusText(status), statusRole(status)};
+}
+
+Pill statePillOf(const QString &state)
 {
     if (state == QLatin1String("opened"))
-        return new StatusPill(QCoreApplication::translate("gitlab", "Open"), StatusRole::Good);
+        return {QCoreApplication::translate("gitlab", "Open"), StatusRole::Good};
     if (state == QLatin1String("merged"))
-        return new StatusPill(QCoreApplication::translate("gitlab", "Merged"), StatusRole::Good);
+        return {QCoreApplication::translate("gitlab", "Merged"), StatusRole::Good};
     if (state == QLatin1String("closed"))
-        return new StatusPill(QCoreApplication::translate("gitlab", "Closed"), StatusRole::Neutral);
+        return {QCoreApplication::translate("gitlab", "Closed"), StatusRole::Neutral};
     if (state == QLatin1String("locked"))
-        return new StatusPill(QCoreApplication::translate("gitlab", "Locked"), StatusRole::Neutral);
-    return new StatusPill(statusText(state), StatusRole::Neutral);
+        return {QCoreApplication::translate("gitlab", "Locked"), StatusRole::Neutral};
+    return {statusText(state), StatusRole::Neutral};
+}
+
+Pill jobPillOf(const QJsonObject &job)
+{
+    const QString status = job.value(QStringLiteral("status")).toString();
+    if (status == QLatin1String("failed") && job.value(QStringLiteral("allow_failure")).toBool())
+        return {QCoreApplication::translate("gitlab", "Failed, allowed"), StatusRole::Waiting};
+    return statusPillOf(status);
+}
+
+StatusPill *pillWidget(const Pill &pill)
+{
+    return new StatusPill(pill.text, pill.role);
+}
+
+StatusPill *statePill(const QString &state)
+{
+    return pillWidget(statePillOf(state));
 }
 
 StatusPill *jobPill(const QJsonObject &job)
 {
-    const QString status = job.value(QStringLiteral("status")).toString();
-    if (status == QLatin1String("failed") && job.value(QStringLiteral("allow_failure")).toBool())
-        return new StatusPill(QCoreApplication::translate("gitlab", "Failed, allowed"), StatusRole::Waiting);
-    return new StatusPill(statusText(status), statusRole(status));
+    return pillWidget(jobPillOf(job));
 }
 
 QPushButton *linkButton(const QString &text, const QString &name)
@@ -186,116 +206,34 @@ QWidget *labelChips(const QJsonArray &labels)
     return row;
 }
 
-GitLabSummary::GitLabSummary(ItemContext &context, QWidget *parent)
-    : widgets::SummaryView(parent)
-    , m_context(&context)
+QString defaultLayoutName(const QString &view)
 {
+    return QStringLiteral("gitlab-%1-default-layout").arg(view);
 }
 
-void GitLabSummary::follow(ItemStatusSource *source)
+void followActions(widgets::SummaryView *view, SummaryModel &model)
 {
-    if (!source) {
-        showStatus({});
-        return;
-    }
-    m_refresh = [source] { source->refresh(); };
-    showStatus(source->current());
-    source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
-}
-
-void GitLabSummary::showStatus(const ItemStatus &status)
-{
-    // Old data stays through an error. Problems show in the cell header. A
-    // message without an error, such as a main folder that left its branch,
-    // says the item has nothing to show now, so it replaces the old data.
-    if (status.data.isEmpty()) {
-        if (!m_drawn || (status.state == ItemStatus::State::None && !status.message.isEmpty()))
-            setMessage(status.message.isEmpty() ? QCoreApplication::translate("gitlab", "Loading…") : status.message);
-        return;
-    }
-    m_drawn = true;
-    setMessage({});
-    draw(status);
-}
-
-QJsonObject GitLabSummary::config() const
-{
-    return m_context->config();
-}
-
-QString GitLabSummary::project() const
-{
-    return projectPath(config(), defaultProject());
-}
-
-ApiClient *GitLabSummary::server() const
-{
-    return m_context->server();
-}
-
-QUrl GitLabSummary::baseUrl() const
-{
-    return baseUrlOf(m_context->moduleSettings(kGeneralScreen));
-}
-
-QJsonValue GitLabSummary::defaultProject() const
-{
-    return m_context->projectSetting(kProjectSettingKey);
-}
-
-void GitLabSummary::applyField(const QString &section, const QString &field)
-{
-    setSectionVisible(section, config().value(field).toBool(true));
-}
-
-void GitLabSummary::addOpenPage()
-{
-    actions()->addLinkAction(kOpenPage, QCoreApplication::translate("gitlab", "Open page"),
-                             QCoreApplication::translate("gitlab", "Page"), [this] { openPage(); });
-}
-
-void GitLabSummary::setPageAddress(const QUrl &url)
-{
-    m_pageAddress = isWebAddress(url) ? url : QUrl();
-    actions()->setWebLink(m_pageAddress);
-    actions()->setActionVisible(kOpenPage, !m_pageAddress.isEmpty());
-}
-
-void GitLabSummary::openPage()
-{
-    if (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier)
-        QDesktopServices::openUrl(m_pageAddress);
-    else
-        m_context->showPage(m_pageAddress);
-}
-
-void GitLabSummary::refreshStatus()
-{
-    if (m_refresh)
-        m_refresh();
-}
-
-void GitLabSummary::runAction(const QString &id, const Request &request)
-{
-    actions()->setBusy(id, true);
-    run(request, [this, id] { actions()->setBusy(id, false); });
-}
-
-void GitLabSummary::run(const Request &request, const std::function<void()> &finished)
-{
-    ApiClient *server = m_context->server();
-    if (!server) {
-        finished();
-        actions()->showError(QCoreApplication::translate("gitlab", "This item has no server."));
-        return;
-    }
-    request(GitLabClient(*server, this), [this, finished](const ApiReply &reply) {
-        finished();
-        if (!reply.ok())
-            actions()->showError(actionError(reply));
-        else
-            refreshStatus();
+    QObject::connect(&model, &SummaryModel::busyChanged, view, [view, &model](const QString &action) {
+        view->actions()->setBusy(action, model.isBusy(action));
     });
+    QObject::connect(&model, &SummaryModel::errorChanged, view, [view, &model] {
+        if (model.error().isEmpty())
+            view->actions()->clearError();
+        else
+            view->actions()->showError(model.error());
+    });
+}
+
+void addOpenPage(widgets::SummaryView *view, SummaryModel &model)
+{
+    view->actions()->addLinkAction(kOpenPage, QCoreApplication::translate("gitlab", "Open page"),
+                                   QCoreApplication::translate("gitlab", "Page"), [&model] { model.openPage(); });
+}
+
+void showPageAddress(widgets::SummaryView *view, const SummaryModel &model)
+{
+    view->actions()->setWebLink(model.pageAddress());
+    view->actions()->setActionVisible(kOpenPage, !model.pageAddress().isEmpty());
 }
 
 } // namespace mirante::modules::gitlab
