@@ -26,6 +26,10 @@ List this repository in the app's `mirante.json`, with the folders you want:
 
 The GitHub, GitLab and Jira modules keep a token for their server in the keychain. Use the narrowest token that works. See [what people who build with a module should know](https://github.com/rrgmc/mirante-core/blob/master/docs/writing-a-module.md#what-people-who-build-with-your-module-should-know).
 
+## Author
+
+Rangel Reale <realerangel@gmail.com>
+
 ## License
 
 These modules are released under the [MIT License](LICENSE).

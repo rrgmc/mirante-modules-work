@@ -17,4 +17,4 @@ jobs:
   tag:
     permissions:
       contents: write
-    uses: rrgmc/mirante-core/.github/workflows/tag-release.yml@a71d4f64adcd16154e5ff9590970f2624defdf95
+    uses: rrgmc/mirante-core/.github/workflows/tag-release.yml@7c929c2b1f8e47e23d04e0b2a6d4aad45a788371
