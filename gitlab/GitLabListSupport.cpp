@@ -1,27 +1,21 @@
 #include "GitLabListSupport.h"
 
-#include "GitLabSettings.h"
 #include "GitLabUrls.h"
 #include "GitLabViewSupport.h"
 
-#include <mirante/ItemContext.h>
 #include <mirante/widgets/CompactDate.h>
 
 #include <QAction>
-#include <QClipboard>
 #include <QCoreApplication>
 #include <QDateTime>
-#include <QDesktopServices>
-#include <QGuiApplication>
-#include <QJsonArray>
 #include <QLabel>
 #include <QLayout>
 #include <QMenu>
-#include <QShowEvent>
+#include <QScopedValueRollback>
 
 using mirante::widgets::ListCell;
 using mirante::widgets::ListLink;
-using mirante::widgets::ListRow;
+
 
 namespace mirante::modules::gitlab {
 
@@ -30,6 +24,17 @@ namespace {
 const QString kWebLink = QStringLiteral("web");
 const QString kOpenLink = QStringLiteral("open");
 const QString kAddLink = QStringLiteral("add");
+
+bool sameCell(const ListCell &a, const ListCell &b)
+{
+    if (a.text != b.text || a.sortKey != b.sortKey || a.role != b.role || a.links.size() != b.links.size())
+        return false;
+    for (qsizetype i = 0; i < a.links.size(); ++i) {
+        if (a.links.at(i).id != b.links.at(i).id || a.links.at(i).label != b.links.at(i).label)
+            return false;
+    }
+    return true;
+}
 
 } // namespace
 
@@ -43,6 +48,30 @@ QString rowProject(const QJsonObject &row, QChar separator, const QUrl &baseUrl)
     const QUrl address(row.value(QStringLiteral("web_url")).toString());
     const std::optional<PageAddress> page = readPageAddress(address, {baseUrl});
     return page ? page->project : QString();
+}
+
+NumberedRow readNumberedRow(const QJsonObject &row, int index, const QUrl &baseUrl, ListKind kind, QChar separator,
+                            const QString &summaryType)
+{
+    NumberedRow read;
+    read.project = rowProject(row, separator, baseUrl);
+    read.iid = row.value(QStringLiteral("iid")).toInteger();
+    const bool complete = !read.project.isEmpty() && read.iid > 0;
+    const QString ref = read.project + separator + QString::number(read.iid);
+    read.row.key = complete ? ref : QStringLiteral("row-%1").arg(index);
+    read.row.data = row;
+    read.refSortKey = read.project + separator + QStringLiteral("%1").arg(read.iid, 12, 10, QLatin1Char('0'));
+    read.ref = read.project.section(QLatin1Char('/'), -1) + separator + QString::number(read.iid);
+
+    const QJsonObject config{{QStringLiteral("project"), read.project}, {QStringLiteral("iid"), read.iid}};
+    const QUrl built =
+        kind == ListKind::MergeRequests ? mergeRequestUrl(baseUrl, config, {}) : issueUrl(baseUrl, config, {});
+    const QUrl address = webAddress(row, built);
+    read.row.address = isWebAddress(address) ? address : QUrl();
+
+    if (complete)
+        read.add = {summaryType, ref, config};
+    return read;
 }
 
 ListCell dashCell()
@@ -59,100 +88,107 @@ ListCell dateCell(const QJsonValue &value)
     return {widgets::compactDate(date), date, {}};
 }
 
-GitLabList::GitLabList(ItemContext &context, const QString &emptyText, const QUrl &page, QWidget *parent)
-    : widgets::ItemListView(parent)
-    , m_context(&context)
-    , m_emptyLine(plainLine(emptyText))
+ListCell textCell(const QString &text)
 {
+    return text.isEmpty() ? dashCell() : ListCell{text, {}, {}};
+}
+
+ListCell pillCell(const Pill &pill)
+{
+    return pill.text.isEmpty() ? dashCell() : ListCell{pill.text, {}, pill.role};
+}
+
+DefaultListLayout::DefaultListLayout(ListModel &model, const QString &view, QWidget *parent)
+    : widgets::ItemListView(parent)
+    , m_model(model)
+    , m_emptyLine(plainLine(model.emptyText()))
+{
+    setObjectName(defaultLayoutName(view));
     // setMessage() shows instead of the table, and this shows with it.
     m_emptyLine->setObjectName(QStringLiteral("emptyLine"));
     m_emptyLine->setAlignment(Qt::AlignCenter);
     layout()->addWidget(m_emptyLine);
     m_emptyLine->hide();
 
-    setWebLink(isWebAddress(page) ? page : QUrl());
-    setPageSize(listPageSize(context.config()));
+    setWebLink(model.pageAddress());
+    setDescription(model.description());
+    setPageSize(model.pageSize());
+}
 
+DefaultListLayout::~DefaultListLayout() = default;
+
+void DefaultListLayout::start()
+{
     connect(this, &ItemListView::rowMenuRequested, this,
             [this](const QString &key, const QPoint &globalPos) { showRowMenu(key, globalPos); });
     connect(this, &ItemListView::rowLinkActivated, this,
             [this](const QString &key, const QString &link) { activateLink(key, link); });
     connect(this, &ItemListView::visibleKeysChanged, this, [this] {
-        if (m_shown && !m_settingRows)
-            askForNewKeys();
+        if (!m_drawing)
+            m_model.setVisibleRows(visibleKeys());
     });
+    connect(&m_model, &ListModel::changed, this, [this] { draw(); });
+    connect(&m_model, &ListModel::rowChanged, this, [this](const QString &key) { drawRow(key); });
+    draw();
 }
 
-void GitLabList::follow(ItemStatusSource *source)
-{
-    if (!source) {
-        showStatus({});
-        return;
-    }
-    showStatus(source->current());
-    source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
-}
-
-void GitLabList::showEvent(QShowEvent *event)
-{
-    widgets::ItemListView::showEvent(event);
-    m_shown = true;
-    askForCells();
-}
-
-void GitLabList::hideEvent(QHideEvent *event)
-{
-    widgets::ItemListView::hideEvent(event);
-    m_shown = false;
-    stopAsking();
-}
-
-ListCell GitLabList::linksCell(const ListRowTarget &target) const
+ListCell DefaultListLayout::linksCell(const ListRow &row, const QVariant &sortKey) const
 {
     ListCell cell;
-    cell.sortKey = target.sortKey;
-    if (!target.address.isEmpty())
+    cell.sortKey = sortKey;
+    if (!row.address.isEmpty())
         // "Open" is also a state; the link opens the row, so it is told apart.
         cell.links << ListLink{kWebLink, QCoreApplication::translate("gitlab", "Web")}
                    << ListLink{kOpenLink, QCoreApplication::translate("gitlab", "Open", "link that opens a row")};
-    if (!target.addType.isEmpty())
+    if (row.canAdd)
         cell.links << ListLink{kAddLink, QCoreApplication::translate("gitlab", "Add")};
     return cell;
 }
 
-void GitLabList::showStatus(const ItemStatus &status)
+void DefaultListLayout::draw()
 {
-    // Old data stays through an error. Problems show in the cell header.
-    if (status.data.isEmpty()) {
-        if (!m_drawn)
-            setMessage(status.message.isEmpty() ? QCoreApplication::translate("gitlab", "Loading…") : status.message);
+    if (!m_model.hasData()) {
+        setMessage(m_model.message());
         return;
     }
-    m_drawn = true;
     setMessage({});
-
-    const QUrl base = baseUrlOf(m_context->moduleSettings(kGeneralScreen));
-    const QJsonArray answers = status.data.value(QStringLiteral("rows")).toArray();
-    QList<ListRow> rows;
-    m_targets.clear();
-    for (int index = 0; index < answers.size(); ++index) {
-        const QJsonObject row = answers.at(index).toObject();
-        const ListRowTarget target = rowTarget(row, index, base);
-        m_targets.insert(target.key, target);
-        rows.append(ListRow{target.key, rowCells(target, row)});
+    QList<widgets::ListRow> rows;
+    m_drawn.clear();
+    for (const QString &key : m_model.keys()) {
+        const QList<ListCell> cells = rowCells(key);
+        m_drawn.insert(key, cells);
+        rows.append(widgets::ListRow{key, cells});
     }
-    m_settingRows = true;
-    setRows(rows);
-    m_settingRows = false;
+    {
+        const QScopedValueRollback drawing(m_drawing, true);
+        setRows(rows);
+    }
     m_emptyLine->setVisible(rows.isEmpty());
-
-    if (m_shown)
-        askForCells();
+    m_model.setVisibleRows(visibleKeys());
 }
 
-void GitLabList::showRowMenu(const QString &key, const QPoint &globalPos)
+// Only the cells that changed, since each one can sort the table again.
+void DefaultListLayout::drawRow(const QString &key)
 {
-    const ListRowTarget target = m_targets.value(key);
+    const auto drawn = m_drawn.find(key);
+    if (drawn == m_drawn.end())
+        return;
+    // A cell can sort the table again. The model keeps the new shown rows, but
+    // does not ask for more while it tells of an answer.
+    const QList<ListCell> cells = rowCells(key);
+    for (int column = 0; column < cells.size(); ++column) {
+        if (column < drawn->size() && sameCell(drawn->at(column), cells.at(column)))
+            continue;
+        setCell(key, column, cells.at(column));
+    }
+    *drawn = cells;
+}
+
+void DefaultListLayout::showRowMenu(const QString &key, const QPoint &globalPos)
+{
+    const ListRow row = m_model.row(key);
+    const bool hasAddress = !row.address.isEmpty();
+    const bool canAdd = row.canAdd;
 
     // It belongs to the view and does not wait, because the view can be made
     // again at any time.
@@ -160,83 +196,32 @@ void GitLabList::showRowMenu(const QString &key, const QPoint &globalPos)
     menu->setAttribute(Qt::WA_DeleteOnClose);
 
     QAction *web = menu->addAction(QCoreApplication::translate("gitlab", "Web"));
-    web->setEnabled(!target.address.isEmpty());
-    connect(web, &QAction::triggered, this, [this, key] { activateLink(key, kWebLink); });
+    web->setEnabled(hasAddress);
+    connect(web, &QAction::triggered, this, [this, key] { m_model.openWeb(key); });
 
     QAction *open = menu->addAction(QCoreApplication::translate("gitlab", "Open page"));
-    open->setEnabled(!target.address.isEmpty());
-    connect(open, &QAction::triggered, this, [this, key] { activateLink(key, kOpenLink); });
+    open->setEnabled(hasAddress);
+    connect(open, &QAction::triggered, this, [this, key] { m_model.openPage(key); });
 
     QAction *add = menu->addAction(QCoreApplication::translate("gitlab", "Add to task as item"));
-    add->setEnabled(!target.addType.isEmpty());
-    connect(add, &QAction::triggered, this, [this, key] { activateLink(key, kAddLink); });
+    add->setEnabled(canAdd);
+    connect(add, &QAction::triggered, this, [this, key] { m_model.addToTask(key); });
 
     QAction *copy = menu->addAction(QCoreApplication::translate("gitlab", "Copy link"));
-    copy->setEnabled(!target.address.isEmpty());
-    connect(copy, &QAction::triggered, this, [address = target.address] {
-        QGuiApplication::clipboard()->setText(address.toString());
-    });
+    copy->setEnabled(hasAddress);
+    connect(copy, &QAction::triggered, this, [this, key] { m_model.copyLink(key); });
 
     menu->popup(globalPos);
 }
 
-void GitLabList::activateLink(const QString &key, const QString &link)
+void DefaultListLayout::activateLink(const QString &key, const QString &link)
 {
-    const ListRowTarget target = m_targets.value(key);
-    if (link == kWebLink && !target.address.isEmpty())
-        QDesktopServices::openUrl(target.address);
-    else if (link == kOpenLink && !target.address.isEmpty())
-        openPage(target.address);
-    else if (link == kAddLink && !target.addType.isEmpty())
-        m_context->addItemToTask(target.addType, target.addName, target.addConfig);
-}
-
-void GitLabList::openPage(const QUrl &address)
-{
-    if (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier)
-        QDesktopServices::openUrl(address);
-    else
-        m_context->showPage(address);
-}
-
-NumberedList::NumberedList(ItemContext &context, const ListTraits &traits, QWidget *parent)
-    : GitLabList(context, traits.emptyText,
-                 listWebUrl(traits.kind, baseUrlOf(context.moduleSettings(kGeneralScreen)), context.config(),
-                            context.projectSetting(kProjectSettingKey)),
-                 parent)
-    , m_traits(traits)
-{
-    setDescription(listDescription(traits.kind, context.config(), context.projectSetting(kProjectSettingKey)));
-}
-
-ListRowTarget NumberedList::rowTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const
-{
-    ListRowTarget target;
-    target.project = rowProject(row, m_traits.separator, baseUrl);
-    target.iid = row.value(QStringLiteral("iid")).toInteger();
-    const QString ref = target.project + m_traits.separator + QString::number(target.iid);
-    target.key = target.complete() ? ref : QStringLiteral("row-%1").arg(index);
-    target.sortKey
-        = target.project + m_traits.separator + QStringLiteral("%1").arg(target.iid, 12, 10, QLatin1Char('0'));
-
-    const QJsonObject config{{QStringLiteral("project"), target.project}, {QStringLiteral("iid"), target.iid}};
-    const QUrl built = m_traits.kind == ListKind::MergeRequests ? mergeRequestUrl(baseUrl, config, {})
-                                                                : issueUrl(baseUrl, config, {});
-    const QUrl address = webAddress(row, built);
-    target.address = isWebAddress(address) ? address : QUrl();
-
-    if (target.complete()) {
-        target.addType = m_traits.summaryType;
-        target.addName = ref;
-        target.addConfig = config;
-    }
-    return target;
-}
-
-ListCell NumberedList::refCell(const ListRowTarget &target) const
-{
-    const QString number = m_traits.separator + QString::number(target.iid);
-    return {target.project.section(QLatin1Char('/'), -1) + number, target.sortKey, {}};
+    if (link == kWebLink)
+        m_model.openWeb(key);
+    else if (link == kOpenLink)
+        m_model.openPage(key);
+    else if (link == kAddLink)
+        m_model.addToTask(key);
 }
 
 } // namespace mirante::modules::gitlab

@@ -1,6 +1,7 @@
 #include "GitLabPipelineListView.h"
 
-#include "GitLabListSupport.h"
+#include "GitLabLists.h"
+#include "GitLabPipelineListLayout.h"
 #include "GitLabSettings.h"
 #include "GitLabUrls.h"
 #include "GitLabViewSupport.h"
@@ -8,16 +9,13 @@
 #include <mirante/ItemContext.h>
 
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
-
-using mirante::widgets::ListCell;
 
 namespace mirante::modules::gitlab {
 
 namespace {
-
-enum Column { IdColumn, StatusColumn, RefColumn, AuthorColumn, StartedColumn, LinksColumn };
 
 // The number in the ref of a pipeline that ran for a merge request, not on a
 // branch, or 0.
@@ -27,35 +25,35 @@ qint64 mergeRequestOfRef(const QString &ref)
     return pattern.match(ref).captured(1).toLongLong();
 }
 
-class PipelineListView : public GitLabList
+} // namespace
+
+PipelineListModel::PipelineListModel(ItemContext &context)
+    : ListModel(context, QCoreApplication::translate("gitlab", "No pipelines"),
+                pipelinesUrl(baseUrlOf(context.moduleSettings(kGeneralScreen)), context.config(),
+                             context.projectSetting(kProjectSettingKey)),
+                pipelineListDescription(context.config(), context.projectSetting(kProjectSettingKey)))
+    , m_project(projectPath(context.config(), context.projectSetting(kProjectSettingKey)))
 {
-public:
-    PipelineListView(ItemContext &context, QWidget *parent)
-        : GitLabList(context, QCoreApplication::translate("gitlab", "No pipelines"),
-                     pipelinesUrl(baseUrlOf(context.moduleSettings(kGeneralScreen)), context.config(),
-                                  context.projectSetting(kProjectSettingKey)),
-                     parent)
-        , m_project(projectPath(context.config(), context.projectSetting(kProjectSettingKey)))
-    {
-        setColumns({{QCoreApplication::translate("gitlab", "Id"), 2},
-                    {QCoreApplication::translate("gitlab", "Status"), 1},
-                    {QCoreApplication::translate("gitlab", "Ref"), 0, true},
-                    {QCoreApplication::translate("gitlab", "Author"), 4},
-                    {QCoreApplication::translate("gitlab", "Started"), 3},
-                    {QCoreApplication::translate("gitlab", "Links"), 0}},
-                   IdColumn);
-        addFilter(StatusColumn, QCoreApplication::translate("gitlab", "Status"));
-        setDescription(pipelineListDescription(context.config(), context.projectSetting(kProjectSettingKey)));
-    }
+}
 
-protected:
-    ListRowTarget rowTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const override
-    {
+QList<PipelineListModel::Pipeline> PipelineListModel::pipelines() const
+{
+    QList<Pipeline> pipelines;
+    for (const QString &key : keys())
+        pipelines << m_pipelines.value(key);
+    return pipelines;
+}
+
+void PipelineListModel::read(const QJsonArray &rows, const QUrl &baseUrl)
+{
+    m_pipelines.clear();
+    for (int index = 0; index < rows.size(); ++index) {
+        const QJsonObject row = rows.at(index).toObject();
         const qint64 id = row.value(QStringLiteral("id")).toInteger();
-        ListRowTarget target;
-        target.key = id > 0 ? QString::number(id) : QStringLiteral("row-%1").arg(index);
-        target.sortKey = id;
 
+        ListRow listRow;
+        listRow.key = id > 0 ? QString::number(id) : QStringLiteral("row-%1").arg(index);
+        listRow.data = row;
         QUrl built;
         if (id > 0) {
             built = pipelinesUrl(baseUrl, QJsonObject{{QStringLiteral("project"), m_project}}, {});
@@ -63,51 +61,50 @@ protected:
                 built.setPath(built.path() + QLatin1Char('/') + QString::number(id));
         }
         const QUrl address = webAddress(row, built);
-        target.address = isWebAddress(address) ? address : QUrl();
+        listRow.address = isWebAddress(address) ? address : QUrl();
 
+        // The same item that a pasted address of its branch or merge request
+        // makes.
+        AddTarget add;
         const QString ref = row.value(QStringLiteral("ref")).toString();
-        if (ref.isEmpty() || m_project.isEmpty())
-            return target;
-        // The same item that a pasted address of its branch or merge request makes.
-        target.addType = QStringLiteral("gitlab.pipeline");
-        target.addConfig.insert(QStringLiteral("project"), m_project);
-        const qint64 iid = mergeRequestOfRef(ref);
-        if (iid > 0) {
-            target.addName = m_project + QLatin1Char('!') + QString::number(iid) + QStringLiteral(" CI");
-            target.addConfig.insert(QStringLiteral("branchSource"), QStringLiteral("mergeRequest"));
-            target.addConfig.insert(QStringLiteral("iid"), iid);
-        } else {
-            target.addName = m_project + QLatin1Char(' ') + ref + QStringLiteral(" CI");
-            target.addConfig.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
-            target.addConfig.insert(QStringLiteral("branch"), ref);
+        if (!ref.isEmpty() && !m_project.isEmpty()) {
+            add.type = QStringLiteral("gitlab.pipeline");
+            add.config.insert(QStringLiteral("project"), m_project);
+            const qint64 iid = mergeRequestOfRef(ref);
+            if (iid > 0) {
+                add.name = m_project + QLatin1Char('!') + QString::number(iid) + QStringLiteral(" CI");
+                add.config.insert(QStringLiteral("branchSource"), QStringLiteral("mergeRequest"));
+                add.config.insert(QStringLiteral("iid"), iid);
+            } else {
+                add.name = m_project + QLatin1Char(' ') + ref + QStringLiteral(" CI");
+                add.config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
+                add.config.insert(QStringLiteral("branch"), ref);
+            }
         }
-        return target;
-    }
+        addRow(listRow, add);
 
-    QList<ListCell> rowCells(const ListRowTarget &target, const QJsonObject &row) const override
-    {
+        Pipeline pipeline;
+        static_cast<ListRow &>(pipeline) = this->row(listRow.key);
+        pipeline.id = id;
         const QString status = row.value(QStringLiteral("status")).toString();
-        const QString author = row.value(QStringLiteral("user")).toObject().value(QStringLiteral("name")).toString();
+        if (!status.isEmpty())
+            pipeline.state = statusPillOf(status);
+        pipeline.ref = ref;
+        pipeline.author = row.value(QStringLiteral("user")).toObject().value(QStringLiteral("name")).toString();
         // GitLab's list answers usually have only the time it was created.
         const QJsonValue started = row.value(QStringLiteral("started_at"));
-        return {{row.value(QStringLiteral("id")).toVariant().toString(), target.sortKey, {}},
-                status.isEmpty() ? dashCell() : ListCell{statusText(status), {}, statusRole(status)},
-                {row.value(QStringLiteral("ref")).toString(), {}, {}},
-                author.isEmpty() ? dashCell() : ListCell{author, {}, {}},
-                dateCell(started.isString() ? started : row.value(QStringLiteral("created_at"))),
-                linksCell(target)};
+        pipeline.started = QDateTime::fromString(
+            (started.isString() ? started : row.value(QStringLiteral("created_at"))).toString(), Qt::ISODateWithMs);
+        m_pipelines.insert(pipeline.key, pipeline);
     }
-
-private:
-    QString m_project;
-};
-
-} // namespace
+}
 
 QWidget *createPipelineListView(ItemContext &context, QWidget *parent)
 {
-    auto *view = new PipelineListView(context, parent);
-    view->follow(context.status());
+    auto *model = new PipelineListModel(context);
+    model->follow(context.status());
+    QWidget *view = makePipelineListLayout(*model, parent);
+    model->attach(view);
     return view;
 }
 
