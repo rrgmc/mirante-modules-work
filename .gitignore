@@ -1,0 +1,5 @@
+# Git worktrees created by Claude Code, one per piece of work
+.claude/worktrees/
+
+# Build folders, one per CMake preset
+/build/

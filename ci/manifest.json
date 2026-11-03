@@ -1,0 +1,12 @@
+{
+  "qt": [],
+  "core": { "repo": "https://github.com/rrgmc/mirante-core", "ref": "b64426190cff183132405c354a4865c1635328e3" },
+  "modules": [
+    {
+      "name": "mirante_modules_work",
+      "repo": "this repository",
+      "ref": "this commit",
+      "folders": ["claude", "github", "gitlab", "jira"]
+    }
+  ]
+}
