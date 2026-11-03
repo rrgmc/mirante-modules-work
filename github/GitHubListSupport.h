@@ -9,6 +9,7 @@
 
 #include <mirante/widgets/ItemListView.h>
 
+#include <QHash>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
@@ -76,8 +77,9 @@ private:
 
     ListModel &m_model;
     QLabel *m_emptyLine;
-    // setRows() and setCell() also change visibleKeys(), and draw() tells the
-    // model after them.
+    // The cells of each row as last drawn.
+    QHash<QString, QList<widgets::ListCell>> m_drawn;
+    // setRows() also changes visibleKeys(), and draw() tells the model after it.
     bool m_drawing = false;
 };
 

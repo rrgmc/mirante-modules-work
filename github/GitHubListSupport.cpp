@@ -26,6 +26,17 @@ const QString kWebLink = QStringLiteral("web");
 const QString kOpenLink = QStringLiteral("open");
 const QString kAddLink = QStringLiteral("add");
 
+bool sameCell(const ListCell &a, const ListCell &b)
+{
+    if (a.text != b.text || a.sortKey != b.sortKey || a.role != b.role || a.links.size() != b.links.size())
+        return false;
+    for (qsizetype i = 0; i < a.links.size(); ++i) {
+        if (a.links.at(i).id != b.links.at(i).id || a.links.at(i).label != b.links.at(i).label)
+            return false;
+    }
+    return true;
+}
+
 } // namespace
 
 QString rowRepository(const QJsonObject &row)
@@ -136,8 +147,12 @@ void DefaultListLayout::draw()
     }
     setMessage({});
     QList<widgets::ListRow> rows;
-    for (const QString &key : m_model.keys())
-        rows.append(widgets::ListRow{key, rowCells(key)});
+    m_drawn.clear();
+    for (const QString &key : m_model.keys()) {
+        const QList<ListCell> cells = rowCells(key);
+        m_drawn.insert(key, cells);
+        rows.append(widgets::ListRow{key, cells});
+    }
     {
         const QScopedValueRollback drawing(m_drawing, true);
         setRows(rows);
@@ -146,13 +161,21 @@ void DefaultListLayout::draw()
     m_model.setVisibleRows(visibleKeys());
 }
 
-// Only the cells that changed, so the table does not sort again for nothing.
+// Only the cells that changed, since each one can sort the table again.
 void DefaultListLayout::drawRow(const QString &key)
 {
+    const auto drawn = m_drawn.find(key);
+    if (drawn == m_drawn.end())
+        return;
+    // A cell can sort the table again. The model keeps the new shown rows, but
+    // does not ask for more while it tells of an answer.
     const QList<ListCell> cells = rowCells(key);
-    const QScopedValueRollback drawing(m_drawing, true);
-    for (int column = 0; column < cells.size(); ++column)
+    for (int column = 0; column < cells.size(); ++column) {
+        if (column < drawn->size() && sameCell(drawn->at(column), cells.at(column)))
+            continue;
         setCell(key, column, cells.at(column));
+    }
+    *drawn = cells;
 }
 
 void DefaultListLayout::showRowMenu(const QString &key, const QPoint &globalPos)
