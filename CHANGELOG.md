@@ -12,12 +12,14 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 - An example extension for `runlayout`, in `examples/extensions/github-run-table`.
 - The `gitlab` module's summaries are extension points: `issuelayout`, `mergerequestlayout` and `pipelinelayout`. See [its layouts](gitlab/README.md#layouts).
 - The `jira` module's issue summary is an extension point: `issuelayout`. See [its layouts](jira/README.md#layouts).
+- The `github` module's lists are extension points: `issuelistlayout`, `pullrequestlistlayout` and `runlistlayout`. The pull request model reads the checks and reviews of the rows that a layout shows. See [list layouts](github/README.md#list-layouts).
 - The README explains how an app names an extension in its own repository or in a repository that holds only extensions. See [replacing the layout of a view](README.md#replacing-the-layout-of-a-view).
 
 ### Changed
 
 - The `github` summaries are split into a model, which reads the status and runs the actions, and a default layout, which draws them as before.
 - The `gitlab` summaries and the `jira` issue summary are split the same way.
+- The `github` lists are split into a model and a default layout, which draws the core's table as before.
 
 ## [0.8.0] - 2026-11-03
 
