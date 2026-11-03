@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-03
+
+Apps can replace the layout of every native view of the `github`, `gitlab` and `jira` modules at build time: the summaries and the lists. The default layouts draw the views as before.
+
 ### Added
 
 - The `github` module's summaries are extension points: `issuelayout`, `pullrequestlayout` and `runlayout`. An app can replace a summary's whole layout at build time with code in its own repository, which draws the module's model. The models and the points' headers are an interface that apps build against. See [layouts](github/README.md#layouts).
@@ -32,5 +36,6 @@ The first release of the work modules on their own.
 - The modules `claude`, `github`, `gitlab` and `jira`, which moved from [`mirante-modules`](https://github.com/rrgmc/mirante-modules) with their history. See [decision 0133](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0133-work-modules-in-their-own-repository.md) in the core.
 - The repository builds alone, as an app of its own folders, with CI on Windows, macOS and Linux that checks the modules' includes and translations.
 
-[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/rrgmc/mirante-modules-work/tree/v0.8.0
