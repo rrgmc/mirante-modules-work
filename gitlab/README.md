@@ -96,23 +96,52 @@ The tests are in `tests/tst_status.cpp`, on responses in `tests/data/` recorded 
 
 ## Summary views
 
-`GitLabMergeRequestView.cpp`, `GitLabPipelineView.cpp` and `GitLabIssueView.cpp` each hold one class, a subclass of `GitLabSummary` in `GitLabViewSupport.h`, which is private to the module. The layouts, fields and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabSummary` holds what they share:
+Each summary has two parts: a **model**, which the module keeps, and a **layout**, which draws the model and which an app can replace. See [layouts](#layouts). `GitLabIssueView.cpp`, `GitLabMergeRequestView.cpp` and `GitLabPipelineView.cpp` hold the models; `GitLab*LayoutDefault.cpp` hold the default layouts, which this section describes. The layouts, fields and rules are in [item types](../../../docs/item-types.md#gitlab). `SummaryModel`, the models' base in `GitLabSummaryModel.h`, holds what they share:
 
-- **Drawing.** `follow()` draws the item's status now and at each change. With no data it shows "Loading…" or the status's message. With old data it keeps drawing that data through an error, because the cell header shows the problem. A status without data, with `State::None` and a message, such as "The main folder is not on a branch.", replaces the old data, since the item has nothing to show.
-- **Actions.** `runAction()` marks the button busy and makes the request. After a success it refreshes the status. A failure shows `reply.message` in the action row. A `403` shows "The token cannot do this. It needs the api scope."
-- **Open page.** It calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. It has the same address as the Web link, and both hide without a web address.
+- **Drawing.** `follow()` reads the item's status now and at each change, and says `changed()`. With no data, `hasData()` is false and `message()` says "Loading…" or the status's message. With old data it keeps that data through an error, because the cell header shows the problem. A status without data, with `State::None` and a message, such as "The main folder is not on a branch.", replaces the old data, since the item has nothing to show.
+- **Actions.** `runAction()` clears the last error, marks the action busy and makes the request. After a success it refreshes the status. A failure sets `error()` to `reply.message`, and a `403` to "The token cannot do this. It needs the api scope." A default layout shows these in its action row.
+- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address.
 - **Dialogs.** The questions before cancelling and triggering run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
 
-The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline`, `trigger-pipeline`, `merge-request` and `open-page`. A job's buttons are `log-<job id>`, `retry-job-<job id>` and `play-job-<job id>`. They are not in the action row, so a job's Retry and Play clear the last error themselves. The merge request summary's link to its pipeline is `pipeline-web`.
+The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline`, `trigger-pipeline`, `merge-request` and `open-page`. A job's buttons are `log-<job id>`, `retry-job-<job id>` and `play-job-<job id>`. They are not in the action row, so the default layout disables them while `isBusy()` says their request runs. The merge request summary's link to its pipeline is `pipeline-web`.
 
-`GitLabPipelineView.cpp` keeps more state than the other two:
+The pipeline model, `PipelineModel`, keeps more state than the other two:
 
-- **What it shows.** `m_selectedId` is the pipeline the user chose, or 0 for the latest. It stays through a new status while that pipeline is still there. The latest is never held on to, so the view follows a newer one.
-- **The head.** The state row is one widget that stays, so Previous and Next (`previous-pipeline`, `next-pipeline`) keep the keyboard's focus. Only the line of state and the pills (`pipeline-pill-<id>`) inside it change.
-- **Jobs.** One section, `jobs`, holds one grid, so its columns line up across stages. A pipeline without `jobs` in the status, either older or a sibling whose request failed, asks for them with `pipelineJobs()` each time it shows. It shows what it last read meanwhile. Only the answer to the latest read counts.
-- **The refresh.** A `QTimer` named `pipeline-refresh` asks the status source for a refresh every 15 seconds. It runs between the view's show and hide events, while the shown pipeline is unfinished, which is every status but `success`, `failed`, `canceled`, `skipped` and `manual`. A manual pipeline waits for a person, so it does not ask.
+- **What it shows.** `shownIndex()` is the pipeline the user chose with `showPipeline()`, or the latest. It stays through a new status while that pipeline is still there. The latest is never held on to, so the view follows a newer one.
+- **The head.** In the default layout, the state row is one widget that stays, so Previous and Next (`previous-pipeline`, `next-pipeline`) keep the keyboard's focus. Only the line of state and the pills (`pipeline-pill-<id>`) inside it change.
+- **Jobs.** `jobs()` are in the order they were created, and `stages()` in the order of their first job. The default layout's section, `jobs`, holds one grid, so its columns line up across stages. A pipeline without `jobs` in the status, either older or a sibling whose request failed, asks for them with `pipelineJobs()` each time it shows. It shows what it last read meanwhile. Only the answer to the latest read counts.
+- **The refresh.** The model's `QTimer`, named `pipeline-refresh`, asks the status source for a refresh every 15 seconds, whatever the layout. It runs while the view is visible, while the shown pipeline is unfinished, which is every status but `success`, `failed`, `canceled`, `skipped` and `manual`. A manual pipeline waits for a person, so it does not ask.
 
-Text from a server is plain text in every label. The tests are in `tests/tst_summary_views.cpp`, with a fake context and a fake status source, on the responses in `tests/data/`.
+Text from a server is plain text in every label. The tests of the models are in `tests/tst_summary_models.cpp`, and those of the default layouts in `tests/tst_summary_views.cpp`, with a fake context and a fake status source from `tests/SummaryTestSupport.h`, on the responses in `tests/data/`. The layouts' tests skip when an app replaces a layout; the models' tests run in every build.
+
+## Layouts
+
+An app can replace the whole layout of each summary when it builds Mirante. **The contract** and how an app names an extension, in its own repository or in a repository of extensions, are in [replacing the layout of a view](../README.md#replacing-the-layout-of-a-view).
+
+| Point | Interface | Model | Default |
+|---|---|---|---|
+| `issuelayout` | `makeIssueLayout()` in `GitLabIssueLayout.h` | `IssueModel` | `GitLabIssueLayoutDefault.cpp` |
+| `mergerequestlayout` | `makeMergeRequestLayout()` in `GitLabMergeRequestLayout.h` | `MergeRequestModel` | `GitLabMergeRequestLayoutDefault.cpp` |
+| `pipelinelayout` | `makePipelineLayout()` in `GitLabPipelineLayout.h` | `PipelineModel` | `GitLabPipelineLayoutDefault.cpp` |
+
+An extension defines its make function in the namespace `mirante::modules::gitlab`.
+
+**What every model gives** (`SummaryModel`, in `GitLabSummaryModel.h`):
+
+- `hasData()` and `message()`: without data, show the message alone, such as "Loading…".
+- `config()` and `isSectionShown(section)`: the item's settings, and its `show<Section>` fields, on when absent.
+- `pageAddress()` and `openPage()`.
+- `isBusy(action)`, `error()` and `clearError()`, with the signals `busyChanged(action)` and `errorChanged()`.
+- `refresh()`, to read the status again.
+- `Pill` values, a text and a `widgets::StatusRole`, for every state, so a layout words and colours states as the module does.
+
+**What each model adds:**
+
+- `IssueModel`: `issue()`, GitLab's issue object; `state()`; `comments()`, GitLab's notes, newest first; and `commentsState()`: `Shown`, `None` or `Unreadable`.
+- `MergeRequestModel`: `mergeRequest()`, GitLab's object; `state()` and `isDraft()`; `pipeline()`, the head pipeline, with `pipelineState()` and `pipelineAddress()`; `failedJobs()`, each with its state, duration and log; `approvals()`: those given, those required and the approvers' names; and `canRetryPipeline()` with the action `retryPipeline()`.
+- `PipelineModel`: `pipelines()`, newest first, each with its title, state, creation, duration, and whether it is of the group; `branch()`; `shownIndex()`, `shownPipeline()` and `showPipeline(index)`; `jobs()`, `stages()` and `jobsState()`: `Loading`, `Shown` or `Unreadable`; `canRetry()`, `canCancel()`, `canTrigger()` and `mergeRequestAddress()`; and the actions `retry()`, `cancel()`, `trigger()`, `retryJob(id)` and `playJob(id)`. `cancel()` and `trigger()` do not ask first: a layout that wants a confirmation asks before it calls them, as the default does.
+
+The point headers and `GitLabSummaryModel.h` are an interface that apps build against; a change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## Lists
 

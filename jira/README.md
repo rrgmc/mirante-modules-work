@@ -163,11 +163,31 @@ The two views find the ids differently:
 - **A summary** asks for all fields and for `names`, so it has what it needs. The label is the name as the user wrote it.
 - **A list** needs the ids before its search, since `fields` takes only ids. It asks `GET field` on each fetch, and only when there are extra fields. This works the same on Cloud and Data Center, whatever the query matches. The other way, reading the `names` of a first search, would not do: Jira gives names only for the fields asked for, and none without rows. The search still asks for `expand=names`, as the decision says, and `data.names` holds its answer, or the names from `GET field` if the server ignored it. If `GET field` fails, the list keeps its usual columns. The columns exist from the start and show once `data.names` has their field, so the sort and the filter do not start over. A new list of names takes effect in a new view.
 
+## Layouts
+
+An app can replace the whole layout of the issue summary when it builds Mirante. **The contract** and how an app names an extension, in its own repository or in a repository of extensions, are in [replacing the layout of a view](../README.md#replacing-the-layout-of-a-view).
+
+| Point | Interface | Model | Default |
+|---|---|---|---|
+| `issuelayout` | `makeIssueLayout()` in `JiraIssueLayout.h` | `IssueModel` | `JiraIssueLayoutDefault.cpp` |
+
+An extension defines `makeIssueLayout()` in the namespace `mirante::modules::jira`. The view only reads, so the model has no actions. `IssueModel` gives:
+
+- `hasData()` and `message()`: without data, show the message alone, such as "Loading…".
+- `config()` and `isSectionShown(section)`: the item's settings, and its fields `showDetails`, `showDescription`, `showComments` and `showLinks`, on when absent.
+- `issue()`, Jira's issue object; `key()`, `title()`, `status()` (a `Pill`, coloured by the status category) and `type()`.
+- `details()`: label and value pairs, the [extra fields](#extra-fields) last.
+- `description()` and `comments()`, newest first, as `RichContent`: Jira's rendered HTML, else the plain text. HTML holds text that anyone with access to the issue wrote, so a layout must show it without loading anything and open only web links, as the default's `RichText` does. A relative link is below `siteAddress()`.
+- `linkedIssues()`: the sub-tasks, the links and the children of an epic, each with its key, text and page; `moreChildren()`, the children the status left out.
+- `pageAddress()` and `openPage()`.
+
+`JiraIssueLayout.h` is an interface that apps build against; a change to it is listed in [`CHANGELOG.md`](../CHANGELOG.md).
+
 ## Views
 
-`JiraIssueView.cpp` has `createIssueView()`, and `JiraListView.cpp` has `createListView()`. See decisions [0066](../../../docs/decisions/0066-fixed-native-layouts-with-sections.md), [0069](../../../docs/decisions/0069-open-page-in-the-placement.md), [0070](../../../docs/decisions/0070-read-mostly-native-views.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md).
+`JiraIssueView.cpp` has `createIssueView()` and the issue's model, `JiraIssueLayoutDefault.cpp` its default layout, and `JiraListView.cpp` has `createListView()`. See decisions [0066](../../../docs/decisions/0066-fixed-native-layouts-with-sections.md), [0069](../../../docs/decisions/0069-open-page-in-the-placement.md), [0070](../../../docs/decisions/0070-read-mostly-native-views.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md).
 
-**The issue.** A `SummaryView` with the key and summary as its title, pills for the status and the type, and the actions. The sections, in order, are:
+**The issue.** It has two parts: a **model**, `IssueModel`, which the module keeps, and a **layout**, which draws the model and which an app can replace. See [layouts](#layouts). The default layout is a `SummaryView` with the key and summary as its title, pills for the status and the type, and the actions. The sections, in order, are:
 
 | Section | Key | Field | Shows |
 |---|---|---|---|
@@ -185,9 +205,9 @@ Development information is left out in M6.
 
 The views only read. Changing an issue happens on its page, as [decision 0070](../../../docs/decisions/0070-read-mostly-native-views.md) says.
 
-**Where the data comes from.** The view draws from `ItemStatus::data`, and redraws only when the answer changed, so a poll does not lose a text selection. With no data it shows "Loading…" or the status's message. With old data and an error it keeps the data, and the cell header shows the error.
+**Where the data comes from.** The model reads `ItemStatus::data`, and says `changed()` only when the answer changed, so a poll does not lose a text selection. With no data it shows "Loading…" or the status's message. With old data and an error it keeps the data, and the cell header shows the error.
 
-**Rendered HTML.** `RichText`, a `QTextBrowser`, holds the description and the comments.
+**Rendered HTML.** In the default layout, `RichText`, a `QTextBrowser`, holds the description and the comments. A layout of an app that shows the HTML must keep these rules.
 
 - `loadResource()` loads nothing, and answers with a blank image, or an empty style sheet. It must not answer with nothing, because the document would then read a `file:` or network path in the HTML itself.
 - `setOpenLinks(false)` and `setOpenExternalLinks(false)` are set. A click resolves the link against the base URL, and opens it in the external browser only for `http` and `https`.
@@ -202,4 +222,4 @@ Other text from the server goes in labels with `Qt::PlainText`. A `&` in an issu
 - **Pages.** `setPageSize()` with the item's `pageSize`. The rows fetched are the item's `limit`.
 - **Filter.** `addFilter()` on Status. The choice is not saved.
 
-The tests are in `tests/tst_views.cpp`, with a fake context and status source. A handler stands in for the external browser, so nothing opens.
+The tests are in `tests/tst_views.cpp`, with a fake context and status source. A handler stands in for the external browser, so nothing opens. The issue view's tests skip when an app replaces its layout; the tests of the issue model and of the list run in every build.

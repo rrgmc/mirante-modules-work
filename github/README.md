@@ -181,7 +181,7 @@ An app can replace the whole layout of each summary when it builds Mirante: its 
 | `pullrequestlayout` | `makePullRequestLayout()` in `GitHubPullRequestLayout.h` | `PullRequestModel` | `GitHubPullRequestLayoutDefault.cpp` |
 | `runlayout` | `makeRunLayout()` in `GitHubRunLayout.h` | `RunModel` | `GitHubRunLayoutDefault.cpp` |
 
-**The contract.** `make<View>Layout(model, parent)` returns the view's widget, a child of `parent`. It draws the model at once, and again at each `changed()`. The model then becomes a child of that widget, so it lives as long as the view, and its refresh follows the widget's visibility. A layout may use the model, Qt and the module interface (`<mirante/...>`), such as `widgets::StatusPill` or `widgets::SummaryView`, and nothing else of the module.
+**The contract** and how an app names an extension, in its own repository or in a repository of extensions, are in [replacing the layout of a view](../README.md#replacing-the-layout-of-a-view).
 
 **What every model gives** (`SummaryModel`, in `GitHubSummaryModel.h`):
 
@@ -198,20 +198,7 @@ An app can replace the whole layout of each summary when it builds Mirante: its 
 - `PullRequestModel`: `pullRequest()`, GitHub's object; `state()` and `isDraft()`; `checks()`, the overall state; `checkList()`, each check run and commit status with its state, whether it passed and its details address; and `reviewers()`, each with a state, the requested reviewers last.
 - `RunModel`: `runs()`, newest first, each with its title, state, branch, start and duration, and whether it is of the group; `shownIndex()`, `shownRun()` and `showRun(index)`; `jobs()` and `jobsState()`: `Loading`, `Shown` or `Unreadable`; `canRerunFailed()`, `canRerun()`, `canCancel()` and `pullRequestAddress()`; and the actions `rerunFailed()`, `rerun()`, `cancel()` and `rerunJob(id)`. `cancel()` does not ask first: a layout that wants a confirmation asks before it calls it, as the default does.
 
-**An extension.** An app names a folder of its own repository for the point, in the module's folder entry of its manifest:
-
-```json
-{
-  "folder": "github",
-  "extensions": { "runlayout": { "local": "extensions/github-run-layout" } }
-}
-```
-
-The core compiles every `.cpp` and `.h` file of that folder into the module, in place of the default, with the module's folder on the include path. The extension includes the point's header by name, such as `#include "GitHubRunLayout.h"`, and defines its make function in the namespace `mirante::modules::github`. A folder in another repository is named with `name`, `repo`, `ref` and `folder` instead of `local`. An app may replace one point and keep the defaults of the others.
-
-[`examples/extensions/github-run-table`](../examples/extensions/github-run-table) is an example for `runlayout`: the runs and the jobs as two tables in tabs, with coloured buttons. This repository's own build does not compile it, because its CI tests the defaults.
-
-**Stability.** The point headers and `GitHubSummaryModel.h` are an interface that apps build against. A change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md), and while the version is 0.x a minor version may change them. Texts in an extension are not in the module's translations.
+[`examples/extensions/github-run-table`](../examples/extensions/github-run-table) is an example for `runlayout`. The point headers and `GitHubSummaryModel.h` are an interface that apps build against; a change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## Lists
 
