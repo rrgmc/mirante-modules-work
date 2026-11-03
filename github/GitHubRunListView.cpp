@@ -1,6 +1,7 @@
 #include "GitHubRunListView.h"
 
-#include "GitHubListSupport.h"
+#include "GitHubLists.h"
+#include "GitHubRunListLayout.h"
 #include "GitHubSettings.h"
 #include "GitHubUrls.h"
 #include "GitHubViewSupport.h"
@@ -11,13 +12,9 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
-using mirante::widgets::ListCell;
-
 namespace mirante::modules::github {
 
 namespace {
-
-enum Column { RunColumn, WorkflowColumn, StatusColumn, BranchColumn, ActorColumn, StartedColumn, LinksColumn };
 
 // The pull request a run ran for: its first entry in pull_requests, for a run
 // of the pull_request event. Else 0.
@@ -31,102 +28,88 @@ qint64 pullRequestOfRun(const QJsonObject &run)
     return pullRequests.first().toObject().value(QStringLiteral("number")).toInteger();
 }
 
-class RunListView : public GitHubList
+} // namespace
+
+RunListModel::RunListModel(ItemContext &context)
+    : ListModel(context, QCoreApplication::translate("github", "No runs"),
+                runListWebUrl(webBaseOf(context.moduleSettings(kGeneralScreen)), context.config(),
+                              context.projectSetting(kProjectSettingKey)),
+                runListDescription(context.config(), context.projectSetting(kProjectSettingKey)))
+    , m_repository(repositoryOf(context.config(), context.projectSetting(kProjectSettingKey)))
+    , m_workflow(configuredWorkflow(context.config()))
 {
-public:
-    RunListView(ItemContext &context, QWidget *parent)
-        : GitHubList(context, QCoreApplication::translate("github", "No runs"),
-                     runListWebUrl(webBaseOf(context.moduleSettings(kGeneralScreen)), context.config(),
-                                   context.projectSetting(kProjectSettingKey)),
-                     parent)
-        , m_repository(repositoryOf(context.config(), context.projectSetting(kProjectSettingKey)))
-        , m_workflow(configuredWorkflow(context.config()))
-    {
-        setColumns({{QCoreApplication::translate("github", "Run"), 2},
-                    {QCoreApplication::translate("github", "Workflow"), 3},
-                    {QCoreApplication::translate("github", "Status"), 1},
-                    {QCoreApplication::translate("github", "Branch"), 0, true},
-                    {QCoreApplication::translate("github", "Actor"), 5},
-                    {QCoreApplication::translate("github", "Started"), 4},
-                    {QCoreApplication::translate("github", "Links"), 0}},
-                   RunColumn);
-        addFilter(StatusColumn, QCoreApplication::translate("github", "Status"));
-        addFilter(WorkflowColumn, QCoreApplication::translate("github", "Workflow"));
-        setDescription(runListDescription(context.config(), context.projectSetting(kProjectSettingKey)));
-    }
+}
 
-protected:
-    ListRowTarget rowTarget(const QJsonObject &row, int index, const QUrl &webBase) const override
-    {
+QList<RunListModel::Run> RunListModel::runs() const
+{
+    QList<Run> runs;
+    for (const QString &key : keys())
+        runs << m_runs.value(key);
+    return runs;
+}
+
+void RunListModel::read(const QJsonArray &rows, const QUrl &webBase)
+{
+    m_runs.clear();
+    for (int index = 0; index < rows.size(); ++index) {
+        const QJsonObject row = rows.at(index).toObject();
         const qint64 id = row.value(QStringLiteral("id")).toInteger();
-        ListRowTarget target;
-        target.key = id > 0 ? QString::number(id) : QStringLiteral("row-%1").arg(index);
-        // Run numbers count per workflow, and ids grow across them, so the id
-        // sorts the runs by age.
-        target.sortKey = id;
-        target.repository = m_repository;
-        target.number = id;
 
+        ListRow listRow;
+        listRow.key = id > 0 ? QString::number(id) : QStringLiteral("row-%1").arg(index);
+        listRow.data = row;
         QUrl built;
         if (id > 0 && !m_repository.isEmpty())
             built = webPageUrl(webBase, m_repository + QStringLiteral("/actions/runs/") + QString::number(id));
         const QUrl address = webAddress(row, built);
-        target.address = isWebAddress(address) ? address : QUrl();
+        listRow.address = isWebAddress(address) ? address : QUrl();
 
-        if (m_repository.isEmpty())
-            return target;
-        // The same item that a pasted address of its branch or pull request makes.
-        QJsonObject config{{QStringLiteral("repository"), m_repository}};
+        // The same item that a pasted address of its branch or pull request
+        // makes.
+        AddTarget add;
         const qint64 number = pullRequestOfRun(row);
         const QString branch = row.value(QStringLiteral("head_branch")).toString();
-        if (number > 0) {
-            target.addName = m_repository + QLatin1Char('#') + QString::number(number) + QStringLiteral(" CI");
-            config.insert(QStringLiteral("branchSource"), QStringLiteral("pullRequest"));
-            config.insert(QStringLiteral("number"), number);
-        } else if (!branch.isEmpty()) {
-            target.addName = m_repository + QLatin1Char(' ') + branch + QStringLiteral(" CI");
-            config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
-            config.insert(QStringLiteral("branch"), branch);
-        } else {
-            return target;
+        if (!m_repository.isEmpty() && (number > 0 || !branch.isEmpty())) {
+            QJsonObject config{{QStringLiteral("repository"), m_repository}};
+            if (number > 0) {
+                add.name = m_repository + QLatin1Char('#') + QString::number(number) + QStringLiteral(" CI");
+                config.insert(QStringLiteral("branchSource"), QStringLiteral("pullRequest"));
+                config.insert(QStringLiteral("number"), number);
+            } else {
+                add.name = m_repository + QLatin1Char(' ') + branch + QStringLiteral(" CI");
+                config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
+                config.insert(QStringLiteral("branch"), branch);
+            }
+            if (!m_workflow.isEmpty())
+                config.insert(QStringLiteral("workflow"), m_workflow);
+            add.type = QStringLiteral("github.run");
+            add.config = config;
         }
-        if (!m_workflow.isEmpty())
-            config.insert(QStringLiteral("workflow"), m_workflow);
-        target.addType = QStringLiteral("github.run");
-        target.addConfig = config;
-        return target;
-    }
+        addRow(listRow, add);
 
-    QList<ListCell> rowCells(const ListRowTarget &target, const QJsonObject &row) const override
-    {
+        Run run;
+        static_cast<ListRow &>(run) = this->row(listRow.key);
+        run.id = id;
+        run.number = row.value(QStringLiteral("run_number")).toInteger();
+        run.workflow = row.value(QStringLiteral("name")).toString();
         const QString status = row.value(QStringLiteral("status")).toString();
-        const QString conclusion = row.value(QStringLiteral("conclusion")).toString();
-        const qint64 number = row.value(QStringLiteral("run_number")).toInteger();
-        const QString workflow = row.value(QStringLiteral("name")).toString();
-        const QString branch = row.value(QStringLiteral("head_branch")).toString();
-        const QString actor = row.value(QStringLiteral("actor")).toObject().value(QStringLiteral("login")).toString();
+        if (!status.isEmpty())
+            run.state = runPillOf(row);
+        run.branch = branch;
+        run.actor = row.value(QStringLiteral("actor")).toObject().value(QStringLiteral("login")).toString();
         const QJsonValue started = row.value(QStringLiteral("run_started_at"));
-        return {{number > 0 ? QStringLiteral("#%1").arg(number) : dashCell().text, target.sortKey, {}},
-                workflow.isEmpty() ? dashCell() : ListCell{workflow, {}, {}},
-                status.isEmpty() ? dashCell()
-                                 : ListCell{statusText(status, conclusion), {}, statusRole(status, conclusion)},
-                branch.isEmpty() ? dashCell() : ListCell{branch, {}, {}},
-                actor.isEmpty() ? dashCell() : ListCell{actor, {}, {}},
-                dateCell(started.isString() ? started : row.value(QStringLiteral("created_at"))),
-                linksCell(target)};
+        run.started = QDateTime::fromString(
+            (started.isString() ? started : row.value(QStringLiteral("created_at"))).toString(), Qt::ISODateWithMs);
+        m_runs.insert(run.key, run);
     }
-
-private:
-    QString m_repository;
-    QString m_workflow;
-};
-
-} // namespace
+}
 
 QWidget *createRunListView(ItemContext &context, QWidget *parent)
 {
-    auto *view = new RunListView(context, parent);
-    view->follow(context.status());
+    auto *model = new RunListModel(context);
+    model->follow(context.status());
+    QWidget *view = makeRunListLayout(*model, parent);
+    model->attach(view);
     return view;
 }
 
