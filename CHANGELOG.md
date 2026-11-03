@@ -6,6 +6,15 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Added
+
+- The `github` module's summaries are extension points: `issuelayout`, `pullrequestlayout` and `runlayout`. An app can replace a summary's whole layout at build time with code in its own repository, which draws the module's model. The models and the points' headers are an interface that apps build against. See [layouts](github/README.md#layouts).
+- An example extension for `runlayout`, in `examples/extensions/github-run-table`.
+
+### Changed
+
+- The `github` summaries are split into a model, which reads the status and runs the actions, and a default layout, which draws them as before.
+
 ## [0.8.0] - 2026-11-03
 
 The first release of the work modules on their own.

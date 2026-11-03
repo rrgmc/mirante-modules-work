@@ -128,25 +128,35 @@ StatusRole statusRole(const QString &status, const QString &conclusion)
     return StatusRole::Neutral;
 }
 
-StatusPill *runPill(const QJsonObject &object)
+Pill runPillOf(const QJsonObject &object)
 {
     const QString status = object.value(QStringLiteral("status")).toString();
     const QString conclusion = object.value(QStringLiteral("conclusion")).toString();
-    return new StatusPill(statusText(status, conclusion), statusRole(status, conclusion));
+    return {statusText(status, conclusion), statusRole(status, conclusion)};
+}
+
+StatusPill *runPill(const QJsonObject &object)
+{
+    return pillWidget(runPillOf(object));
+}
+
+Pill commitStatusPillOf(const QJsonObject &status)
+{
+    const QString state = status.value(QStringLiteral("state")).toString();
+    if (state == QLatin1String("success"))
+        return {QCoreApplication::translate("github", "Passed"), StatusRole::Good};
+    if (state == QLatin1String("failure"))
+        return {QCoreApplication::translate("github", "Failed"), StatusRole::Bad};
+    if (state == QLatin1String("error"))
+        return {QCoreApplication::translate("github", "Error"), StatusRole::Bad};
+    if (state == QLatin1String("pending"))
+        return {QCoreApplication::translate("github", "Pending"), StatusRole::Waiting};
+    return {state, StatusRole::Neutral};
 }
 
 StatusPill *commitStatusPill(const QJsonObject &status)
 {
-    const QString state = status.value(QStringLiteral("state")).toString();
-    if (state == QLatin1String("success"))
-        return new StatusPill(QCoreApplication::translate("github", "Passed"), StatusRole::Good);
-    if (state == QLatin1String("failure"))
-        return new StatusPill(QCoreApplication::translate("github", "Failed"), StatusRole::Bad);
-    if (state == QLatin1String("error"))
-        return new StatusPill(QCoreApplication::translate("github", "Error"), StatusRole::Bad);
-    if (state == QLatin1String("pending"))
-        return new StatusPill(QCoreApplication::translate("github", "Pending"), StatusRole::Waiting);
-    return new StatusPill(state, StatusRole::Neutral);
+    return pillWidget(commitStatusPillOf(status));
 }
 
 QString checksText(ChecksState state)
@@ -179,25 +189,40 @@ StatusRole checksRole(ChecksState state)
     return StatusRole::Neutral;
 }
 
+Pill checksPillOf(ChecksState state)
+{
+    return {checksText(state), checksRole(state)};
+}
+
 StatusPill *checksPill(ChecksState state)
 {
-    return new StatusPill(checksText(state), checksRole(state));
+    return pillWidget(checksPillOf(state));
+}
+
+Pill reviewPillOf(const QString &state)
+{
+    if (state == QLatin1String("APPROVED"))
+        return {QCoreApplication::translate("github", "Approved"), StatusRole::Good};
+    if (state == QLatin1String("CHANGES_REQUESTED"))
+        return {QCoreApplication::translate("github", "Changes requested"), StatusRole::Bad};
+    if (state == QLatin1String("COMMENTED"))
+        return {QCoreApplication::translate("github", "Commented"), StatusRole::Neutral};
+    if (state.isEmpty())
+        return {QCoreApplication::translate("github", "Waiting"), StatusRole::Waiting};
+    QString words = state.toLower();
+    words.replace(QLatin1Char('_'), QLatin1Char(' '));
+    words[0] = words[0].toUpper();
+    return {words, StatusRole::Neutral};
 }
 
 StatusPill *reviewPill(const QString &state)
 {
-    if (state == QLatin1String("APPROVED"))
-        return new StatusPill(QCoreApplication::translate("github", "Approved"), StatusRole::Good);
-    if (state == QLatin1String("CHANGES_REQUESTED"))
-        return new StatusPill(QCoreApplication::translate("github", "Changes requested"), StatusRole::Bad);
-    if (state == QLatin1String("COMMENTED"))
-        return new StatusPill(QCoreApplication::translate("github", "Commented"), StatusRole::Neutral);
-    if (state.isEmpty())
-        return new StatusPill(QCoreApplication::translate("github", "Waiting"), StatusRole::Waiting);
-    QString words = state.toLower();
-    words.replace(QLatin1Char('_'), QLatin1Char(' '));
-    words[0] = words[0].toUpper();
-    return new StatusPill(words, StatusRole::Neutral);
+    return pillWidget(reviewPillOf(state));
+}
+
+StatusPill *pillWidget(const Pill &pill)
+{
+    return new StatusPill(pill.text, pill.role);
 }
 
 bool canCancelRun(const QString &status)
@@ -249,18 +274,23 @@ QLabel *plainWord(const QString &text)
     return label;
 }
 
-StatusPill *statePill(const QJsonObject &object)
+Pill statePillOf(const QJsonObject &object)
 {
     const bool merged = object.value(QStringLiteral("merged")).toBool()
         || !object.value(QStringLiteral("merged_at")).toString().isEmpty();
     if (merged)
-        return new StatusPill(QCoreApplication::translate("github", "Merged"), StatusRole::Good);
+        return {QCoreApplication::translate("github", "Merged"), StatusRole::Good};
     const QString state = object.value(QStringLiteral("state")).toString();
     if (state == QLatin1String("open"))
-        return new StatusPill(QCoreApplication::translate("github", "Open"), StatusRole::Good);
+        return {QCoreApplication::translate("github", "Open"), StatusRole::Good};
     if (state == QLatin1String("closed"))
-        return new StatusPill(QCoreApplication::translate("github", "Closed"), StatusRole::Neutral);
-    return new StatusPill(state, StatusRole::Neutral);
+        return {QCoreApplication::translate("github", "Closed"), StatusRole::Neutral};
+    return {state, StatusRole::Neutral};
+}
+
+StatusPill *statePill(const QJsonObject &object)
+{
+    return pillWidget(statePillOf(object));
 }
 
 QPushButton *linkButton(const QString &text, const QString &name)
@@ -299,116 +329,34 @@ QWidget *labelChips(const QJsonArray &labels)
     return row;
 }
 
-GitHubSummary::GitHubSummary(ItemContext &context, QWidget *parent)
-    : widgets::SummaryView(parent)
-    , m_context(&context)
+QString defaultLayoutName(const QString &view)
 {
+    return QStringLiteral("github-%1-default-layout").arg(view);
 }
 
-void GitHubSummary::follow(ItemStatusSource *source)
+void followActions(widgets::SummaryView *view, SummaryModel &model)
 {
-    if (!source) {
-        showStatus({});
-        return;
-    }
-    m_refresh = [source] { source->refresh(); };
-    showStatus(source->current());
-    source->subscribe(this, [this](const ItemStatus &status) { showStatus(status); });
-}
-
-void GitHubSummary::showStatus(const ItemStatus &status)
-{
-    // Old data stays through an error. Problems show in the cell header. A
-    // message without an error, such as a main folder that left its branch,
-    // says the item has nothing to show now, so it replaces the old data.
-    if (status.data.isEmpty()) {
-        if (!m_drawn || (status.state == ItemStatus::State::None && !status.message.isEmpty()))
-            setMessage(status.message.isEmpty() ? QCoreApplication::translate("github", "Loading…") : status.message);
-        return;
-    }
-    m_drawn = true;
-    setMessage({});
-    draw(status);
-}
-
-QJsonObject GitHubSummary::config() const
-{
-    return m_context->config();
-}
-
-QString GitHubSummary::repository() const
-{
-    return repositoryOf(config(), defaultRepository());
-}
-
-ApiClient *GitHubSummary::server() const
-{
-    return m_context->server();
-}
-
-QUrl GitHubSummary::webBase() const
-{
-    return webBaseOf(m_context->moduleSettings(kGeneralScreen));
-}
-
-QJsonValue GitHubSummary::defaultRepository() const
-{
-    return m_context->projectSetting(kProjectSettingKey);
-}
-
-void GitHubSummary::applyField(const QString &section, const QString &field)
-{
-    setSectionVisible(section, config().value(field).toBool(true));
-}
-
-void GitHubSummary::addOpenPage()
-{
-    actions()->addLinkAction(kOpenPage, QCoreApplication::translate("github", "Open page"),
-                             QCoreApplication::translate("github", "Page"), [this] { openPage(); });
-}
-
-void GitHubSummary::setPageAddress(const QUrl &url)
-{
-    m_pageAddress = isWebAddress(url) ? url : QUrl();
-    actions()->setWebLink(m_pageAddress);
-    actions()->setActionVisible(kOpenPage, !m_pageAddress.isEmpty());
-}
-
-void GitHubSummary::openPage()
-{
-    if (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier)
-        QDesktopServices::openUrl(m_pageAddress);
-    else
-        m_context->showPage(m_pageAddress);
-}
-
-void GitHubSummary::refreshStatus()
-{
-    if (m_refresh)
-        m_refresh();
-}
-
-void GitHubSummary::runAction(const QString &id, const Request &request)
-{
-    actions()->setBusy(id, true);
-    run(request, [this, id] { actions()->setBusy(id, false); });
-}
-
-void GitHubSummary::run(const Request &request, const std::function<void()> &finished)
-{
-    ApiClient *server = m_context->server();
-    if (!server) {
-        finished();
-        actions()->showError(QCoreApplication::translate("github", "This item has no server."));
-        return;
-    }
-    request(GitHubClient(*server, this), [this, finished](const ApiReply &reply) {
-        finished();
-        if (!reply.ok())
-            actions()->showError(actionError(reply));
-        else
-            refreshStatus();
+    QObject::connect(&model, &SummaryModel::busyChanged, view, [view, &model](const QString &action) {
+        view->actions()->setBusy(action, model.isBusy(action));
     });
+    QObject::connect(&model, &SummaryModel::errorChanged, view, [view, &model] {
+        if (model.error().isEmpty())
+            view->actions()->clearError();
+        else
+            view->actions()->showError(model.error());
+    });
+}
+
+void addOpenPage(widgets::SummaryView *view, SummaryModel &model)
+{
+    view->actions()->addLinkAction(kOpenPage, QCoreApplication::translate("github", "Open page"),
+                                   QCoreApplication::translate("github", "Page"), [&model] { model.openPage(); });
+}
+
+void showPageAddress(widgets::SummaryView *view, const SummaryModel &model)
+{
+    view->actions()->setWebLink(model.pageAddress());
+    view->actions()->setActionVisible(kOpenPage, !model.pageAddress().isEmpty());
 }
 
 } // namespace mirante::modules::github

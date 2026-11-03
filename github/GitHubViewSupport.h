@@ -1,9 +1,10 @@
-// What the three GitHub summaries share: drawing from a status, the actions,
-// dates and the small widgets. Private to the module. See README.md#summary-views.
+// What the GitHub summaries share: dates, pills and the small widgets of the
+// default layouts. Private to the module: a layout of an app uses the models. See README.md#summary-views.
 #pragma once
 
 #include "GitHubClient.h"
 #include "GitHubStatus.h"
+#include "GitHubSummaryModel.h"
 
 #include <mirante/Status.h>
 #include <mirante/widgets/StatusPill.h>
@@ -78,6 +79,14 @@ QString userNames(const QJsonArray &users);
 QLabel *plainLine(const QString &text);
 // The same on one line, for a row that wraps by itself.
 QLabel *plainWord(const QString &text);
+// The same states as Pill values, for a model, and a pill widget of one.
+Pill runPillOf(const QJsonObject &object);
+Pill commitStatusPillOf(const QJsonObject &status);
+Pill checksPillOf(ChecksState state);
+Pill reviewPillOf(const QString &state);
+Pill statePillOf(const QJsonObject &object);
+widgets::StatusPill *pillWidget(const Pill &pill);
+
 // A pull request's or an issue's state as a pill: "Open", "Merged" (when
 // merged or merged_at is set) or "Closed". A draft's own pill is the view's.
 widgets::StatusPill *statePill(const QJsonObject &object);
@@ -92,63 +101,14 @@ QWidget *newColumn();
 // line that says there are none.
 QWidget *labelChips(const QJsonArray &labels);
 
-// The base of the three summaries. It draws from the item's status in the status
-// cache. A subclass adds its actions in its constructor and implements draw().
-// Requests use this view as their receiver, so an answer that comes after the
-// view is gone is dropped.
-class GitHubSummary : public widgets::SummaryView
-{
-public:
-    // Draws the item's status now and at each change. Null, where the core
-    // keeps no status, stays at "Loading…".
-    void follow(ItemStatusSource *source);
-
-protected:
-    // Reads the status again.
-    void refreshStatus();
-
-    // Makes the request of an action, and passes done on to it.
-    using Request = std::function<void(const GitHubClient &, GitHubClient::Done)>;
-
-    GitHubSummary(ItemContext &context, QWidget *parent);
-
-    // Only called with data. It replaces what was drawn before.
-    virtual void draw(const ItemStatus &status) = 0;
-
-    ItemContext &context() const { return *m_context; }
-    QJsonObject config() const;
-    // The item's repository, "owner/repo", or the project's setting.
-    QString repository() const;
-    // The item's server, for a request that is not an action, or null.
-    ApiClient *server() const;
-    // The profile's web address, for an address that the data does not give.
-    QUrl webBase() const;
-    // The project's default repository, for building an address.
-    QJsonValue defaultRepository() const;
-
-    // Shows or hides a section by its field, which is on when absent.
-    void applyField(const QString &section, const QString &field);
-
-    // Adds "Open page". Called after a subclass's other actions.
-    void addOpenPage();
-    // The address of "Open page" and "Web". Without a web address, both hide.
-    void setPageAddress(const QUrl &url);
-
-    // Marks the action busy while its request runs. On success the status is
-    // read again, and on failure the action row shows why.
-    void runAction(const QString &id, const Request &request);
-    // Like runAction, for a button outside the action row. finished runs when
-    // the answer comes, before anything else.
-    void run(const Request &request, const std::function<void()> &finished);
-
-private:
-    void showStatus(const ItemStatus &status);
-    void openPage();
-
-    ItemContext *m_context;
-    QUrl m_pageAddress;
-    std::function<void()> m_refresh;
-    bool m_drawn = false;
-};
+// For the default layouts. The object name of a default layout's view, such
+// as "github-issue-default-layout", by which the tests know it.
+QString defaultLayoutName(const QString &view);
+// Shows the model's busy actions and its error in the view's action row.
+void followActions(widgets::SummaryView *view, SummaryModel &model);
+// Adds "Open page", after the view's other actions.
+void addOpenPage(widgets::SummaryView *view, SummaryModel &model);
+// The address of "Open page" and "Web". Without a web address, both hide.
+void showPageAddress(widgets::SummaryView *view, const SummaryModel &model);
 
 } // namespace mirante::modules::github

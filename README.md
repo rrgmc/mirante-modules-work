@@ -24,6 +24,8 @@ List this repository in the app's `mirante.json`, with the folders you want:
 }
 ```
 
+An app can replace the layout of the GitHub summaries with code of its own. See [layouts](github/README.md#layouts).
+
 The GitHub, GitLab and Jira modules keep a token for their server in the keychain. Use the narrowest token that works. See [what people who build with a module should know](https://github.com/rrgmc/mirante-core/blob/master/docs/writing-a-module.md#what-people-who-build-with-your-module-should-know).
 
 ## Author
