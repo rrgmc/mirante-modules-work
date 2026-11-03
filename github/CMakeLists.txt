@@ -1,4 +1,5 @@
 mirante_add_module(github
+    API       0.1
     SOURCES   GitHubClient.cpp GitHubClient.h GitHubIssueListView.cpp GitHubIssueListView.h
               GitHubIssueView.cpp GitHubIssueView.h GitHubLists.cpp GitHubLists.h GitHubListSupport.cpp
               GitHubListSupport.h GitHubModule.cpp GitHubPullRequestListView.cpp GitHubPullRequestListView.h
