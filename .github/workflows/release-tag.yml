@@ -3,6 +3,9 @@
 # core's ref in ci/manifest.json. See decision 0134 in mirante-core.
 
 name: Release tag
+# Pull request runs lead with the number. Other runs keep GitHub's default
+# title, because an empty run-name means the default.
+run-name: ${{ github.event_name == 'pull_request' && format('#{0} {1}', github.event.pull_request.number, github.event.pull_request.title) || '' }}
 
 on:
   push:
