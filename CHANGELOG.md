@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-03
+
+Lists can cover several repositories or projects, and a list's filters can start with values from its settings.
+
 ### Added
 
 - New list types over several repositories or projects: `github.pr.multilist`, `github.run.multilist`, `gitlab.mr.multilist` and `gitlab.pipeline.multilist`. Each has a list of repositories or projects in place of the scope, and leaves out the fields that fit one repository only, such as a pull request number. GitHub's pull requests come from one search; the others ask each repository or project and sort the rows by date. Their tables show each row's repository or project, with a filter on it. See [several repositories](github/README.md#several-repositories) and [several projects](gitlab/README.md#several-projects).
@@ -46,6 +50,7 @@ The first release of the work modules on their own.
 - The modules `claude`, `github`, `gitlab` and `jira`, which moved from [`mirante-modules`](https://github.com/rrgmc/mirante-modules) with their history. See [decision 0133](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0133-work-modules-in-their-own-repository.md) in the core.
 - The repository builds alone, as an app of its own folders, with CI on Windows, macOS and Linux that checks the modules' includes and translations.
 
-[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/rrgmc/mirante-modules-work/tree/v0.8.0
