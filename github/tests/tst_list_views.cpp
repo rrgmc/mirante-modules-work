@@ -1,10 +1,14 @@
-// The GitHub lists, drawn from the responses in tests/data/. A handler stands
-// in for the external browser, so nothing is opened.
+// The default layouts of the GitHub lists, drawn from the responses in
+// tests/data/. A build whose app replaces a list layout skips them;
+// tst_list_models.cpp still runs. A handler stands in for the external browser,
+// so nothing is opened.
 #include "../GitHubIssueListView.h"
 #include "../GitHubListSupport.h"
 #include "../GitHubLists.h"
 #include "../GitHubPullRequestListView.h"
 #include "../GitHubRunListView.h"
+#include "../GitHubViewSupport.h"
+#include "ListTestSupport.h"
 
 #include <mirante/testing/FakeItemContext.h>
 #include <mirante/Status.h>
@@ -42,185 +46,13 @@ using mirante::ItemStatus;
 using mirante::testing::FakeApiClient;
 using mirante::widgets::ItemListView;
 using namespace mirante::modules::github;
+using namespace listtest;
 
 namespace {
 
 enum PrColumn { PrRef, PrTitle, PrAuthor, PrChecks, PrReviews, PrUpdated, PrLinks };
 enum IssueColumn { IssueRef, IssueTitle, IssueAssignees, IssueLabels, IssueUpdated, IssueLinks };
 enum RunColumn { RunNumber, RunWorkflow, RunStatus, RunBranch, RunActor, RunStarted, RunLinks };
-
-const QString kDash = QStringLiteral("–");
-const QString kBase = QStringLiteral("https://github.example");
-// The head commit of pull_request.json.
-const QString kHeadSha = QStringLiteral("04c4ebf52e7033a83eb38e9741c8ace05bf8617b");
-
-// The GET key of a request about acme/backend.
-QString backendKey(const QString &suffix)
-{
-    return QStringLiteral("GET repos/acme/backend/") + suffix;
-}
-
-QString pullKey(int number)
-{
-    return backendKey(QStringLiteral("pulls/%1").arg(number));
-}
-
-QString reviewsKey(int number)
-{
-    return backendKey(QStringLiteral("pulls/%1/reviews?per_page=100").arg(number));
-}
-
-QString checkRunsKey(const QString &sha = kHeadSha)
-{
-    return backendKey(QStringLiteral("commits/%1/check-runs?per_page=100").arg(sha));
-}
-
-QString combinedStatusKey(const QString &sha = kHeadSha)
-{
-    return backendKey(QStringLiteral("commits/%1/status").arg(sha));
-}
-
-QString dataFile(const QString &name)
-{
-    return QFINDTESTDATA(QStringLiteral("tests/data/") + name);
-}
-
-QJsonDocument readJson(const QString &name)
-{
-    QFile file(dataFile(name));
-    if (!file.open(QIODevice::ReadOnly))
-        qFatal("Cannot read %s", qPrintable(name));
-    return QJsonDocument::fromJson(file.readAll());
-}
-
-ItemStatus statusOfRows(const QJsonArray &rows)
-{
-    ItemStatus status;
-    status.state = ItemStatus::State::Ok;
-    status.data = QJsonObject{{QStringLiteral("rows"), rows}, {QStringLiteral("total"), int(rows.size())}};
-    return status;
-}
-
-QJsonArray pullRequestRows()
-{
-    return readJson(QStringLiteral("pr_search.json")).object().value(QStringLiteral("items")).toArray();
-}
-
-ItemStatus pullRequests()
-{
-    return statusOfRows(pullRequestRows());
-}
-
-ItemStatus issues()
-{
-    return statusOfRows(readJson(QStringLiteral("issue_search.json")).object().value(QStringLiteral("items")).toArray());
-}
-
-QJsonArray runRows()
-{
-    return readJson(QStringLiteral("run_list.json")).object().value(QStringLiteral("workflow_runs")).toArray();
-}
-
-ItemStatus runs()
-{
-    return statusOfRows(runRows());
-}
-
-QJsonObject runConfig()
-{
-    return QJsonObject{{QStringLiteral("repository"), QStringLiteral("acme/backend")},
-                       {QStringLiteral("source"), QStringLiteral("all")}};
-}
-
-// count pull requests of acme/backend, numbered from 1, where a higher number
-// is newer. The array holds the oldest first.
-QJsonArray manyPullRequests(int count)
-{
-    QJsonArray rows;
-    for (int number = 1; number <= count; ++number) {
-        rows.append(QJsonObject{
-            {QStringLiteral("number"), number},
-            {QStringLiteral("repository_url"), QStringLiteral("https://api.github.com/repos/acme/backend")},
-            {QStringLiteral("title"), QStringLiteral("Change %1").arg(number)},
-            {QStringLiteral("updated_at"), QDateTime(QDate(2026, 10, 1), QTime(0, 0), QTimeZone::UTC)
-                                               .addSecs(number * 3600)
-                                               .toString(Qt::ISODate)}});
-    }
-    return rows;
-}
-
-// A status source that a test drives by hand.
-class FakeStatusSource : public mirante::ItemStatusSource
-{
-public:
-    ItemStatus status;
-
-    ItemStatus current() const override { return status; }
-    void refresh() override {}
-    void subscribe(QObject *receiver, std::function<void(const ItemStatus &)> changed) override
-    {
-        m_subscribers.push_back({receiver, std::move(changed)});
-    }
-
-    void change(const ItemStatus &next)
-    {
-        status = next;
-        for (const Subscriber &subscriber : m_subscribers) {
-            if (subscriber.receiver)
-                subscriber.changed(next);
-        }
-    }
-
-private:
-    struct Subscriber
-    {
-        QPointer<QObject> receiver;
-        std::function<void(const ItemStatus &)> changed;
-    };
-    std::vector<Subscriber> m_subscribers;
-};
-
-struct AddedItem
-{
-    QString typeId;
-    QString name;
-    QJsonObject config;
-};
-
-class FakeContext : public mirante::testing::FakeItemContext
-{
-public:
-    FakeContext()
-    {
-        itemConfig = QJsonObject{{QStringLiteral("scope"), QStringLiteral("repository")},
-                     {QStringLiteral("repository"), QStringLiteral("own/config")}};
-    }
-
-    QJsonObject general{{QStringLiteral("baseUrl"), kBase}};
-    QJsonValue repositorySetting;
-    QList<QUrl> pages;
-    QList<AddedItem> added;
-    FakeApiClient client{QUrl(kBase + QStringLiteral("/api/v3/"))};
-    FakeStatusSource source;
-    bool hasStatus = true;
-
-    QJsonValue projectSetting(const QString &key) const override
-    {
-        return key == QLatin1String("repository") ? repositorySetting : QJsonValue();
-    }
-    QJsonObject moduleSettings(const QString &screenId) const override
-    {
-        return screenId == QLatin1String("general") ? general : QJsonObject();
-    }
-    void showPage(const QUrl &url) override { pages << url; }
-    QString addItemToTask(const QString &typeId, const QString &name, const QJsonObject &config) override
-    {
-        added.append(AddedItem{typeId, name, config});
-        return QStringLiteral("new-item");
-    }
-    mirante::ApiClient *server() override { return &client; }
-    mirante::ItemStatusSource *status() override { return hasStatus ? &source : nullptr; }
-};
 
 using View = std::unique_ptr<QWidget>;
 
@@ -363,28 +195,6 @@ bool menuEntryEnabled(const View &view, const QString &key, const QString &text)
     return enabled;
 }
 
-// Answers for acme/backend#42: checks failed, by the combined status, and one
-// approval.
-void setUpBackend42(FakeContext &context)
-{
-    QVERIFY(context.client.setJsonFile(pullKey(42), dataFile(QStringLiteral("pull_request.json"))));
-    QVERIFY(context.client.setJsonFile(reviewsKey(42), dataFile(QStringLiteral("pull_request_reviews.json"))));
-    QVERIFY(context.client.setJsonFile(checkRunsKey(), dataFile(QStringLiteral("check_runs.json"))));
-    QVERIFY(context.client.setJsonFile(combinedStatusKey(), dataFile(QStringLiteral("combined_status.json"))));
-}
-
-// A pull request whose head is sha, and one check run with this conclusion on it.
-void setChecksAnswer(FakeContext &context, int number, const QString &sha, const QString &conclusion)
-{
-    context.client.setJson(pullKey(number),
-                           QJsonDocument(QJsonObject{{QStringLiteral("head"), QJsonObject{{QStringLiteral("sha"), sha}}}}));
-    context.client.setJson(
-        checkRunsKey(sha),
-        QJsonDocument(QJsonObject{{QStringLiteral("check_runs"),
-                                   QJsonArray{QJsonObject{{QStringLiteral("status"), QStringLiteral("completed")},
-                                                          {QStringLiteral("conclusion"), conclusion}}}}}));
-}
-
 } // namespace
 
 class TestListViews : public QObject
@@ -396,6 +206,19 @@ public slots:
     void openUrl(const QUrl &url) { m_opened << url; }
 
 private slots:
+    // These tests know the default layouts' widgets.
+    void initTestCase()
+    {
+        FakeContext context;
+        const View issueView(createIssueListView(context, nullptr));
+        const View pullRequestView(createPullRequestListView(context, nullptr));
+        const View runView(createRunListView(context, nullptr));
+        if (issueView->objectName() != defaultLayoutName(QStringLiteral("issue-list"))
+            || pullRequestView->objectName() != defaultLayoutName(QStringLiteral("pull-request-list"))
+            || runView->objectName() != defaultLayoutName(QStringLiteral("run-list")))
+            QSKIP("The app replaces a layout of the GitHub lists.");
+    }
+
     void init()
     {
         m_opened.clear();
@@ -407,14 +230,6 @@ private slots:
     {
         QDesktopServices::unsetUrlHandler(QStringLiteral("https"));
         QDesktopServices::unsetUrlHandler(QStringLiteral("http"));
-    }
-
-    void rowRepositoryReadsTheApiAddress()
-    {
-        const QJsonObject row{
-            {QStringLiteral("repository_url"), QStringLiteral("https://api.github.com/repos/cli/cli")}};
-        QCOMPARE(rowRepository(row), QStringLiteral("cli/cli"));
-        QCOMPARE(rowRepository(QJsonObject()), QString());
     }
 
     // Drawing.

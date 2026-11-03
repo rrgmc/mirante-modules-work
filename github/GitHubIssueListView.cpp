@@ -1,71 +1,78 @@
 #include "GitHubIssueListView.h"
 
+#include "GitHubIssueListLayout.h"
 #include "GitHubListSupport.h"
-#include "GitHubViewSupport.h"
+#include "GitHubLists.h"
+#include "GitHubSettings.h"
 
 #include <mirante/ItemContext.h>
 
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QStringList>
-
-using mirante::widgets::ListCell;
 
 namespace mirante::modules::github {
 
 namespace {
 
-enum Column { RefColumn, TitleColumn, AssigneesColumn, LabelsColumn, UpdatedColumn, LinksColumn };
-
-ListTraits issueTraits()
-{
-    return {ListKind::Issues, QStringLiteral("github.issue.summary"), QCoreApplication::translate("github", "No issues")};
-}
-
-// GitHub's labels are objects with a name.
-QString labelNames(const QJsonArray &labels)
+QStringList names(const QJsonArray &objects, const QString &field)
 {
     QStringList names;
-    for (const QJsonValue &label : labels)
-        names << label.toObject().value(QStringLiteral("name")).toString();
-    names.removeAll(QString());
-    return names.join(QStringLiteral(", "));
+    for (const QJsonValue &object : objects) {
+        const QString name = object.toObject().value(field).toString();
+        if (!name.isEmpty())
+            names << name;
+    }
+    return names;
 }
-
-class IssueListView : public NumberedList
-{
-public:
-    IssueListView(ItemContext &context, QWidget *parent)
-        : NumberedList(context, issueTraits(), parent)
-    {
-        setColumns({{QCoreApplication::translate("github", "Ref"), 1},
-                    {QCoreApplication::translate("github", "Title"), 0, true},
-                    {QCoreApplication::translate("github", "Assignees"), 3},
-                    {QCoreApplication::translate("github", "Labels"), 4},
-                    {QCoreApplication::translate("github", "Updated"), 2},
-                    {QCoreApplication::translate("github", "Links"), 0}},
-                   UpdatedColumn);
-    }
-
-protected:
-    QList<ListCell> rowCells(const ListRowTarget &target, const QJsonObject &row) const override
-    {
-        return {refCell(target),
-                {row.value(QStringLiteral("title")).toString(), {}, {}},
-                {userNames(row.value(QStringLiteral("assignees")).toArray()), {}, {}},
-                {labelNames(row.value(QStringLiteral("labels")).toArray()), {}, {}},
-                dateCell(row.value(QStringLiteral("updated_at"))),
-                linksCell(target)};
-    }
-};
 
 } // namespace
 
+IssueListModel::IssueListModel(ItemContext &context)
+    : ListModel(context, QCoreApplication::translate("github", "No issues"),
+                listWebUrl(ListKind::Issues, webBaseOf(context.moduleSettings(kGeneralScreen)), context.config(),
+                           context.projectSetting(kProjectSettingKey)),
+                listDescription(ListKind::Issues, context.config(), context.projectSetting(kProjectSettingKey)))
+{
+}
+
+QList<IssueListModel::Issue> IssueListModel::issues() const
+{
+    QList<Issue> issues;
+    for (const QString &key : keys())
+        issues << m_issues.value(key);
+    return issues;
+}
+
+void IssueListModel::read(const QJsonArray &rows, const QUrl &webBase)
+{
+    m_issues.clear();
+    for (int index = 0; index < rows.size(); ++index) {
+        const QJsonObject row = rows.at(index).toObject();
+        const NumberedRow read =
+            readNumberedRow(row, index, webBase, ListKind::Issues, QStringLiteral("github.issue.summary"));
+        addRow(read.row, read.add);
+
+        Issue issue;
+        static_cast<ListRow &>(issue) = this->row(read.row.key);
+        issue.repository = read.repository;
+        issue.number = read.number;
+        issue.ref = read.ref;
+        issue.refSortKey = read.refSortKey;
+        issue.title = row.value(QStringLiteral("title")).toString();
+        issue.assignees = names(row.value(QStringLiteral("assignees")).toArray(), QStringLiteral("login"));
+        issue.labels = names(row.value(QStringLiteral("labels")).toArray(), QStringLiteral("name"));
+        issue.updated = QDateTime::fromString(row.value(QStringLiteral("updated_at")).toString(), Qt::ISODateWithMs);
+        m_issues.insert(issue.key, issue);
+    }
+}
+
 QWidget *createIssueListView(ItemContext &context, QWidget *parent)
 {
-    auto *view = new IssueListView(context, parent);
-    view->follow(context.status());
+    auto *model = new IssueListModel(context);
+    model->follow(context.status());
+    QWidget *view = makeIssueListLayout(*model, parent);
+    model->attach(view);
     return view;
 }
 

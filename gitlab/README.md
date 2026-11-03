@@ -188,24 +188,44 @@ The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json`, `issu
 
 ## List views
 
-`GitLabMergeRequestListView.cpp`, `GitLabIssueListView.cpp` and `GitLabPipelineListView.cpp` each hold one class, a subclass of `GitLabList` in `GitLabListSupport.h`, which is private to the module. It is an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit). The first two go through `NumberedList`, which reads a row's project and number. The columns and rules are in [item types](../../../docs/item-types.md#gitlab). `GitLabList` holds what they share:
+Each list has two parts: a **model**, which the module keeps, and a **layout**, which draws the model and which an app can replace. See [list layouts](#list-layouts). `GitLabMergeRequestListView.cpp`, `GitLabIssueListView.cpp` and `GitLabPipelineListView.cpp` hold the models; `GitLab*ListLayoutDefault.cpp` hold the default layouts, which draw an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit) through `DefaultListLayout` in `GitLabListSupport.h`. The columns and rules are in [item types](../../../docs/item-types.md#gitlab). `ListModel`, the models' base in `GitLabListModel.h`, and the default layouts hold what they share:
 
-- **Drawing.** `follow()` draws the item's status now and at each change, as a summary does. An empty list shows the table and a line of its own, because `setMessage()` shows instead of the table.
+- **Drawing.** `follow()` reads the item's status now and at each change, as a summary's model does, and says `changed()`. An empty list shows the table and a line of its own, `emptyText()`, because `setMessage()` shows instead of the table.
 - **Rows.** A row's key is its project and number, such as `acme/backend!42`, because a list can span projects. `rowProject()` reads the project from `references.full`, else from `web_url` with the base URL of the item's profile. `project_id` is a number, so it is not used, and neither is the item's configuration. A row that names neither still draws, without requests or "Add". A pipeline's key is its id, and its project is the item's, because the list has one project. See [decision 0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md): there is no preview, and a click on a row only selects it.
-- **Pages and dates.** The constructor calls `setPageSize()` with the `pageSize` field. `dateCell()` draws a date with `compactDate()` and sorts by the date itself. A missing date is a dash, and sorts as the oldest.
-- **Links.** `linksCell()` makes the last column, whose ids are `web`, `open` and `add`, in that order. A link goes when the row cannot do it: without an address "Web" and "Open", without a project or a ref "Add". The cell's `sortKey` is the row's, because a cell with links has no text, and without it the order of equal rows would depend on the sort before.
+- **Pages and dates.** `pageSize()` reads the `pageSize` field, and the default layout calls `setPageSize()` with it. `dateCell()` draws a date with `compactDate()` and sorts by the date itself. A missing date is a dash, and sorts as the oldest.
+- **Links.** The row actions are the model's: `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`, by the row's key. In the default layout, `linksCell()` makes the last column, whose ids are `web`, `open` and `add`, in that order. A link goes when the row cannot do it: without an address "Web" and "Open", without a project or a ref "Add". The cell's `sortKey` is the row's, because a cell with links has no text, and without it the order of equal rows would depend on the sort before.
 - **The row menu** is a `QMenu` that belongs to the view and uses `popup()`, so nothing waits on it if the view is made again. It offers the same as the links, and "Copy link".
 
-`GitLabMergeRequestListView.cpp` also fills the Pipeline and Approvals columns, as decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md) describe:
+The merge request model, `MergeRequestListModel`, also reads each row's head pipeline and approvals, which fill the default layout's Pipeline and Approvals columns, as decisions [0067](../../../docs/decisions/0067-lists-report-status.md) and [0071](../../../docs/decisions/0071-lists-link-out-without-a-preview.md) describe:
 
-- **Requests.** `askForCells()` runs while the view is visible, after each new status and each time the view shows. It asks with `GitLabClient::mergeRequest()` for the Pipeline column and `approvals()` for the Approvals column, for the first 25 of `visibleKeys()`. A column with its field off asks for nothing. A column hidden only because the cell is narrow still asks.
-- **A new page, sort or filter.** `visibleKeysChanged()` runs `askForNewKeys()`. It asks only for rows that have not been asked for since the latest status, and a row that stays keeps what is on the way. An answer can move its row when the table is sorted on that column, and such a move does not ask again. Otherwise rows with an answer and rows without one could keep trading places, each asking the server again.
-- **Receivers.** Each row's requests use a child `QObject` of the view as their receiver. A row leaving the first 25 deletes its own. A new status, or hiding the view, deletes them all. The answers on the way are dropped. `ServerClient` still sends requests that were already queued.
-- **Answers.** The latest answers are kept by row, and new rows draw with them, so the cells do not flicker at each poll. A failed request puts the dash back, and so does a row leaving the first 25.
+- **Requests.** The layout tells the model which rows it shows with `setVisibleRows()`, after each `changed()` and whenever they change; the default layout passes `visibleKeys()`. While the view is visible, after each new status and each time the view shows, the model asks with `GitLabClient::mergeRequest()` for the pipeline and `approvals()` for the approvals, for the first 25 of them (`AskedRows`). A column with its field off asks for nothing. A column hidden only because the cell is narrow still asks.
+- **A new page, sort or filter.** The model asks only for rows that have not been asked for since the latest status, and a row that stays keeps what is on the way. An answer can move its row when the table is sorted on that column, and such a move does not ask again. Otherwise rows with an answer and rows without one could keep trading places, each asking the server again.
+- **Receivers.** Each row's requests use a child `QObject` of the model as their receiver. A row leaving the first 25 deletes its own. A new status, or hiding the view, deletes them all. The answers on the way are dropped. `ServerClient` still sends requests that were already queued.
+- **Answers.** The latest answers are kept by row, and new rows draw with them, so the cells do not flicker at each poll. Each answer says `rowChanged(key)`, and the default layout then sets only the cells that changed. A failed request puts the dash back, and so does a row leaving the first 25.
 
-`GitLabPipelineListView.cpp` makes no further requests, so Author and Started show what the list's answer holds. GitLab leaves `user` and `started_at` out of its list answers, so Author usually shows a dash, and Started falls back to `created_at`. "Add" reads `refs/merge-requests/<iid>/head`, `/merge` and `/train` as that merge request, and any other ref as a branch.
+The pipeline model makes no further requests, so Author and Started show what the list's answer holds. GitLab leaves `user` and `started_at` out of its list answers, so Author usually shows a dash, and Started falls back to `created_at`. "Add" reads `refs/merge-requests/<iid>/head`, `/merge` and `/train` as that merge request, and any other ref as a branch.
 
-The table's cells draw text from a server as plain text. The tests are in `tests/tst_list_views.cpp`, with a fake context and a fake status source, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`.
+The table's cells draw text from a server as plain text. The tests of the models are in `tests/tst_list_models.cpp`, and those of the default layouts in `tests/tst_list_views.cpp`, with a fake context and a fake status source from `tests/ListTestSupport.h`, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`. The layouts' tests skip when an app replaces a list layout; the models' tests run in every build.
+
+## List layouts
+
+An app can replace the whole layout of each list when it builds Mirante, as for the [summaries](#layouts). **The contract** and how an app names an extension are in [replacing the layout of a view](../README.md#replacing-the-layout-of-a-view).
+
+| Point | Interface | Model | Default |
+|---|---|---|---|
+| `issuelistlayout` | `makeIssueListLayout()` in `GitLabIssueListLayout.h` | `IssueListModel` | `GitLabIssueListLayoutDefault.cpp` |
+| `mergerequestlistlayout` | `makeMergeRequestListLayout()` in `GitLabMergeRequestListLayout.h` | `MergeRequestListModel` | `GitLabMergeRequestListLayoutDefault.cpp` |
+| `pipelinelistlayout` | `makePipelineListLayout()` in `GitLabPipelineListLayout.h` | `PipelineListModel` | `GitLabPipelineListLayoutDefault.cpp` |
+
+**What every list model gives** (`ListModel`, in `GitLabListModel.h`): `hasData()` and `message()`; `description()`, `pageAddress()`, `emptyText()` and `pageSize()`; `config()` and `isColumnShown(column)`, which reads the `show<Column>` fields; `keys()` and `row(key)`, with GitLab's row object, its page and whether it can be added; the row actions `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`; and `setVisibleRows(keys)`, which a layout calls after each `changed()` and whenever the rows it shows change.
+
+**What each model adds:**
+
+- `IssueListModel`: `issues()` and `issue(key)`, each with its project, iid, ref, title, assignees, labels and update time.
+- `MergeRequestListModel`: `mergeRequests()` and `mergeRequest(key)`, each with its project, iid, ref, title, author, update time, `pipeline` (a `Pill`, empty until the answer comes) and `approvals`: whether answered, those given and those required. Only the first 25 shown rows, `AskedRows`, get them, and each answer says `rowChanged(key)`.
+- `PipelineListModel`: `pipelines()` and `pipeline(key)`, each with its id, state (a `Pill`), ref, author and start time.
+
+A layout that does not use `ItemListView` sorts, filters and pages the rows itself. The headers and `GitLabListModel.h` are an interface that apps build against; a change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## Pages
 

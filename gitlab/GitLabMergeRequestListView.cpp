@@ -2,208 +2,196 @@
 
 #include "GitLabClient.h"
 #include "GitLabListSupport.h"
+#include "GitLabLists.h"
+#include "GitLabMergeRequestListLayout.h"
+#include "GitLabSettings.h"
 #include "GitLabViewSupport.h"
 
 #include <mirante/ItemContext.h>
 
 #include <QCoreApplication>
-#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QScopedValueRollback>
 #include <QSet>
-#include <QStringList>
-
-using mirante::widgets::ListCell;
 
 namespace mirante::modules::gitlab {
 
 namespace {
 
-enum Column { RefColumn, TitleColumn, AuthorColumn, PipelineColumn, ApprovalsColumn, UpdatedColumn, LinksColumn };
-
-// The rows of the page that get the further requests. See decisions 0067 and 0071.
-constexpr int kAskedRows = 25;
-
-ListTraits mergeRequestTraits()
-{
-    return {ListKind::MergeRequests,
-            QLatin1Char('!'),
-            QStringLiteral("gitlab.mr.summary"),
-            QCoreApplication::translate("gitlab", "No merge requests")};
-}
-
-ListCell pipelineCell(const QJsonObject &mergeRequest)
+Pill pipelineOf(const QJsonObject &mergeRequest)
 {
     const QString status =
         mergeRequest.value(QStringLiteral("head_pipeline")).toObject().value(QStringLiteral("status")).toString();
-    if (status.isEmpty())
-        return dashCell();
-    return {statusText(status), {}, statusRole(status)};
+    return status.isEmpty() ? Pill() : statusPillOf(status);
 }
-
-// Such as "1/2", or just the count when none are required, as in the status's
-// summary. Sorted by the approvals given, and a row without an answer comes last.
-ListCell approvalsCell(const QJsonObject &approvals)
-{
-    const int given = int(approvals.value(QStringLiteral("approved_by")).toArray().size());
-    const int required = approvals.value(QStringLiteral("approvals_required")).toInt();
-    const QString text = required > 0 ? QStringLiteral("%1/%2").arg(given).arg(required) : QString::number(given);
-    return {text, given, {}};
-}
-
-ListCell noApprovalsCell()
-{
-    ListCell cell = dashCell();
-    cell.sortKey = -1;
-    return cell;
-}
-
-class MergeRequestListView : public NumberedList
-{
-public:
-    MergeRequestListView(ItemContext &context, QWidget *parent)
-        : NumberedList(context, mergeRequestTraits(), parent)
-        , m_showPipeline(context.config().value(QStringLiteral("showPipeline")).toBool(true))
-        , m_showApprovals(context.config().value(QStringLiteral("showApprovals")).toBool(true))
-    {
-        setColumns({{QCoreApplication::translate("gitlab", "Ref"), 1},
-                    {QCoreApplication::translate("gitlab", "Title"), 0, true},
-                    {QCoreApplication::translate("gitlab", "Author"), 5},
-                    {QCoreApplication::translate("gitlab", "Pipeline"), 2},
-                    {QCoreApplication::translate("gitlab", "Approvals"), 4},
-                    {QCoreApplication::translate("gitlab", "Updated"), 3},
-                    {QCoreApplication::translate("gitlab", "Links"), 0}},
-                   UpdatedColumn);
-        setColumnVisible(PipelineColumn, m_showPipeline);
-        setColumnVisible(ApprovalsColumn, m_showApprovals);
-    }
-
-protected:
-    QList<ListCell> rowCells(const ListRowTarget &target, const QJsonObject &row) const override
-    {
-        return {refCell(target),
-                {row.value(QStringLiteral("title")).toString(), {}, {}},
-                {row.value(QStringLiteral("author")).toObject().value(QStringLiteral("name")).toString(), {}, {}},
-                m_pipelines.value(target.key, dashCell()),
-                m_approvals.value(target.key, noApprovalsCell()),
-                dateCell(row.value(QStringLiteral("updated_at"))),
-                linksCell(target)};
-    }
-
-    // A new status asks again for every row.
-    void askForCells() override
-    {
-        stopAsking();
-        askForNewKeys();
-    }
-
-    // A row that stays keeps what is on the way, or the answer it has. An answer
-    // can move its row when the table sorts on that column. That does not ask again
-    // until the next change, or rows would keep trading places with those they push
-    // out of the first 25.
-    void askForNewKeys() override
-    {
-        if (m_answering)
-            return;
-        forgetOthers(askedKeys());
-
-        ApiClient *server = context().server();
-        if (!server || (!m_showPipeline && !m_showApprovals))
-            return;
-        for (const QString &key : askedKeys()) {
-            if (!m_rounds.contains(key))
-                ask(*server, key);
-        }
-    }
-
-    void stopAsking() override
-    {
-        // The answers to their requests are dropped with them.
-        qDeleteAll(m_rounds);
-        m_rounds.clear();
-    }
-
-private:
-    QStringList askedKeys() const { return visibleKeys().mid(0, kAskedRows); }
-
-    void ask(ApiClient &server, const QString &key)
-    {
-        const ListRowTarget row = target(key);
-        if (!row.complete())
-            return;
-        auto *round = new QObject(this);
-        m_rounds.insert(key, round);
-        const GitLabClient client(server, round);
-        if (m_showPipeline) {
-            client.mergeRequest(row.project, row.iid, [this, key](const ApiReply &reply) {
-                const ListCell cell = reply.ok() ? pipelineCell(reply.json.object()) : dashCell();
-                m_pipelines.insert(key, cell);
-                setAnswer(key, PipelineColumn, cell);
-            });
-        }
-        if (m_showApprovals) {
-            client.approvals(row.project, row.iid, [this, key](const ApiReply &reply) {
-                const ListCell cell = reply.ok() ? approvalsCell(reply.json.object()) : noApprovalsCell();
-                m_approvals.insert(key, cell);
-                setAnswer(key, ApprovalsColumn, cell);
-            });
-        }
-    }
-
-    void setAnswer(const QString &key, int column, const ListCell &cell)
-    {
-        const QScopedValueRollback answering(m_answering, true);
-        setCell(key, column, cell);
-    }
-
-    // Rows that are not asked for drop what is on the way and go back to a dash.
-    // The others keep their last answer until the new one comes, so the cells do
-    // not flicker at each poll.
-    void forgetOthers(const QStringList &asked)
-    {
-        const QSet<QString> kept(asked.cbegin(), asked.cend());
-        for (auto it = m_rounds.begin(); it != m_rounds.end();) {
-            if (kept.contains(it.key())) {
-                ++it;
-            } else {
-                delete it.value();
-                it = m_rounds.erase(it);
-            }
-        }
-        const auto forget = [this, &kept](QHash<QString, ListCell> &answers, int column, const ListCell &empty) {
-            for (auto it = answers.begin(); it != answers.end();) {
-                if (kept.contains(it.key())) {
-                    ++it;
-                } else {
-                    setAnswer(it.key(), column, empty);
-                    it = answers.erase(it);
-                }
-            }
-        };
-        forget(m_pipelines, PipelineColumn, dashCell());
-        forget(m_approvals, ApprovalsColumn, noApprovalsCell());
-    }
-
-    bool m_showPipeline;
-    bool m_showApprovals;
-    // The requests of the rows asked for since the latest status, each row with a
-    // receiver of its own, so they can be cancelled row by row. A row stays here
-    // after its answers come.
-    QHash<QString, QObject *> m_rounds;
-    // The latest answers, by row.
-    QHash<QString, ListCell> m_pipelines;
-    QHash<QString, ListCell> m_approvals;
-    // A cell is changing because of an answer.
-    bool m_answering = false;
-};
 
 } // namespace
 
+MergeRequestListModel::MergeRequestListModel(ItemContext &context)
+    : ListModel(context, QCoreApplication::translate("gitlab", "No merge requests"),
+                listWebUrl(ListKind::MergeRequests, baseUrlOf(context.moduleSettings(kGeneralScreen)),
+                           context.config(), context.projectSetting(kProjectSettingKey)),
+                listDescription(ListKind::MergeRequests, context.config(), context.projectSetting(kProjectSettingKey)))
+{
+}
+
+MergeRequestListModel::~MergeRequestListModel() = default;
+
+QList<MergeRequestListModel::MergeRequest> MergeRequestListModel::mergeRequests() const
+{
+    QList<MergeRequest> mergeRequests;
+    for (const QString &key : keys())
+        mergeRequests << mergeRequest(key);
+    return mergeRequests;
+}
+
+MergeRequestListModel::MergeRequest MergeRequestListModel::mergeRequest(const QString &key) const
+{
+    MergeRequest mergeRequest = m_mergeRequests.value(key);
+    mergeRequest.pipeline = m_pipelines.value(key);
+    mergeRequest.approvals = m_approvals.value(key);
+    return mergeRequest;
+}
+
+void MergeRequestListModel::setVisibleRows(const QStringList &keys)
+{
+    m_visible = keys;
+    // An answer can move its row when the table sorts on that column. That does
+    // not ask again until the next change, or rows would keep trading places
+    // with those they push out of the first 25.
+    if (!m_answering && isViewVisible())
+        askForNewKeys();
+}
+
+void MergeRequestListModel::read(const QJsonArray &rows, const QUrl &baseUrl)
+{
+    m_mergeRequests.clear();
+    for (int index = 0; index < rows.size(); ++index) {
+        const QJsonObject row = rows.at(index).toObject();
+        const NumberedRow read = readNumberedRow(row, index, baseUrl, ListKind::MergeRequests, QLatin1Char('!'),
+                                                 QStringLiteral("gitlab.mr.summary"));
+        addRow(read.row, read.add);
+
+        MergeRequest mergeRequest;
+        static_cast<ListRow &>(mergeRequest) = this->row(read.row.key);
+        mergeRequest.project = read.project;
+        mergeRequest.iid = read.iid;
+        mergeRequest.ref = read.ref;
+        mergeRequest.refSortKey = read.refSortKey;
+        mergeRequest.title = row.value(QStringLiteral("title")).toString();
+        mergeRequest.author = row.value(QStringLiteral("author")).toObject().value(QStringLiteral("name")).toString();
+        mergeRequest.updated =
+            QDateTime::fromString(row.value(QStringLiteral("updated_at")).toString(), Qt::ISODateWithMs);
+        m_mergeRequests.insert(mergeRequest.key, mergeRequest);
+    }
+    // A new status asks again for every row, once the layout says which show.
+    stopAsking();
+}
+
+void MergeRequestListModel::viewVisibilityChanged(bool visible)
+{
+    stopAsking();
+    if (visible)
+        askForNewKeys();
+}
+
+void MergeRequestListModel::askForNewKeys()
+{
+    const QStringList asked = m_visible.mid(0, AskedRows);
+    forgetOthers(asked);
+
+    ApiClient *server = context().server();
+    if (!server || (!isColumnShown(QStringLiteral("pipeline")) && !isColumnShown(QStringLiteral("approvals"))))
+        return;
+    for (const QString &key : asked) {
+        if (!m_rounds.contains(key))
+            ask(*server, key);
+    }
+}
+
+void MergeRequestListModel::stopAsking()
+{
+    // The answers to their requests are dropped with them.
+    qDeleteAll(m_rounds);
+    m_rounds.clear();
+}
+
+void MergeRequestListModel::ask(ApiClient &server, const QString &key)
+{
+    const MergeRequest row = m_mergeRequests.value(key);
+    if (row.project.isEmpty() || row.iid <= 0)
+        return;
+    auto *round = new QObject(this);
+    m_rounds.insert(key, round);
+    const GitLabClient client(server, round);
+    if (isColumnShown(QStringLiteral("pipeline"))) {
+        client.mergeRequest(row.project, row.iid, [this, key](const ApiReply &reply) {
+            m_pipelines.insert(key, reply.ok() ? pipelineOf(reply.json.object()) : Pill());
+            answer(key);
+        });
+    }
+    if (isColumnShown(QStringLiteral("approvals"))) {
+        client.approvals(row.project, row.iid, [this, key](const ApiReply &reply) {
+            Approvals approvals;
+            if (reply.ok()) {
+                const QJsonObject answer = reply.json.object();
+                approvals = {true, int(answer.value(QStringLiteral("approved_by")).toArray().size()),
+                             answer.value(QStringLiteral("approvals_required")).toInt()};
+            }
+            m_approvals.insert(key, approvals);
+            this->answer(key);
+        });
+    }
+}
+
+void MergeRequestListModel::answer(const QString &key)
+{
+    const QScopedValueRollback answering(m_answering, true);
+    emit rowChanged(key);
+}
+
+// Rows that are not asked for drop what is on the way and their answers. The
+// others keep their last answer until the new one comes, so the cells do not
+// flicker at each poll.
+void MergeRequestListModel::forgetOthers(const QStringList &asked)
+{
+    const QSet<QString> kept(asked.cbegin(), asked.cend());
+    for (auto it = m_rounds.begin(); it != m_rounds.end();) {
+        if (kept.contains(it.key())) {
+            ++it;
+        } else {
+            delete it.value();
+            it = m_rounds.erase(it);
+        }
+    }
+    QSet<QString> forgotten;
+    for (auto it = m_pipelines.begin(); it != m_pipelines.end();) {
+        if (kept.contains(it.key())) {
+            ++it;
+        } else {
+            forgotten.insert(it.key());
+            it = m_pipelines.erase(it);
+        }
+    }
+    for (auto it = m_approvals.begin(); it != m_approvals.end();) {
+        if (kept.contains(it.key())) {
+            ++it;
+        } else {
+            forgotten.insert(it.key());
+            it = m_approvals.erase(it);
+        }
+    }
+    for (const QString &key : std::as_const(forgotten))
+        answer(key);
+}
+
 QWidget *createMergeRequestListView(ItemContext &context, QWidget *parent)
 {
-    auto *view = new MergeRequestListView(context, parent);
-    view->follow(context.status());
+    auto *model = new MergeRequestListModel(context);
+    model->follow(context.status());
+    QWidget *view = makeMergeRequestListLayout(*model, parent);
+    model->attach(view);
     return view;
 }
 
