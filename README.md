@@ -33,8 +33,8 @@ An app can replace the whole layout of a module's native views when it builds Mi
 | Module | Points |
 |---|---|
 | GitHub | `issuelayout`, `pullrequestlayout`, `runlayout`, and for its lists `issuelistlayout`, `pullrequestlistlayout`, `runlistlayout`. See [its layouts](github/README.md#layouts) and [list layouts](github/README.md#list-layouts). |
-| GitLab | `issuelayout`, `mergerequestlayout`, `pipelinelayout`. See [its layouts](gitlab/README.md#layouts). |
-| Jira | `issuelayout`. See [its layouts](jira/README.md#layouts). |
+| GitLab | `issuelayout`, `mergerequestlayout`, `pipelinelayout`, and for its lists `issuelistlayout`, `mergerequestlistlayout`, `pipelinelistlayout`. See [its layouts](gitlab/README.md#layouts) and [list layouts](gitlab/README.md#list-layouts). |
+| Jira | `issuelayout`, and for its list `listlayout`. See [its layouts](jira/README.md#layouts). |
 
 The Claude module has no native views, so it has no points.
 

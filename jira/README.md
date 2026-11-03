@@ -165,11 +165,12 @@ The two views find the ids differently:
 
 ## Layouts
 
-An app can replace the whole layout of the issue summary when it builds Mirante. **The contract** and how an app names an extension, in its own repository or in a repository of extensions, are in [replacing the layout of a view](../README.md#replacing-the-layout-of-a-view).
+An app can replace the whole layout of the issue summary and of the list when it builds Mirante. **The contract** and how an app names an extension, in its own repository or in a repository of extensions, are in [replacing the layout of a view](../README.md#replacing-the-layout-of-a-view).
 
 | Point | Interface | Model | Default |
 |---|---|---|---|
 | `issuelayout` | `makeIssueLayout()` in `JiraIssueLayout.h` | `IssueModel` | `JiraIssueLayoutDefault.cpp` |
+| `listlayout` | `makeListLayout()` in `JiraListLayout.h` | `ListModel` | `JiraListLayoutDefault.cpp` |
 
 An extension defines `makeIssueLayout()` in the namespace `mirante::modules::jira`. The view only reads, so the model has no actions. `IssueModel` gives:
 
@@ -181,7 +182,14 @@ An extension defines `makeIssueLayout()` in the namespace `mirante::modules::jir
 - `linkedIssues()`: the sub-tasks, the links and the children of an epic, each with its key, text and page; `moreChildren()`, the children the status left out.
 - `pageAddress()` and `openPage()`.
 
-`JiraIssueLayout.h` is an interface that apps build against; a change to it is listed in [`CHANGELOG.md`](../CHANGELOG.md).
+`ListModel` gives:
+
+- `hasData()` and `message()`, `description()`, `pageAddress()` and `pageSize()`.
+- `extraFields()`, the names of the [extra fields](#extra-fields), and `extraFieldsFound()`, whether the site has each.
+- `issues()` and `issue(key)`, in the order of Jira's answer, each with its key, a key that sorts `OPS-9` before `OPS-10`, its summary, its status (a `Pill`), its assignee, its update time, the values of the extra fields and its page.
+- The row actions `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`, by the key.
+
+A layout that does not use `ItemListView` sorts, filters and pages the rows itself. `JiraIssueLayout.h` and `JiraListLayout.h` are an interface that apps build against; a change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## Views
 
@@ -214,7 +222,7 @@ The views only read. Changing an issue happens on its page, as [decision 0070](.
 
 Other text from the server goes in labels with `Qt::PlainText`. A `&` in an issue key on a button is escaped, so it does not mark a shortcut.
 
-**The list.** An `ItemListView` with the columns Key, Summary, Status, Assignee, Updated, the [extra fields](#extra-fields) and Links, sorted on Updated. The extra fields hide first in a narrow cell, the last of them first, then Assignee, Updated, Status and Key. Summary and Links stay. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`. Updated reads as `compactDate()` and sorts by the real date. A click on a row only selects it: there is no preview.
+**The list.** It has a model, `ListModel`, and a layout that an app can replace; see [layouts](#layouts). The default layout is an `ItemListView` with the columns Key, Summary, Status, Assignee, Updated, the [extra fields](#extra-fields) and Links, sorted on Updated. The extra fields hide first in a narrow cell, the last of them first, then Assignee, Updated, Status and Key. Summary and Links stay. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`. Updated reads as `compactDate()` and sorts by the real date. A click on a row only selects it: there is no preview.
 
 - **Web link.** `listWebUrl()`, `<baseUrl>/issues/?jql=<query>`, above the table. It is hidden when the query cannot be built.
 - **Row links.** "Web" opens `<baseUrl>/browse/<key>` in the external browser. "Open" works as Open page above. "Add" calls `ItemContext::addItemToTask()` with the type `jira.issue.summary`, the key as its name and `{"key": <key>}`. Without a site only "Add" is there. The column sorts by the key.
@@ -222,4 +230,4 @@ Other text from the server goes in labels with `Qt::PlainText`. A `&` in an issu
 - **Pages.** `setPageSize()` with the item's `pageSize`. The rows fetched are the item's `limit`.
 - **Filter.** `addFilter()` on Status. The choice is not saved.
 
-The tests are in `tests/tst_views.cpp`, with a fake context and status source. A handler stands in for the external browser, so nothing opens. The issue view's tests skip when an app replaces its layout; the tests of the issue model and of the list run in every build.
+The tests are in `tests/tst_views.cpp`, with a fake context and status source. A handler stands in for the external browser, so nothing opens. The tests of the issue view and of the list skip when an app replaces their layout; the tests of the models run in every build.
