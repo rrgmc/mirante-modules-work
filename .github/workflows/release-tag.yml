@@ -1,0 +1,20 @@
+# Tags a release of these modules when a merged pull request raises VERSION,
+# with the core's workflow. Apps pin these tags. The ref below must match the
+# core's ref in ci/manifest.json. See decision 0134 in mirante-core.
+
+name: Release tag
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    paths: [VERSION, CHANGELOG.md]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    permissions:
+      contents: write
+    uses: rrgmc/mirante-core/.github/workflows/tag-release.yml@a71d4f64adcd16154e5ff9590970f2624defdf95
