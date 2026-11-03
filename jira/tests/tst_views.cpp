@@ -3,6 +3,7 @@
 // external browser. See README.md#views.
 #include "../JiraIssueLayout.h"
 #include "../JiraIssueView.h"
+#include "../JiraListLayout.h"
 #include "../JiraListView.h"
 #include "../JiraStatus.h"
 
@@ -277,10 +278,37 @@ class TestViews : public QObject
     Q_OBJECT
 
 private slots:
-    // The issue view's tests know the default layout's widgets. A build whose
-    // app replaces the layout skips them; the issue model's tests still run.
+    // The issue view's and the list's tests know the default layouts' widgets.
+    // A build whose app replaces a layout skips them; the models' tests still
+    // run.
     void init()
     {
+        static const QSet<QString> defaultListLayoutTests{
+            QStringLiteral("addToTaskPassesTypeAndConfiguration"),
+            QStringLiteral("compactDatesSortByTheRealDate"),
+            QStringLiteral("extraFieldsHideFirst"),
+            QStringLiteral("extraFieldsShowAsColumns"),
+            QStringLiteral("linksColumnSortsByKey"),
+            QStringLiteral("listDrawsFromStatus"),
+            QStringLiteral("listKeepsItsRowsWithAnError"),
+            QStringLiteral("listWebLink"),
+            QStringLiteral("listWithoutRowsShowsWhyOrLoading"),
+            QStringLiteral("listWithoutSourceSaysLoading"),
+            QStringLiteral("pageSizeFromTheField"),
+            QStringLiteral("rowLinkActions"),
+            QStringLiteral("rowLinks"),
+            QStringLiteral("rowMenuOpensAndCopies"),
+            QStringLiteral("selectingARowShowsNoPreview"),
+            QStringLiteral("statusFilter"),
+            QStringLiteral("withoutNamesTheExtraColumnsStayHidden"),
+        };
+        if (defaultListLayoutTests.contains(QString::fromLatin1(QTest::currentTestFunction()))) {
+            FakeContext context;
+            const std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+            if (view->objectName() != QLatin1String("jira-list-default-layout"))
+                QSKIP("The app replaces the layout of the Jira list.");
+            return;
+        }
         static const QSet<QString> defaultLayoutTests{
             QStringLiteral("aLineCountsTheOtherChildren"),
             QStringLiteral("changingAnIssueIsGone"),
@@ -312,6 +340,68 @@ private slots:
         const std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
         if (view->objectName() != QLatin1String("jira-issue-default-layout"))
             QSKIP("The app replaces the layout of the Jira issue.");
+    }
+
+    // The list model, which every list layout draws.
+
+    void listModelReadsTheIssues()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        context.itemConfig = {{QStringLiteral("preset"), QStringLiteral("myOpen")}};
+        context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json")));
+        jira::ListModel model(context);
+        model.follow(&context.source);
+        QVERIFY(model.hasData());
+        QVERIFY(!model.description().isEmpty());
+        QVERIFY(!model.pageAddress().isEmpty());
+
+        const QList<jira::ListModel::Issue> issues = model.issues();
+        QCOMPARE(issues.size(), 3);
+        const jira::ListModel::Issue backups = model.issue(QStringLiteral("OPS-10"));
+        QCOMPARE(backups.summary, QStringLiteral("Move the backups to the new bucket"));
+        QCOMPARE(backups.status.text, QStringLiteral("To Do"));
+        QVERIFY(backups.assignee.isEmpty());
+        QVERIFY(backups.updated.isValid());
+        QCOMPARE(backups.address, QUrl(kCloudBase + QStringLiteral("/browse/OPS-10")));
+        // OPS-9 sorts before OPS-10.
+        QVERIFY(model.issue(QStringLiteral("OPS-9")).keySortKey < backups.keySortKey);
+        QVERIFY(context.client.requests().isEmpty());
+    }
+
+    void listModelMessagesAndActions()
+    {
+        BrowserGuard browser;
+        FakeContext context;
+        useCloud(context, QString());
+        jira::ListModel model(context);
+        model.follow(&context.source);
+        QVERIFY(!model.hasData());
+        QCOMPARE(model.message(), QStringLiteral("Loading…"));
+
+        context.source.push(listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json"))));
+        model.openWeb(QStringLiteral("OPS-7"));
+        QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/OPS-7"))});
+        model.openPage(QStringLiteral("OPS-7"));
+        QCOMPARE(context.shownPages, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/OPS-7"))});
+        model.addToTask(QStringLiteral("OPS-7"));
+        QCOMPARE(context.added.size(), 1);
+        QCOMPARE(context.added.first().typeId, QStringLiteral("jira.issue.summary"));
+    }
+
+    void everyListLayoutDrawsEveryState()
+    {
+        FakeContext context;
+        useCloud(context, QString());
+        std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
+        QVERIFY(view);
+        view->show();
+        context.source.push(listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-cloud.json"))));
+        ItemStatus failed;
+        failed.message = QStringLiteral("Token not set");
+        context.source.push(failed);
+        QCoreApplication::processEvents();
+        view.reset();
     }
 
     // The issue model, which every layout draws.

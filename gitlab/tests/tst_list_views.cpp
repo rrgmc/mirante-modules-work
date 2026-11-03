@@ -1,9 +1,13 @@
-// The GitLab lists, drawn from the responses in tests/data/. A handler stands
-// in for the external browser, so nothing is opened.
+// The default layouts of the GitLab lists, drawn from the responses in
+// tests/data/. A build whose app replaces a list layout skips them;
+// tst_list_models.cpp still runs. A handler stands in for the external browser,
+// so nothing is opened.
 #include "../GitLabIssueListView.h"
 #include "../GitLabLists.h"
 #include "../GitLabMergeRequestListView.h"
 #include "../GitLabPipelineListView.h"
+#include "../GitLabViewSupport.h"
+#include "ListTestSupport.h"
 
 #include <mirante/testing/FakeItemContext.h>
 #include <mirante/Status.h>
@@ -42,145 +46,13 @@ using mirante::ItemStatus;
 using mirante::testing::FakeApiClient;
 using mirante::widgets::ItemListView;
 using namespace mirante::modules::gitlab;
+using namespace listtest;
 
 namespace {
 
 enum MrColumn { MrRef, MrTitle, MrAuthor, MrPipeline, MrApprovals, MrUpdated, MrLinks };
 enum IssueColumn { IssueRef, IssueTitle, IssueAssignees, IssueLabels, IssueUpdated, IssueLinks };
 enum PipelineColumn { PipelineId, PipelineStatus, PipelineRef, PipelineAuthor, PipelineStarted, PipelineLinks };
-
-const QString kDash = QStringLiteral("–");
-const QString kBase = QStringLiteral("https://gitlab.example");
-
-// The GET key of a merge request or an issue of acme/backend.
-QString backendKey(const QString &suffix)
-{
-    return QStringLiteral("GET api/v4/projects/acme%2Fbackend/") + suffix;
-}
-
-QJsonDocument readJson(const QString &name)
-{
-    QFile file(QFINDTESTDATA(QStringLiteral("tests/data/") + name));
-    if (!file.open(QIODevice::ReadOnly))
-        qFatal("Cannot read %s", qPrintable(name));
-    return QJsonDocument::fromJson(file.readAll());
-}
-
-ItemStatus statusOfRows(const QJsonArray &rows)
-{
-    ItemStatus status;
-    status.state = ItemStatus::State::Ok;
-    status.data = QJsonObject{{QStringLiteral("rows"), rows}, {QStringLiteral("total"), int(rows.size())}};
-    return status;
-}
-
-ItemStatus mergeRequests()
-{
-    return statusOfRows(readJson(QStringLiteral("merge_request_list.json")).array());
-}
-
-ItemStatus issues()
-{
-    return statusOfRows(readJson(QStringLiteral("issue_list.json")).array());
-}
-
-ItemStatus pipelines()
-{
-    return statusOfRows(readJson(QStringLiteral("pipeline_list.json")).array());
-}
-
-QJsonObject pipelineConfig()
-{
-    return QJsonObject{{QStringLiteral("project"), QStringLiteral("acme/backend")},
-                       {QStringLiteral("source"), QStringLiteral("all")}};
-}
-
-// count merge requests of acme/backend, numbered from 1, where a higher number
-// is newer. The array holds the oldest first.
-QJsonArray manyMergeRequests(int count)
-{
-    QJsonArray rows;
-    for (int iid = 1; iid <= count; ++iid) {
-        rows.append(QJsonObject{
-            {QStringLiteral("iid"), iid},
-            {QStringLiteral("project_id"), 77},
-            {QStringLiteral("title"), QStringLiteral("Change %1").arg(iid)},
-            {QStringLiteral("updated_at"), QDateTime(QDate(2026, 10, 1), QTime(0, 0), QTimeZone::UTC)
-                                               .addSecs(iid * 3600)
-                                               .toString(Qt::ISODate)},
-            {QStringLiteral("references"),
-             QJsonObject{{QStringLiteral("full"), QStringLiteral("acme/backend!%1").arg(iid)}}}});
-    }
-    return rows;
-}
-
-// A status source that a test drives by hand.
-class FakeStatusSource : public mirante::ItemStatusSource
-{
-public:
-    ItemStatus status;
-
-    ItemStatus current() const override { return status; }
-    void refresh() override {}
-    void subscribe(QObject *receiver, std::function<void(const ItemStatus &)> changed) override
-    {
-        m_subscribers.push_back({receiver, std::move(changed)});
-    }
-
-    void change(const ItemStatus &next)
-    {
-        status = next;
-        for (const Subscriber &subscriber : m_subscribers) {
-            if (subscriber.receiver)
-                subscriber.changed(next);
-        }
-    }
-
-private:
-    struct Subscriber
-    {
-        QPointer<QObject> receiver;
-        std::function<void(const ItemStatus &)> changed;
-    };
-    std::vector<Subscriber> m_subscribers;
-};
-
-struct AddedItem
-{
-    QString typeId;
-    QString name;
-    QJsonObject config;
-};
-
-class FakeContext : public mirante::testing::FakeItemContext
-{
-public:
-    FakeContext()
-    {
-        itemConfig = QJsonObject{{QStringLiteral("scope"), QStringLiteral("project")},
-                     {QStringLiteral("project"), QStringLiteral("own/config")}};
-    }
-
-    QJsonObject general{{QStringLiteral("baseUrl"), kBase}};
-    QList<QUrl> pages;
-    QList<AddedItem> added;
-    FakeApiClient client{QUrl(kBase)};
-    FakeStatusSource source;
-    bool hasStatus = true;
-
-    QJsonObject moduleSettings(const QString &screenId) const override
-    {
-        return screenId == QLatin1String("general") ? general : QJsonObject();
-    }
-    void showPage(const QUrl &url) override { pages << url; }
-    QString addItemToTask(const QString &typeId, const QString &name, const QJsonObject &config) override
-    {
-        added.append(AddedItem{typeId, name, config});
-        return QStringLiteral("new-item");
-    }
-    mirante::ApiClient *server() override { return &client; }
-    mirante::ItemStatusSource *status() override { return hasStatus ? &source : nullptr; }
-};
 
 using View = std::unique_ptr<QWidget>;
 
@@ -304,22 +176,6 @@ bool menuEntryEnabled(const View &view, const QString &key, const QString &text)
     return enabled;
 }
 
-// Answers for acme/backend!42, with a failed pipeline and 2 of 3 approvals.
-void setUpBackend42(FakeContext &context)
-{
-    QVERIFY(context.client.setJsonFile(backendKey(QStringLiteral("merge_requests/42")),
-                                       QFINDTESTDATA("tests/data/merge_request.json")));
-    QVERIFY(context.client.setJsonFile(backendKey(QStringLiteral("merge_requests/42/approvals")),
-                                       QFINDTESTDATA("tests/data/approvals.json")));
-}
-
-void setPipelineAnswer(FakeContext &context, const QString &status)
-{
-    context.client.setJson(
-        backendKey(QStringLiteral("merge_requests/42")),
-        QJsonDocument(QJsonObject{{QStringLiteral("head_pipeline"), QJsonObject{{QStringLiteral("status"), status}}}}));
-}
-
 } // namespace
 
 class TestListViews : public QObject
@@ -331,6 +187,19 @@ public slots:
     void openUrl(const QUrl &url) { m_opened << url; }
 
 private slots:
+    // These tests know the default layouts' widgets.
+    void initTestCase()
+    {
+        FakeContext context;
+        const View issueView(createIssueListView(context, nullptr));
+        const View mergeRequestView(createMergeRequestListView(context, nullptr));
+        const View pipelineView(createPipelineListView(context, nullptr));
+        if (issueView->objectName() != defaultLayoutName(QStringLiteral("issue-list"))
+            || mergeRequestView->objectName() != defaultLayoutName(QStringLiteral("merge-request-list"))
+            || pipelineView->objectName() != defaultLayoutName(QStringLiteral("pipeline-list")))
+            QSKIP("The app replaces a layout of the GitLab lists.");
+    }
+
     void init()
     {
         m_opened.clear();

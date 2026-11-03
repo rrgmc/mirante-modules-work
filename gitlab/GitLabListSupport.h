@@ -1,10 +1,12 @@
-// What the GitLab lists share: drawing rows from a status, the links and menu of
-// a row, the pages and the Web link. Private to the module. See decision 0071.
+// What the GitLab lists share: reading a row's project, and the base
+// of the default list layouts, which draw a model in the core's ItemListView.
+// Private to the module: a layout of an app uses the models. See
+// README.md#list-views and decision 0071.
 #pragma once
 
+#include "GitLabListModel.h"
 #include "GitLabLists.h"
 
-#include <mirante/Status.h>
 #include <mirante/widgets/ItemListView.h>
 
 #include <QChar>
@@ -13,113 +15,74 @@
 #include <QJsonValue>
 #include <QList>
 #include <QString>
-#include <QUrl>
-#include <QVariant>
 
 class QLabel;
 
-namespace mirante {
-class ItemContext;
-}
-
 namespace mirante::modules::gitlab {
-
-// What a row points at, and what its links do.
-struct ListRowTarget
-{
-    QString key;
-    QVariant sortKey;       // of the column that identifies the row, and of the links
-    QString project;        // empty if the row does not say
-    qint64 iid = 0;         // the merge request or issue number, or 0
-    QUrl address;           // its page on the site, or empty, and then Web and Open go
-    QString addType;        // the type that "Add" adds, or empty, and then Add goes
-    QString addName;
-    QJsonObject addConfig;
-
-    bool complete() const { return !project.isEmpty() && iid > 0; }
-};
 
 // The project of a row: from references.full, else from web_url. project_id is
 // no use here, because it is a number. Empty if neither gives one.
 QString rowProject(const QJsonObject &row, QChar separator, const QUrl &baseUrl);
+
+// A merge request or issue row. A list can span projects, so a row's project
+// comes from the row, never from the item's configuration. Its key is
+// "group/project!42" or "group/project#7", or "row-<index>" without one.
+struct NumberedRow
+{
+    ListRow row;
+    ListModel::AddTarget add;
+    QString project;
+    qint64 iid = 0;
+    // Such as "backend!42", and a key that sorts by the whole path and then by
+    // the number.
+    QString ref;
+    QString refSortKey;
+};
+// separator is '!' for merge requests and '#' for issues.
+NumberedRow readNumberedRow(const QJsonObject &row, int index, const QUrl &baseUrl, ListKind kind, QChar separator,
+                            const QString &summaryType);
 
 // The cell of a value that is missing, or of a column whose answer has not come.
 widgets::ListCell dashCell();
 // A date from GitLab, in compact form and sorted by the date. A missing one is a
 // dash, and sorts as the oldest.
 widgets::ListCell dateCell(const QJsonValue &value);
+// A text, or a dash when it is empty.
+widgets::ListCell textCell(const QString &text);
+// A state as a pill, or a dash when it has no text.
+widgets::ListCell pillCell(const Pill &pill);
 
-// The base of the lists. A subclass sets its columns in its constructor, and
-// implements rowTarget() and rowCells(). Requests use this view, or a child of it,
-// as their receiver, so an answer that comes after the view is gone is dropped.
-class GitLabList : public widgets::ItemListView
+// The base of the default list layouts: a table of the model's rows, with the
+// description, the Web link, pages, and the links and menu of each row. A
+// subclass sets its columns in its constructor, then calls start().
+class DefaultListLayout : public widgets::ItemListView
 {
 public:
-    // Draws the item's status now and at each change. Null, where the core keeps
-    // no status, stays at "Loading…".
-    void follow(ItemStatusSource *source);
+    ~DefaultListLayout() override;
 
 protected:
-    // page is the Web link above the table, which hides without a web address.
-    // The item's pageSize field sets the rows per page.
-    GitLabList(ItemContext &context, const QString &emptyText, const QUrl &page, QWidget *parent);
+    // view names the layout, such as "pull-request-list", for its object name.
+    DefaultListLayout(ListModel &model, const QString &view, QWidget *parent);
 
-    virtual ListRowTarget rowTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const = 0;
+    // Draws the model now, and follows it.
+    void start();
     // The cells of one row, in the order of the columns.
-    virtual QList<widgets::ListCell> rowCells(const ListRowTarget &target, const QJsonObject &row) const = 0;
-    // Called while visible, after each new status and each time the view shows.
-    virtual void askForCells() {}
-    // Called while visible, when a new page, sort or filter changes visibleKeys().
-    virtual void askForNewKeys() {}
-    // Called when the view hides.
-    virtual void stopAsking() {}
-
-    void showEvent(QShowEvent *event) override;
-    void hideEvent(QHideEvent *event) override;
-
-    ItemContext &context() const { return *m_context; }
-    // "Web", "Open" and "Add", as far as the target allows.
-    widgets::ListCell linksCell(const ListRowTarget &target) const;
-    ListRowTarget target(const QString &key) const { return m_targets.value(key); }
+    virtual QList<widgets::ListCell> rowCells(const QString &key) const = 0;
+    // "Web", "Open" and "Add", as far as the row allows, sorted by sortKey.
+    widgets::ListCell linksCell(const ListRow &row, const QVariant &sortKey) const;
 
 private:
-    void showStatus(const ItemStatus &status);
+    void draw();
+    void drawRow(const QString &key);
     void showRowMenu(const QString &key, const QPoint &globalPos);
     void activateLink(const QString &key, const QString &link);
-    void openPage(const QUrl &address);
-    void addToTask(const ListRowTarget &target);
 
-    ItemContext *m_context;
+    ListModel &m_model;
     QLabel *m_emptyLine;
-    QHash<QString, ListRowTarget> m_targets;
-    bool m_drawn = false;
-    bool m_shown = false;
-    // setRows() also changes visibleKeys(), and showStatus() asks after it.
-    bool m_settingRows = false;
-};
-
-// What differs between the two lists of numbered objects.
-struct ListTraits
-{
-    ListKind kind;
-    QChar separator;        // between a project and a number: '!' or '#'
-    QString summaryType;    // the type that "Add" adds
-    QString emptyText;      // the line under a table with no rows
-};
-
-// A list of merge requests or issues. A list can span projects, so a row's project
-// comes from the row, never from the item's configuration.
-class NumberedList : public GitLabList
-{
-protected:
-    NumberedList(ItemContext &context, const ListTraits &traits, QWidget *parent);
-
-    ListRowTarget rowTarget(const QJsonObject &row, int index, const QUrl &baseUrl) const override;
-    // Such as "backend!42", sorted by the whole path and then by the number.
-    widgets::ListCell refCell(const ListRowTarget &target) const;
-
-private:
-    ListTraits m_traits;
+    // The cells of each row as last drawn.
+    QHash<QString, QList<widgets::ListCell>> m_drawn;
+    // setRows() also changes visibleKeys(), and draw() tells the model after it.
+    bool m_drawing = false;
 };
 
 } // namespace mirante::modules::gitlab
