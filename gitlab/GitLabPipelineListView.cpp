@@ -27,12 +27,16 @@ qint64 mergeRequestOfRef(const QString &ref)
 
 } // namespace
 
-PipelineListModel::PipelineListModel(ItemContext &context)
+PipelineListModel::PipelineListModel(ItemContext &context, ListSpan span)
     : ListModel(context, QCoreApplication::translate("gitlab", "No pipelines"),
-                pipelinesUrl(baseUrlOf(context.moduleSettings(kGeneralScreen)), context.config(),
-                             context.projectSetting(kProjectSettingKey)),
-                pipelineListDescription(context.config(), context.projectSetting(kProjectSettingKey)))
-    , m_project(projectPath(context.config(), context.projectSetting(kProjectSettingKey)))
+                // A list over several projects has no page.
+                span == ListSpan::Projects ? QUrl()
+                                           : pipelinesUrl(baseUrlOf(context.moduleSettings(kGeneralScreen)),
+                                                          context.config(), context.projectSetting(kProjectSettingKey)),
+                pipelineListDescription(context.config(), context.projectSetting(kProjectSettingKey), span), span)
+    // A list over several projects reads each row's project instead.
+    , m_project(span == ListSpan::Projects ? QString()
+                                           : projectPath(context.config(), context.projectSetting(kProjectSettingKey)))
 {
 }
 
@@ -50,13 +54,15 @@ void PipelineListModel::read(const QJsonArray &rows, const QUrl &baseUrl)
     for (int index = 0; index < rows.size(); ++index) {
         const QJsonObject row = rows.at(index).toObject();
         const qint64 id = row.value(QStringLiteral("id")).toInteger();
+        const QString ofRow = row.value(kRowProjectKey).toString();
+        const QString project = ofRow.isEmpty() ? m_project : ofRow;
 
         ListRow listRow;
         listRow.key = id > 0 ? QString::number(id) : QStringLiteral("row-%1").arg(index);
         listRow.data = row;
         QUrl built;
         if (id > 0) {
-            built = pipelinesUrl(baseUrl, QJsonObject{{QStringLiteral("project"), m_project}}, {});
+            built = pipelinesUrl(baseUrl, QJsonObject{{QStringLiteral("project"), project}}, {});
             if (!built.isEmpty())
                 built.setPath(built.path() + QLatin1Char('/') + QString::number(id));
         }
@@ -67,16 +73,16 @@ void PipelineListModel::read(const QJsonArray &rows, const QUrl &baseUrl)
         // makes.
         AddTarget add;
         const QString ref = row.value(QStringLiteral("ref")).toString();
-        if (!ref.isEmpty() && !m_project.isEmpty()) {
+        if (!ref.isEmpty() && !project.isEmpty()) {
             add.type = QStringLiteral("gitlab.pipeline");
-            add.config.insert(QStringLiteral("project"), m_project);
+            add.config.insert(QStringLiteral("project"), project);
             const qint64 iid = mergeRequestOfRef(ref);
             if (iid > 0) {
-                add.name = m_project + QLatin1Char('!') + QString::number(iid) + QStringLiteral(" CI");
+                add.name = project + QLatin1Char('!') + QString::number(iid) + QStringLiteral(" CI");
                 add.config.insert(QStringLiteral("branchSource"), QStringLiteral("mergeRequest"));
                 add.config.insert(QStringLiteral("iid"), iid);
             } else {
-                add.name = m_project + QLatin1Char(' ') + ref + QStringLiteral(" CI");
+                add.name = project + QLatin1Char(' ') + ref + QStringLiteral(" CI");
                 add.config.insert(QStringLiteral("branchSource"), QStringLiteral("fixed"));
                 add.config.insert(QStringLiteral("branch"), ref);
             }
@@ -86,6 +92,7 @@ void PipelineListModel::read(const QJsonArray &rows, const QUrl &baseUrl)
         Pipeline pipeline;
         static_cast<ListRow &>(pipeline) = this->row(listRow.key);
         pipeline.id = id;
+        pipeline.project = project;
         const QString status = row.value(QStringLiteral("status")).toString();
         if (!status.isEmpty())
             pipeline.state = statusPillOf(status);
@@ -99,13 +106,27 @@ void PipelineListModel::read(const QJsonArray &rows, const QUrl &baseUrl)
     }
 }
 
-QWidget *createPipelineListView(ItemContext &context, QWidget *parent)
+namespace {
+
+QWidget *createView(ItemContext &context, QWidget *parent, ListSpan span)
 {
-    auto *model = new PipelineListModel(context);
+    auto *model = new PipelineListModel(context, span);
     model->follow(context.status());
     QWidget *view = makePipelineListLayout(*model, parent);
     model->attach(view);
     return view;
+}
+
+} // namespace
+
+QWidget *createPipelineListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Scope);
+}
+
+QWidget *createPipelineMultiListView(ItemContext &context, QWidget *parent)
+{
+    return createView(context, parent, ListSpan::Projects);
 }
 
 } // namespace mirante::modules::gitlab

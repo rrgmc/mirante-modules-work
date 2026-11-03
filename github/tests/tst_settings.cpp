@@ -227,14 +227,20 @@ private slots:
             return QStringList{QStringLiteral("no repository field")};
         };
 
-        for (const mirante::ItemType *type : registry.types())
+        // A list over several repositories has no repository field.
+        QList<const mirante::ItemType *> types;
+        for (const mirante::ItemType *type : registry.types()) {
+            if (!type->id().endsWith(QLatin1String(".multilist")))
+                types << type;
+        }
+        for (const mirante::ItemType *type : types)
             QVERIFY2(suggestionsOf(type->id(), QStringLiteral("work")).isEmpty(), qPrintable(type->id()));
 
         work.insert(QStringLiteral("repositories"),
                     QJsonArray{QStringLiteral("acme/backend"), QStringLiteral(" acme/web/ ")});
         standard.insert(QStringLiteral("repositories"), QJsonArray{QStringLiteral("me/dotfiles")});
         const QStringList expected{QStringLiteral("acme/backend"), QStringLiteral("acme/web")};
-        for (const mirante::ItemType *type : registry.types()) {
+        for (const mirante::ItemType *type : types) {
             QCOMPARE(suggestionsOf(type->id(), QStringLiteral("work")), expected);
             QCOMPARE(suggestionsOf(type->id(), QStringLiteral("default")), QStringList{QStringLiteral("me/dotfiles")});
             QVERIFY(suggestionsOf(type->id(), QStringLiteral("other")).isEmpty());

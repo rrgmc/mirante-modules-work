@@ -896,7 +896,8 @@ private slots:
         const QStringList withStatus{QStringLiteral("gitlab.mr.summary"), QStringLiteral("gitlab.mr.page"),
                                      QStringLiteral("gitlab.mr.list"),    QStringLiteral("gitlab.pipeline"),
                                      QStringLiteral("gitlab.issue.summary"), QStringLiteral("gitlab.issue.page"),
-                                     QStringLiteral("gitlab.issue.list"), QStringLiteral("gitlab.pipeline.list")};
+                                     QStringLiteral("gitlab.issue.list"), QStringLiteral("gitlab.pipeline.list"),
+                                     QStringLiteral("gitlab.mr.multilist"), QStringLiteral("gitlab.pipeline.multilist")};
         for (const mirante::ItemType *type : registry.types())
             QCOMPARE(type->hasStatus(), withStatus.contains(type->id()));
 

@@ -15,8 +15,10 @@
 
 namespace mirante::modules::github {
 
-ListModel::ListModel(ItemContext &context, const QString &emptyText, const QUrl &page, const QString &description)
+ListModel::ListModel(ItemContext &context, const QString &emptyText, const QUrl &page, const QString &description,
+                     ListSpan span)
     : m_context(&context)
+    , m_span(span)
     , m_emptyText(emptyText)
     , m_pageAddress(page.scheme() == QLatin1String("https") || page.scheme() == QLatin1String("http") ? page : QUrl())
     , m_description(description)
@@ -42,6 +44,11 @@ bool ListModel::isColumnShown(const QString &column) const
         return true;
     const QString field = QStringLiteral("show") + column.at(0).toUpper() + column.mid(1);
     return config().value(field).toBool(true);
+}
+
+QStringList ListModel::filterDefault(const QString &column) const
+{
+    return github::filterDefault(config(), column);
 }
 
 void ListModel::openWeb(const QString &key)

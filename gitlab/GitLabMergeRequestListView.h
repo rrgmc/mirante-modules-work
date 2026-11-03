@@ -10,5 +10,7 @@ class ItemContext;
 namespace mirante::modules::gitlab {
 
 QWidget *createMergeRequestListView(ItemContext &context, QWidget *parent);
+// The view of gitlab.mr.multilist.
+QWidget *createMergeRequestMultiListView(ItemContext &context, QWidget *parent);
 
 } // namespace mirante::modules::gitlab

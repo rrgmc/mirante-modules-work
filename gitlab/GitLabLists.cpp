@@ -9,8 +9,12 @@
 #include <QJsonArray>
 #include <QList>
 #include <QPair>
+#include <QSet>
 #include <QStringList>
 
+#include <algorithm>
+#include <functional>
+#include <memory>
 #include <utility>
 
 namespace mirante::modules::gitlab {
@@ -21,17 +25,30 @@ namespace {
 // empty when the scope is complete.
 struct ListScope
 {
-    enum class Where { Project, Group, All };
+    enum class Where { Project, Group, All, Projects };
 
     Where where = Where::All;
-    QString path;     // the project or the group
+    QString path;       // the project or the group
+    QStringList paths;  // Projects: "group/project" each
     QString problem;
 };
 
+QString severalProjectsProblem()
+{
+    return QCoreApplication::translate("gitlab", "Set the projects in the item's settings.");
+}
+
 // An absent scope is a project, the first choice of the form.
-ListScope readScope(const QJsonObject &config, const QJsonValue &defaultProject)
+ListScope readScope(const QJsonObject &config, const QJsonValue &defaultProject, ListSpan span = ListSpan::Scope)
 {
     ListScope scope;
+    if (span == ListSpan::Projects) {
+        scope.where = ListScope::Where::Projects;
+        scope.paths = configuredProjects(config);
+        if (scope.paths.isEmpty())
+            scope.problem = severalProjectsProblem();
+        return scope;
+    }
     const QString name = config.value(QStringLiteral("scope")).toString();
     if (name.isEmpty() || name == QLatin1String("project")) {
         scope.where = ListScope::Where::Project;
@@ -81,6 +98,75 @@ void requestRows(const GitLabClient &client, ListKind kind, const ListScope &sco
         else
             client.issues(query, limit, std::move(done));
         break;
+    case ListScope::Where::Projects:
+        // fetchList() asks each project itself.
+        break;
+    }
+}
+
+ItemStatus listStatus(const QString &summary, const QJsonArray &rows);
+
+// The rows of several projects, as they come. The first failure finishes the
+// job; the last answer joins the rows.
+struct Answers
+{
+    int waiting = 0;
+    bool finished = false;
+    QJsonArray rows;
+};
+
+// The newest rows by key, an ISO date in UTC, whose text sorts as the date does.
+QJsonArray newestRows(const QJsonArray &rows, const QString &key, int limit)
+{
+    QList<QJsonObject> sorted;
+    for (const QJsonValue &row : rows)
+        sorted << row.toObject();
+    std::stable_sort(sorted.begin(), sorted.end(), [&key](const QJsonObject &a, const QJsonObject &b) {
+        return a.value(key).toString() > b.value(key).toString();
+    });
+    QJsonArray newest;
+    for (int index = 0; index < sorted.size() && index < limit; ++index)
+        newest << sorted.at(index);
+    return newest;
+}
+
+// A status of one of several projects, with the project's path before its
+// message.
+ItemStatus ofProject(const QString &project, ItemStatus status)
+{
+    status.message = project + QStringLiteral(": ") + status.message;
+    return status;
+}
+
+// Asks each project with ask, then finishes the job with the newest rows by
+// sortKey. tag, when set, adds kRowProjectKey to each row.
+using AskProject = std::function<void(const QString &project, GitLabClient::Done done)>;
+void requestEachProject(StatusJob *target, const QStringList &projects, const QString &sortKey, int limit, bool tag,
+                        QString (*summary)(int total, int limit), const AskProject &ask)
+{
+    auto answers = std::make_shared<Answers>();
+    answers->waiting = int(projects.size());
+    for (const QString &project : projects) {
+        ask(project, [=](const ApiReply &reply) {
+            if (answers->finished)
+                return;
+            if (!reply.ok()) {
+                answers->finished = true;
+                target->finish(ofProject(project, statusFromReply(reply)));
+                return;
+            }
+            for (const QJsonValue &value : reply.json.array()) {
+                QJsonObject row = value.toObject();
+                if (tag)
+                    row.insert(kRowProjectKey, project);
+                answers->rows << row;
+            }
+            if (--answers->waiting > 0)
+                return;
+            answers->finished = true;
+            const QJsonArray rows = newestRows(answers->rows, sortKey, limit);
+            target->finish(listStatus(summary(int(rows.size()), limit), rows));
+        });
     }
 }
 
@@ -112,10 +198,15 @@ ItemStatus listStatus(const QString &summary, const QJsonArray &rows)
     return status;
 }
 
-void fetchList(StatusJob &job, ListKind kind)
+QString mergeRequestSummary(int total, int limit)
+{
+    return listSummary(ListKind::MergeRequests, total, limit);
+}
+
+void fetchList(StatusJob &job, ListKind kind, ListSpan span = ListSpan::Scope)
 {
     const QJsonObject config = job.config();
-    const ListScope scope = readScope(config, job.projectSetting(kProjectSettingKey));
+    const ListScope scope = readScope(config, job.projectSetting(kProjectSettingKey), span);
     if (!scope.problem.isEmpty()) {
         ItemStatus status;
         status.message = scope.problem;
@@ -136,6 +227,17 @@ void fetchList(StatusJob &job, ListKind kind)
         const QJsonArray rows = reply.json.array();
         target->finish(listStatus(listSummary(kind, int(rows.size()), limit), rows));
     };
+    // Only merge requests have a type over several projects.
+    const auto rows = [=](const QUrlQuery &query) {
+        if (scope.where != ListScope::Where::Projects) {
+            requestRows(client, kind, scope, query, limit, finishWithRows);
+            return;
+        }
+        requestEachProject(target, scope.paths, QStringLiteral("updated_at"), limit, false, mergeRequestSummary,
+                           [=](const QString &project, GitLabClient::Done done) {
+            client.projectMergeRequests(project, query, limit, std::move(done));
+        });
+    };
 
     if (kind == ListKind::MergeRequests && preset == QLatin1String("reviewRequested")) {
         client.currentUser([=](const ApiReply &user) {
@@ -144,11 +246,11 @@ void fetchList(StatusJob &job, ListKind kind)
                 return;
             }
             const qint64 userId = user.json.object().value(QStringLiteral("id")).toInteger();
-            requestRows(client, kind, scope, listQuery(kind, preset, userId, filter), limit, finishWithRows);
+            rows(listQuery(kind, preset, userId, filter));
         });
         return;
     }
-    requestRows(client, kind, scope, listQuery(kind, preset, 0, filter), limit, finishWithRows);
+    rows(listQuery(kind, preset, 0, filter));
 }
 
 QString pipelineSummary(int total, int limit)
@@ -168,6 +270,32 @@ ItemStatus incompleteList(const QString &message)
 }
 
 } // namespace
+
+QStringList configuredProjects(const QJsonObject &config)
+{
+    QStringList projects;
+    QSet<QString> seen;
+    for (const QJsonValue &value : config.value(QStringLiteral("projects")).toArray()) {
+        // projectPath() tidies a path given as the default.
+        const QString project = projectPath({}, value);
+        if (project.isEmpty() || seen.contains(project))
+            continue;
+        seen.insert(project);
+        projects << project;
+    }
+    return projects;
+}
+
+QStringList filterDefault(const QJsonObject &config, const QString &column)
+{
+    QStringList values;
+    for (const QJsonValue &value : config.value(column + QStringLiteral("Filter")).toArray()) {
+        const QString text = value.toString().trimmed();
+        if (!text.isEmpty())
+            values << text;
+    }
+    return values;
+}
 
 int listLimit(const QJsonObject &config)
 {
@@ -212,7 +340,7 @@ QUrlQuery listQuery(ListKind kind, const QString &preset, qint64 userId, const Q
     return query;
 }
 
-QString listDescription(ListKind kind, const QJsonObject &config, const QJsonValue &defaultProject)
+QString listDescription(ListKind kind, const QJsonObject &config, const QJsonValue &defaultProject, ListSpan span)
 {
     const QString preset = config.value(QStringLiteral("preset")).toString();
     const bool mergeRequests = kind == ListKind::MergeRequests;
@@ -226,7 +354,7 @@ QString listDescription(ListKind kind, const QJsonObject &config, const QJsonVal
     else
         parts << QCoreApplication::translate("gitlab", "Assigned to me");
 
-    const ListScope scope = readScope(config, defaultProject);
+    const ListScope scope = readScope(config, defaultProject, span);
     if (scope.problem.isEmpty()) {
         switch (scope.where) {
         case ListScope::Where::Project:
@@ -238,6 +366,9 @@ QString listDescription(ListKind kind, const QJsonObject &config, const QJsonVal
         case ListScope::Where::All:
             parts << QCoreApplication::translate("gitlab", "all projects");
             break;
+        case ListScope::Where::Projects:
+            parts << scope.paths.join(QStringLiteral(", "));
+            break;
         }
     }
     const QString filter = config.value(QStringLiteral("filter")).toString().trimmed();
@@ -246,7 +377,7 @@ QString listDescription(ListKind kind, const QJsonObject &config, const QJsonVal
     return parts.join(QStringLiteral(" · "));
 }
 
-QString pipelineListDescription(const QJsonObject &config, const QJsonValue &defaultProject)
+QString pipelineListDescription(const QJsonObject &config, const QJsonValue &defaultProject, ListSpan span)
 {
     const QString source = config.value(QStringLiteral("source")).toString();
     QStringList parts;
@@ -260,16 +391,23 @@ QString pipelineListDescription(const QJsonObject &config, const QJsonValue &def
     } else {
         parts << QCoreApplication::translate("gitlab", "All pipelines");
     }
+    if (span == ListSpan::Projects) {
+        const QStringList projects = configuredProjects(config);
+        if (!projects.isEmpty())
+            parts << projects.join(QStringLiteral(", "));
+        return parts.join(QStringLiteral(" · "));
+    }
     const QString project = projectPath(config, defaultProject);
     if (!project.isEmpty())
         parts << project;
     return parts.join(QStringLiteral(" · "));
 }
 
-QUrl listWebUrl(ListKind kind, const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject)
+QUrl listWebUrl(ListKind kind, const QUrl &baseUrl, const QJsonObject &config, const QJsonValue &defaultProject,
+                ListSpan span)
 {
-    const ListScope scope = readScope(config, defaultProject);
-    if (!scope.problem.isEmpty() || baseUrl.isEmpty())
+    const ListScope scope = readScope(config, defaultProject, span);
+    if (!scope.problem.isEmpty() || baseUrl.isEmpty() || scope.where == ListScope::Where::Projects)
         return {};
 
     QString path = baseUrl.path();
@@ -285,6 +423,8 @@ QUrl listWebUrl(ListKind kind, const QUrl &baseUrl, const QJsonObject &config, c
         break;
     case ListScope::Where::All:
         path += QStringLiteral("/dashboard/") + page;
+        break;
+    case ListScope::Where::Projects:
         break;
     }
 
@@ -303,6 +443,11 @@ void fetchMergeRequestListStatus(StatusJob &job)
 void fetchIssueListStatus(StatusJob &job)
 {
     fetchList(job, ListKind::Issues);
+}
+
+void fetchMergeRequestMultiListStatus(StatusJob &job)
+{
+    fetchList(job, ListKind::MergeRequests, ListSpan::Projects);
 }
 
 void fetchPipelineListStatus(StatusJob &job)
@@ -354,6 +499,49 @@ void fetchPipelineListStatus(StatusJob &job)
         client.pipelines(project, query, limit, finishWithRows);
     } else if (source.isEmpty() || source == QLatin1String("all")) {
         client.pipelines(project, {}, limit, finishWithRows);
+    } else {
+        job.finish(incompleteList(QCoreApplication::translate("gitlab", "Set the source in the item's settings.")));
+    }
+}
+
+void fetchPipelineMultiListStatus(StatusJob &job)
+{
+    const QJsonObject config = job.config();
+    const QStringList projects = configuredProjects(config);
+    if (projects.isEmpty()) {
+        job.finish(incompleteList(severalProjectsProblem()));
+        return;
+    }
+    // An absent source is the first choice of the form.
+    const QString source = config.value(QStringLiteral("source")).toString();
+    const int limit = listLimit(config);
+    StatusJob *target = &job;
+    const GitLabClient client(job.server(), job.owner());
+    const auto pipelines = [=](const QUrlQuery &query) {
+        requestEachProject(target, projects, QStringLiteral("created_at"), limit, true, pipelineSummary,
+                           [=](const QString &project, GitLabClient::Done done) {
+            client.pipelines(project, query, limit, std::move(done));
+        });
+    };
+
+    if (source == QLatin1String("mine")) {
+        client.currentUser([=](const ApiReply &user) {
+            if (!user.ok()) {
+                target->finish(statusFromReply(user));
+                return;
+            }
+            // Encoded here, as a branch is, so the name reaches GitLab whole.
+            const QString username = user.json.object().value(QStringLiteral("username")).toString();
+            QUrlQuery query;
+            query.addQueryItem(QStringLiteral("username"), GitLabClient::encodePath(username));
+            pipelines(query);
+        });
+    } else if (source == QLatin1String("branch")) {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("ref"), GitLabClient::encodePath(configuredBranch(config)));
+        pipelines(query);
+    } else if (source.isEmpty() || source == QLatin1String("all")) {
+        pipelines({});
     } else {
         job.finish(incompleteList(QCoreApplication::translate("gitlab", "Set the source in the item's settings.")));
     }

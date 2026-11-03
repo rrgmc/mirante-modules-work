@@ -4,6 +4,7 @@
 // README.md#list-layouts.
 #pragma once
 
+#include "GitHubLists.h"
 #include "GitHubSummaryModel.h"
 
 #include <mirante/Status.h>
@@ -79,6 +80,14 @@ public:
     // Whether the item's settings show a column: the boolean field show<Column>,
     // on when absent. isColumnShown("checks") reads showChecks.
     bool isColumnShown(const QString &column) const;
+    // Whether the list is of a type over several repositories, such as
+    // github.pr.multilist. Its layout then shows each row's repository, with a
+    // filter on it.
+    bool spansRepositories() const { return m_span == ListSpan::Repositories; }
+    // The values a view filter on a column chooses at the start: the item's
+    // field <column>Filter. filterDefault("status") reads statusFilter. Empty
+    // means "All".
+    QStringList filterDefault(const QString &column) const;
 
     // The keys of the rows, in the order of GitHub's answer.
     QStringList keys() const { return m_keys; }
@@ -112,7 +121,8 @@ signals:
     void rowChanged(const QString &key);
 
 protected:
-    ListModel(ItemContext &context, const QString &emptyText, const QUrl &page, const QString &description);
+    ListModel(ItemContext &context, const QString &emptyText, const QUrl &page, const QString &description,
+              ListSpan span = ListSpan::Scope);
 
     // Reads the rows of a new status. webBase is the profile's web address, for
     // an address a row does not give. It calls addRow() for each row, in order.
@@ -128,6 +138,7 @@ private:
     void showStatus(const ItemStatus &status);
 
     ItemContext *m_context;
+    ListSpan m_span;
     QString m_emptyText;
     QUrl m_pageAddress;
     QString m_description;

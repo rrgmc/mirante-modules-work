@@ -21,6 +21,8 @@ public:
     struct Run : ListRow
     {
         qint64 id = 0;
+        // "owner/repo": the row's own, else the item's.
+        QString repository;
         // Its number in its workflow, or 0.
         qint64 number = 0;
         QString workflow;
@@ -35,9 +37,10 @@ public:
     };
 
     // Called by the module only.
-    explicit RunListModel(ItemContext &context);
+    explicit RunListModel(ItemContext &context, ListSpan span = ListSpan::Scope);
 
-    // In the order of GitHub's answer: newest first.
+    // In the order of GitHub's answer: newest first. Over several
+    // repositories, newest first by created_at.
     QList<Run> runs() const;
     Run run(const QString &key) const { return m_runs.value(key); }
 

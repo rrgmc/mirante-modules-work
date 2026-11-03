@@ -60,6 +60,23 @@ QJsonObject pipelineList(const QString &source)
                        {QStringLiteral("source"), source}};
 }
 
+// A list over several projects, with blanks, slashes and a repetition that
+// the module tidies away.
+QJsonObject multiList(const QJsonObject &more = {})
+{
+    QJsonObject config{{QStringLiteral("projects"),
+                        QJsonArray{QStringLiteral(" acme/backend/ "), QStringLiteral(""), QStringLiteral("acme/web"),
+                                   QStringLiteral("acme/backend")}}};
+    for (auto it = more.begin(); it != more.end(); ++it)
+        config.insert(it.key(), it.value());
+    return config;
+}
+
+QJsonObject rowAt(qint64 id, const QString &key, const QString &when)
+{
+    return QJsonObject{{QStringLiteral("id"), id}, {key, when}};
+}
+
 ApiReply forbiddenReply()
 {
     ApiReply reply;
@@ -740,6 +757,130 @@ private slots:
         WAIT_FOR_FINISH(job);
         QCOMPARE(job.finished->state, ItemStatus::State::Error);
         QCOMPARE(job.client.requestKeys(), QStringList{kUser});
+    }
+
+    // Several projects.
+
+    void severalProjectsAreTidied()
+    {
+        QCOMPARE(configuredProjects(multiList()), (QStringList{QStringLiteral("acme/backend"), QStringLiteral("acme/web")}));
+        QCOMPARE(listDescription(ListKind::MergeRequests,
+                                 multiList({{QStringLiteral("preset"), QStringLiteral("allOpen")}}), {},
+                                 ListSpan::Projects),
+                 QStringLiteral("All open · acme/backend, acme/web"));
+        QVERIFY(listWebUrl(ListKind::MergeRequests, QUrl(QStringLiteral("https://gitlab.example")), multiList(), {},
+                           ListSpan::Projects)
+                    .isEmpty());
+        QCOMPARE(pipelineListDescription(multiList({{QStringLiteral("source"), QStringLiteral("mine")}}), {},
+                                         ListSpan::Projects),
+                 QStringLiteral("Started by me · acme/backend, acme/web"));
+    }
+
+    void severalProjectsNeedOne()
+    {
+        FakeStatusJob mergeRequests;
+        fetchMergeRequestMultiListStatus(mergeRequests);
+        QCOMPARE(mergeRequests.finishCount, 1);
+        QCOMPARE(mergeRequests.finished->message, QStringLiteral("Set the projects in the item's settings."));
+
+        FakeStatusJob pipelines;
+        fetchPipelineMultiListStatus(pipelines);
+        QCOMPARE(pipelines.finishCount, 1);
+        QCOMPARE(pipelines.finished->message, QStringLiteral("Set the projects in the item's settings."));
+        QVERIFY(pipelines.client.requests().isEmpty());
+    }
+
+    // One request per project, joined newest first by updated_at and cut to the
+    // limit.
+    void mergeRequestsOfSeveralProjects()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList({{QStringLiteral("preset"), QStringLiteral("allOpen")}, {QStringLiteral("limit"), 3}});
+        const QString query = QStringLiteral("?state=opened&scope=all&order_by=updated_at&per_page=3");
+        const QString backend = QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests") + query;
+        const QString web = QStringLiteral("GET api/v4/projects/acme%2Fweb/merge_requests") + query;
+        job.client.setJson(backend, QJsonDocument(QJsonArray{rowAt(1, QStringLiteral("updated_at"), "2026-11-01T10:00:00Z"),
+                                                             rowAt(2, QStringLiteral("updated_at"), "2026-10-30T10:00:00Z")}));
+        job.client.setJson(web, QJsonDocument(QJsonArray{rowAt(3, QStringLiteral("updated_at"), "2026-11-02T10:00:00Z"),
+                                                         rowAt(4, QStringLiteral("updated_at"), "2026-10-31T10:00:00Z")}));
+        fetchMergeRequestMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.client.requestKeys(), (QStringList{backend, web}));
+        QCOMPARE(job.finished->summary, QStringLiteral("3+ merge requests"));
+        QStringList ids;
+        for (const QJsonValue &row : job.finished->data.value(QStringLiteral("rows")).toArray())
+            ids << QString::number(row.toObject().value(QStringLiteral("id")).toInteger());
+        QCOMPARE(ids, (QStringList{QStringLiteral("3"), QStringLiteral("1"), QStringLiteral("4")}));
+    }
+
+    // "Review requested" asks for the user once.
+    void mergeRequestsOfSeveralProjectsForReview()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList({{QStringLiteral("preset"), QStringLiteral("reviewRequested")}});
+        QVERIFY(job.client.setJsonFile(kUser, dataFile(QStringLiteral("user.json"))));
+        const QString query = QStringLiteral("?state=opened&scope=all&reviewer_id=1001&order_by=updated_at&per_page=100");
+        const QString backend = QStringLiteral("GET api/v4/projects/acme%2Fbackend/merge_requests") + query;
+        const QString web = QStringLiteral("GET api/v4/projects/acme%2Fweb/merge_requests") + query;
+        job.client.setJson(backend, QJsonDocument(QJsonArray()));
+        job.client.setJson(web, QJsonDocument(QJsonArray()));
+        fetchMergeRequestMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.client.requestKeys(), (QStringList{kUser, backend, web}));
+    }
+
+    // Each pipeline row gets the path of its project.
+    void pipelinesOfSeveralProjects()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList({{QStringLiteral("source"), QStringLiteral("branch")},
+                                      {QStringLiteral("branch"), QStringLiteral("main")}});
+        const QString backend = kPipelines + QStringLiteral("?ref=main&per_page=100");
+        const QString web = QStringLiteral("GET api/v4/projects/acme%2Fweb/pipelines?ref=main&per_page=100");
+        job.client.setJson(backend, QJsonDocument(QJsonArray{rowAt(1, QStringLiteral("created_at"), "2026-11-01T10:00:00Z")}));
+        job.client.setJson(web, QJsonDocument(QJsonArray{rowAt(2, QStringLiteral("created_at"), "2026-11-02T10:00:00Z")}));
+        fetchPipelineMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.client.requestKeys(), (QStringList{backend, web}));
+        QCOMPARE(job.finished->summary, QStringLiteral("2 pipelines"));
+        const QJsonArray rows = job.finished->data.value(QStringLiteral("rows")).toArray();
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows.at(0).toObject().value(kRowProjectKey).toString(), QStringLiteral("acme/web"));
+        QCOMPARE(rows.at(1).toObject().value(kRowProjectKey).toString(), QStringLiteral("acme/backend"));
+    }
+
+    void pipelinesOfSeveralProjectsFail()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList();
+        job.client.setJson(kPipelines + QStringLiteral("?per_page=100"), QJsonDocument(QJsonArray()));
+        job.client.setReply(QStringLiteral("GET api/v4/projects/acme%2Fweb/pipelines?per_page=100"), forbiddenReply());
+        fetchPipelineMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Error);
+        QCOMPARE(job.finished->message, QStringLiteral("acme/web: Forbidden (403)"));
+    }
+
+    void pipelinesOfSeveralProjectsTakeThreeSources()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList({{QStringLiteral("source"), QStringLiteral("mergeRequest")}});
+        fetchPipelineMultiListStatus(job);
+        QCOMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->message, QStringLiteral("Set the source in the item's settings."));
+        QVERIFY(job.client.requests().isEmpty());
+    }
+
+    void filterDefaults()
+    {
+        const QJsonObject config{{QStringLiteral("statusFilter"),
+                                  QJsonArray{QStringLiteral(" Failed "), QStringLiteral(""), QStringLiteral("Running")}}};
+        QCOMPARE(filterDefault(config, QStringLiteral("status")),
+                 (QStringList{QStringLiteral("Failed"), QStringLiteral("Running")}));
+        QVERIFY(filterDefault(config, QStringLiteral("project")).isEmpty());
     }
 };
 

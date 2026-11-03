@@ -26,8 +26,11 @@ private slots:
         expected.insert(QStringLiteral("gitlab.mr.summary"), QStringLiteral("GitLab MR (summary)"));
         expected.insert(QStringLiteral("gitlab.mr.page"), QStringLiteral("GitLab MR (page)"));
         expected.insert(QStringLiteral("gitlab.mr.list"), QStringLiteral("GitLab MR List"));
+        expected.insert(QStringLiteral("gitlab.mr.multilist"), QStringLiteral("GitLab MR List (several projects)"));
         expected.insert(QStringLiteral("gitlab.pipeline"), QStringLiteral("GitLab CI Pipeline"));
         expected.insert(QStringLiteral("gitlab.pipeline.list"), QStringLiteral("GitLab CI Pipeline List"));
+        expected.insert(QStringLiteral("gitlab.pipeline.multilist"),
+                        QStringLiteral("GitLab CI Pipeline List (several projects)"));
         expected.insert(QStringLiteral("gitlab.issue.summary"), QStringLiteral("GitLab Issue (summary)"));
         expected.insert(QStringLiteral("gitlab.issue.page"), QStringLiteral("GitLab Issue (page)"));
         expected.insert(QStringLiteral("gitlab.issue.list"), QStringLiteral("GitLab Issue List"));
@@ -81,7 +84,15 @@ private slots:
         expected.insert(QStringLiteral("gitlab.pipeline.list"),
                         QStringList{QStringLiteral("project"), QStringLiteral("source"), QStringLiteral("branch"),
                                     QStringLiteral("iid")}
-                            + sizes);
+                            + sizes + QStringList{QStringLiteral("statusFilter")});
+        expected.insert(QStringLiteral("gitlab.pipeline.multilist"),
+                        QStringList{QStringLiteral("projects"), QStringLiteral("source"), QStringLiteral("branch")}
+                            + sizes + QStringList{QStringLiteral("projectFilter"), QStringLiteral("statusFilter")});
+        expected.insert(QStringLiteral("gitlab.mr.multilist"),
+                        QStringList{QStringLiteral("projects"), QStringLiteral("preset"), QStringLiteral("filter")}
+                            + sizes
+                            + QStringList{QStringLiteral("showPipeline"), QStringLiteral("showApprovals"),
+                                          QStringLiteral("projectFilter")});
         expected.insert(QStringLiteral("gitlab.issue.summary"),
                         single
                             + QStringList{QStringLiteral("showDetails"), QStringLiteral("showLabels"),

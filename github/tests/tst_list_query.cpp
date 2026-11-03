@@ -71,6 +71,32 @@ QJsonObject runList(const QString &source)
                        {QStringLiteral("source"), source}};
 }
 
+// A list over several repositories, with blanks, slashes and a repetition
+// that the module tidies away.
+QJsonObject multiList(const QJsonObject &more = {})
+{
+    QJsonObject config{{QStringLiteral("repositories"),
+                        QJsonArray{QStringLiteral(" acme/backend/ "), QStringLiteral(""), QStringLiteral("acme/web"),
+                                   QStringLiteral("acme/backend")}}};
+    for (auto it = more.begin(); it != more.end(); ++it)
+        config.insert(it.key(), it.value());
+    return config;
+}
+
+// A run of a repository, made at a time.
+QJsonObject runOf(qint64 id, const QString &repository, const QString &createdAt)
+{
+    return QJsonObject{{QStringLiteral("id"), id},
+                       {QStringLiteral("created_at"), createdAt},
+                       {QStringLiteral("repository"), QJsonObject{{QStringLiteral("full_name"), repository}}}};
+}
+
+QJsonDocument runsAnswer(const QJsonArray &runs)
+{
+    return QJsonDocument(QJsonObject{{QStringLiteral("total_count"), int(runs.size())},
+                                     {QStringLiteral("workflow_runs"), runs}});
+}
+
 ApiReply forbiddenReply()
 {
     ApiReply reply;
@@ -697,6 +723,174 @@ private slots:
         WAIT_FOR_FINISH(job);
         QCOMPARE(job.finished->state, ItemStatus::State::Error);
         QVERIFY(job.finished->data.isEmpty());
+    }
+
+    // Several repositories.
+
+    void severalRepositoriesAreTidied()
+    {
+        QCOMPARE(configuredRepositories(multiList()),
+                 (QStringList{QStringLiteral("acme/backend"), QStringLiteral("acme/web")}));
+        QVERIFY(configuredRepositories({}).isEmpty());
+        QCOMPARE(scopeProblem({}, {}, ListSpan::Repositories),
+                 QStringLiteral("Set the repositories in the item's settings."));
+        QVERIFY(scopeProblem(multiList(), {}, ListSpan::Repositories).isEmpty());
+    }
+
+    void severalRepositoriesSearchTogether()
+    {
+        const QJsonObject config = multiList({{QStringLiteral("preset"), QStringLiteral("reviewRequested")},
+                                              {QStringLiteral("filter"), QStringLiteral("label:bug")}});
+        const QString query = QStringLiteral("is:pr is:open repo:acme/backend repo:acme/web review-requested:@me "
+                                             "label:bug");
+        QCOMPARE(searchQuery(ListKind::PullRequests, config, {}, ListSpan::Repositories), query);
+        // All open needs no other qualifier, as the repositories narrow it.
+        QCOMPARE(searchQuery(ListKind::PullRequests, multiList({{QStringLiteral("preset"), QStringLiteral("allOpen")}}),
+                             {}, ListSpan::Repositories),
+                 QStringLiteral("is:pr is:open repo:acme/backend repo:acme/web"));
+        QCOMPARE(listWebUrl(ListKind::PullRequests, QUrl(QStringLiteral("https://github.com")), config, {},
+                            ListSpan::Repositories)
+                     .toString(QUrl::FullyEncoded),
+                 QStringLiteral("https://github.com/pulls?q=is%3Apr%20is%3Aopen%20repo%3Aacme%2Fbackend%20repo%3Aacme"
+                                "%2Fweb%20review-requested%3A%40me%20label%3Abug"));
+        QCOMPARE(listDescription(ListKind::PullRequests, config, {}, ListSpan::Repositories),
+                 QStringLiteral("Review requested from me · acme/backend, acme/web · label:bug"));
+
+        const QString key = searchKey(QStringLiteral("is%3Apr%20is%3Aopen%20repo%3Aacme%2Fbackend%20repo%3Aacme%2Fweb%20"
+                                                     "review-requested%3A%40me%20label%3Abug"));
+        FakeStatusJob job;
+        job.configValues = config;
+        QVERIFY(job.client.setJsonFile(key, dataFile(QStringLiteral("pr_search.json"))));
+        fetchPullRequestMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.client.requestKeys(), QStringList{key});
+        QCOMPARE(job.finished->summary, QStringLiteral("3 pull request(s)"));
+    }
+
+    void severalRepositoriesNeedOne()
+    {
+        FakeStatusJob pullRequests;
+        fetchPullRequestMultiListStatus(pullRequests);
+        QCOMPARE(pullRequests.finishCount, 1);
+        QCOMPARE(pullRequests.finished->message, QStringLiteral("Set the repositories in the item's settings."));
+
+        FakeStatusJob runs;
+        runs.configValues = QJsonObject{{QStringLiteral("repositories"), QJsonArray{QStringLiteral(" ")}}};
+        fetchRunMultiListStatus(runs);
+        QCOMPARE(runs.finishCount, 1);
+        QCOMPARE(runs.finished->state, ItemStatus::State::None);
+        QCOMPARE(runs.finished->message, QStringLiteral("Set the repositories in the item's settings."));
+        QVERIFY(runs.client.requests().isEmpty());
+    }
+
+    // One request per repository, joined newest first and cut to the limit.
+    void runsOfSeveralRepositories()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList({{QStringLiteral("limit"), 3}});
+        const QString backend = QStringLiteral("GET repos/acme/backend/actions/runs?per_page=3");
+        const QString web = QStringLiteral("GET repos/acme/web/actions/runs?per_page=3");
+        job.client.setJson(backend, runsAnswer({runOf(1, QStringLiteral("acme/backend"), "2026-11-01T10:00:00Z"),
+                                                runOf(2, QStringLiteral("acme/backend"), "2026-10-30T10:00:00Z")}));
+        job.client.setJson(web, runsAnswer({runOf(3, QStringLiteral("acme/web"), "2026-11-02T10:00:00Z"),
+                                            runOf(4, QStringLiteral("acme/web"), "2026-10-31T10:00:00Z")}));
+        fetchRunMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.client.requestKeys(), (QStringList{backend, web}));
+        const ItemStatus &status = *job.finished;
+        QCOMPARE(status.state, ItemStatus::State::Ok);
+        QCOMPARE(status.summary, QStringLiteral("3+ run(s)"));
+        QStringList ids;
+        for (const QJsonValue &row : status.data.value(QStringLiteral("rows")).toArray())
+            ids << QString::number(row.toObject().value(QStringLiteral("id")).toInteger());
+        QCOMPARE(ids, (QStringList{QStringLiteral("3"), QStringLiteral("1"), QStringLiteral("4")}));
+        QCOMPARE(status.data.value(QStringLiteral("total")).toInt(), 3);
+    }
+
+    void runsOfSeveralRepositoriesBySource_data()
+    {
+        QTest::addColumn<QJsonObject>("config");
+        QTest::addColumn<QStringList>("keys");
+
+        QTest::newRow("mine") << multiList({{QStringLiteral("source"), QStringLiteral("mine")}})
+                              << QStringList{kUser, kRuns + "?actor=ana&per_page=100",
+                                             "GET repos/acme/web/actions/runs?actor=ana&per_page=100"};
+        QTest::newRow("fixed branch")
+            << multiList({{QStringLiteral("source"), QStringLiteral("branch")},
+                          {QStringLiteral("branch"), QStringLiteral("main")}})
+            << QStringList{kRuns + "?branch=main&per_page=100", "GET repos/acme/web/actions/runs?branch=main&per_page=100"};
+        // Each repository's own default branch.
+        QTest::newRow("default branches")
+            << multiList({{QStringLiteral("source"), QStringLiteral("branch")}})
+            << QStringList{kRepository, QStringLiteral("GET repos/acme/web"), kRuns + "?branch=trunk&per_page=100",
+                           "GET repos/acme/web/actions/runs?branch=trunk&per_page=100"};
+    }
+
+    void runsOfSeveralRepositoriesBySource()
+    {
+        QFETCH(QJsonObject, config);
+        QFETCH(QStringList, keys);
+
+        FakeStatusJob job;
+        job.configValues = config;
+        job.client.setJson(kUser, QJsonDocument(QJsonObject{{QStringLiteral("login"), QStringLiteral("ana")}}));
+        const QJsonDocument repository(QJsonObject{{QStringLiteral("default_branch"), QStringLiteral("trunk")}});
+        job.client.setJson(kRepository, repository);
+        job.client.setJson(QStringLiteral("GET repos/acme/web"), repository);
+        for (const QString &key : keys) {
+            if (key.contains(QLatin1String("/runs")))
+                job.client.setJson(key, runsAnswer({}));
+        }
+        fetchRunMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QStringList asked = job.client.requestKeys();
+        asked.sort();
+        keys.sort();
+        QCOMPARE(asked, keys);
+    }
+
+    // The first repository that fails fails the list, and names itself.
+    void runsOfSeveralRepositoriesFail()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList();
+        job.client.setJson(kRuns + QStringLiteral("?per_page=100"), runsAnswer({}));
+        job.client.setReply(QStringLiteral("GET repos/acme/web/actions/runs?per_page=100"), forbiddenReply());
+        fetchRunMultiListStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::Error);
+        QCOMPARE(job.finished->message, QStringLiteral("acme/web: Forbidden (403)"));
+        QVERIFY(job.finished->data.isEmpty());
+    }
+
+    void runsOfSeveralRepositoriesTakeThreeSources()
+    {
+        FakeStatusJob job;
+        job.configValues = multiList({{QStringLiteral("source"), QStringLiteral("pullRequest")}});
+        fetchRunMultiListStatus(job);
+        QCOMPARE(job.finishCount, 1);
+        QCOMPARE(job.finished->message, QStringLiteral("Set the source in the item's settings."));
+        QVERIFY(job.client.requests().isEmpty());
+    }
+
+    void runsOfSeveralRepositoriesHaveNoPage()
+    {
+        const QJsonObject config = multiList({{QStringLiteral("source"), QStringLiteral("mine")}});
+        QVERIFY(runListWebUrl(QUrl(QStringLiteral("https://github.com")), config, {}, ListSpan::Repositories).isEmpty());
+        QCOMPARE(runListDescription(config, {}, ListSpan::Repositories),
+                 QStringLiteral("Started by me · acme/backend, acme/web"));
+    }
+
+    // The values a view filter starts with.
+    void filterDefaults()
+    {
+        const QJsonObject config{{QStringLiteral("statusFilter"),
+                                  QJsonArray{QStringLiteral(" Failed "), QStringLiteral(""), QStringLiteral("Running")}}};
+        QCOMPARE(filterDefault(config, QStringLiteral("status")),
+                 (QStringList{QStringLiteral("Failed"), QStringLiteral("Running")}));
+        QVERIFY(filterDefault(config, QStringLiteral("workflow")).isEmpty());
     }
 };
 

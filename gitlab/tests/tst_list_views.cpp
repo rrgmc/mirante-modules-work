@@ -50,9 +50,9 @@ using namespace listtest;
 
 namespace {
 
-enum MrColumn { MrRef, MrTitle, MrAuthor, MrPipeline, MrApprovals, MrUpdated, MrLinks };
+enum MrColumn { MrRef, MrTitle, MrProject, MrAuthor, MrPipeline, MrApprovals, MrUpdated, MrLinks };
 enum IssueColumn { IssueRef, IssueTitle, IssueAssignees, IssueLabels, IssueUpdated, IssueLinks };
-enum PipelineColumn { PipelineId, PipelineStatus, PipelineRef, PipelineAuthor, PipelineStarted, PipelineLinks };
+enum PipelineColumn { PipelineId, PipelineProject, PipelineStatus, PipelineRef, PipelineAuthor, PipelineStarted, PipelineLinks };
 
 using View = std::unique_ptr<QWidget>;
 
@@ -233,6 +233,29 @@ private slots:
         QCOMPARE(cellText(view, 2, MrRef), QStringLiteral("website!8"));
     }
 
+    void mergeRequestsOfSeveralProjects()
+    {
+        FakeContext context;
+        context.itemConfig = QJsonObject{
+            {QStringLiteral("projects"), QJsonArray{QStringLiteral("acme/backend"), QStringLiteral("acme/website")}},
+            {QStringLiteral("projectFilter"), QJsonArray{QStringLiteral("acme/website")}}};
+        context.source.status = mergeRequests();
+        View view(createMergeRequestMultiListView(context, nullptr));
+        // Wide enough for every column.
+        view->resize(1800, 700);
+        view->show();
+        QCoreApplication::processEvents();
+
+        QVERIFY(!table(view)->isColumnHidden(MrProject));
+        QVERIFY(list(view)->webLink().isEmpty());
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(MrProject)));
+        QVERIFY(filter);
+        QCOMPARE(rowCount(view), 1);
+        QCOMPARE(cellText(view, 0, MrProject), QStringLiteral("acme/website"));
+        filter->setCurrentIndex(0);
+        QCOMPARE(rowCount(view), 3);
+    }
+
     void issueRowsDrawFromData()
     {
         FakeContext context;
@@ -366,8 +389,11 @@ private slots:
 
         view->resize(1400, 400);
         QCoreApplication::processEvents();
-        for (int column = MrRef; column <= MrUpdated; ++column)
-            QVERIFY(!table(view)->isColumnHidden(column));
+        for (int column = MrRef; column <= MrUpdated; ++column) {
+            // One repository or project has no column of its own.
+            if (column != MrProject)
+                QVERIFY(!table(view)->isColumnHidden(column));
+        }
     }
 
     // The further requests.
@@ -903,6 +929,57 @@ private slots:
         QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("1000"));
         QCOMPARE(cellText(view, 1, PipelineId), QStringLiteral("250"));
         QCOMPARE(cellText(view, 2, PipelineId), QStringLiteral("99"));
+    }
+
+    // The Status filter starts with the item's values; the user's choice
+    // replaces them.
+    void pipelineFilterStartsWithTheItemsValues()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.itemConfig.insert(QStringLiteral("statusFilter"), QJsonArray{QStringLiteral("Failed")});
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        QCOMPARE(rowCount(view), 2);
+        QVERIFY(table(view)->isColumnHidden(PipelineProject));
+        QVERIFY(!view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineProject))));
+        view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineStatus)))->setCurrentIndex(0);
+        QCOMPARE(rowCount(view), 4);
+    }
+
+    // A list over several projects shows each pipeline's project, with a
+    // filter on it, and builds addresses and items from it.
+    void pipelinesOfSeveralProjects()
+    {
+        QJsonArray rows = pipelines().data.value(QStringLiteral("rows")).toArray();
+        for (int index = 0; index < rows.size(); ++index) {
+            QJsonObject row = rows.at(index).toObject();
+            row.remove(QStringLiteral("web_url"));
+            row.insert(kRowProjectKey, index % 2 ? QStringLiteral("acme/web") : QStringLiteral("acme/backend"));
+            rows[index] = row;
+        }
+        FakeContext context;
+        context.itemConfig = QJsonObject{
+            {QStringLiteral("projects"), QJsonArray{QStringLiteral("acme/backend"), QStringLiteral("acme/web")}},
+            {QStringLiteral("projectFilter"), QJsonArray{QStringLiteral("acme/web")}}};
+        context.source.status = statusOfRows(rows);
+        View view(createPipelineMultiListView(context, nullptr));
+        show(view);
+
+        QVERIFY(!table(view)->isColumnHidden(PipelineProject));
+        QVERIFY(list(view)->webLink().isEmpty());
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineProject)));
+        QVERIFY(filter);
+        QCOMPARE(rowCount(view), 2);
+        QCOMPARE(cellText(view, 0, PipelineProject), QStringLiteral("acme/web"));
+        const QString key = table(view)->model()->index(0, PipelineId).data().toString();
+        emit list(view)->rowLinkActivated(key, QStringLiteral("web"));
+        QCOMPARE(m_opened, QList<QUrl>{QUrl(kBase + QStringLiteral("/acme/web/-/pipelines/") + key)});
+
+        filter->setCurrentIndex(0);
+        QCOMPARE(rowCount(view), 4);
     }
 
     void pipelineFilterOnStatus()

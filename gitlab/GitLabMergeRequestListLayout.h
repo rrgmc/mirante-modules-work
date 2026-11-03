@@ -58,7 +58,7 @@ public:
     };
 
     // Called by the module only.
-    explicit MergeRequestListModel(ItemContext &context);
+    explicit MergeRequestListModel(ItemContext &context, ListSpan span = ListSpan::Scope);
     ~MergeRequestListModel() override;
 
     // In the order of GitLab's answer.

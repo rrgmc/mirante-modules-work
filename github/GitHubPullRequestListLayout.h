@@ -59,7 +59,7 @@ public:
     };
 
     // Called by the module only.
-    explicit PullRequestListModel(ItemContext &context);
+    explicit PullRequestListModel(ItemContext &context, ListSpan span = ListSpan::Scope);
     ~PullRequestListModel() override;
 
     // In the order of GitHub's answer.

@@ -54,9 +54,13 @@ private slots:
                         {QStringLiteral("GitHub PR (summary)"), QStringLiteral("PR")});
         expected.insert(QStringLiteral("github.pr.page"), {QStringLiteral("GitHub PR (page)"), QStringLiteral("PR")});
         expected.insert(QStringLiteral("github.pr.list"), {QStringLiteral("GitHub PR List"), QStringLiteral("PRs")});
+        expected.insert(QStringLiteral("github.pr.multilist"),
+                        {QStringLiteral("GitHub PR List (several repositories)"), QStringLiteral("PRs")});
         expected.insert(QStringLiteral("github.run"), {QStringLiteral("GitHub Actions Run"), QStringLiteral("Run")});
         expected.insert(QStringLiteral("github.run.list"),
                         {QStringLiteral("GitHub Actions Run List"), QStringLiteral("Runs")});
+        expected.insert(QStringLiteral("github.run.multilist"),
+                        {QStringLiteral("GitHub Actions Run List (several repositories)"), QStringLiteral("Runs")});
         expected.insert(QStringLiteral("github.issue.summary"),
                         {QStringLiteral("GitHub Issue (summary)"), QStringLiteral("Issue")});
         expected.insert(QStringLiteral("github.issue.page"),
@@ -115,10 +119,19 @@ private slots:
         expected.insert(QStringLiteral("github.run"),
                         {QStringLiteral("repository"), QStringLiteral("branchSource"), QStringLiteral("branch"),
                          QStringLiteral("number"), QStringLiteral("workflow")});
+        const QStringList runFilters{QStringLiteral("statusFilter"), QStringLiteral("workflowFilter")};
         expected.insert(QStringLiteral("github.run.list"),
                         QStringList{QStringLiteral("repository"), QStringLiteral("source"), QStringLiteral("branch"),
                                     QStringLiteral("number"), QStringLiteral("workflow")}
-                            + sizes);
+                            + sizes + runFilters);
+        expected.insert(QStringLiteral("github.run.multilist"),
+                        QStringList{QStringLiteral("repositories"), QStringLiteral("source"), QStringLiteral("branch")}
+                            + sizes + QStringList{QStringLiteral("repositoryFilter")} + runFilters);
+        expected.insert(QStringLiteral("github.pr.multilist"),
+                        QStringList{QStringLiteral("repositories"), QStringLiteral("preset"), QStringLiteral("filter")}
+                            + sizes
+                            + QStringList{QStringLiteral("showChecks"), QStringLiteral("showReviews"),
+                                          QStringLiteral("repositoryFilter")});
         expected.insert(QStringLiteral("github.issue.summary"),
                         single
                             + QStringList{QStringLiteral("showDetails"), QStringLiteral("showLabels"),
@@ -372,6 +385,14 @@ private slots:
         registerGitHub(registry);
 
         for (const mirante::ItemType *type : registry.types()) {
+            // A list over several repositories has a list of them instead.
+            if (type->id().endsWith(QLatin1String(".multilist"))) {
+                const mirante::Field repositories = fieldOf(*type, QStringLiteral("repositories"));
+                QCOMPARE(repositories.type, mirante::Field::Type::TextList);
+                QVERIFY2(repositories.required, qPrintable(type->id()));
+                QVERIFY2(fieldOf(*type, QStringLiteral("repository")).key.isEmpty(), qPrintable(type->id()));
+                continue;
+            }
             const mirante::Field repository = fieldOf(*type, QStringLiteral("repository"));
             QCOMPARE(repository.type, mirante::Field::Type::Text);
             QVERIFY2(!repository.required, qPrintable(type->id()));

@@ -21,6 +21,8 @@ public:
     struct Pipeline : ListRow
     {
         qint64 id = 0;
+        // "group/project": the row's kRowProjectKey, else the item's.
+        QString project;
         // Such as Bad "Failed". Empty text when GitLab does not say.
         Pill state;
         // The branch, tag or merge request ref it ran for.
@@ -33,9 +35,10 @@ public:
     };
 
     // Called by the module only.
-    explicit PipelineListModel(ItemContext &context);
+    explicit PipelineListModel(ItemContext &context, ListSpan span = ListSpan::Scope);
 
-    // In the order of GitLab's answer: newest first.
+    // In the order of GitLab's answer: newest first. Over several projects,
+    // newest first by created_at.
     QList<Pipeline> pipelines() const;
     Pipeline pipeline(const QString &key) const { return m_pipelines.value(key); }
 
