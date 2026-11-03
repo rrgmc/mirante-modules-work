@@ -1,6 +1,7 @@
-// The Jira issue view and the list view, with a fake context and a fake status
-// source. Nothing opens for real: handlers stand in for the
+// The Jira issue model, the issue view's default layout and the list view, with
+// a fake context and a fake status source. Nothing opens for real: handlers stand in for the
 // external browser. See README.md#views.
+#include "../JiraIssueLayout.h"
 #include "../JiraIssueView.h"
 #include "../JiraListView.h"
 #include "../JiraStatus.h"
@@ -29,6 +30,8 @@
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QScrollBar>
+#include <QSet>
+#include <QSignalSpy>
 #include <QSplitter>
 #include <QTableView>
 #include <QTemporaryDir>
@@ -274,6 +277,150 @@ class TestViews : public QObject
     Q_OBJECT
 
 private slots:
+    // The issue view's tests know the default layout's widgets. A build whose
+    // app replaces the layout skips them; the issue model's tests still run.
+    void init()
+    {
+        static const QSet<QString> defaultLayoutTests{
+            QStringLiteral("aLineCountsTheOtherChildren"),
+            QStringLiteral("changingAnIssueIsGone"),
+            QStringLiteral("childrenShowWithPillsAndLinks"),
+            QStringLiteral("extraFieldValuesAreNeverMarkup"),
+            QStringLiteral("extraFieldsOnDataCenter"),
+            QStringLiteral("extraFieldsShowInDetails"),
+            QStringLiteral("fieldsHideSections"),
+            QStringLiteral("imagesAreNeverFetched"),
+            QStringLiteral("issueDrawsFromStatus"),
+            QStringLiteral("issueOnDataCenter"),
+            QStringLiteral("latestFiveCommentsNewestFirst"),
+            QStringLiteral("linkedIssueOpensInTheBrowser"),
+            QStringLiteral("newChildrenDrawAgain"),
+            QStringLiteral("oldDataStaysWithAnError"),
+            QStringLiteral("openPageShowsThePage"),
+            QStringLiteral("richTextGrowsToItsText"),
+            QStringLiteral("richTextLinks"),
+            QStringLiteral("richTextOpensNothingByItself"),
+            QStringLiteral("serverTextIsNeverMarkup"),
+            QStringLiteral("shiftOpensTheBrowserInstead"),
+            QStringLiteral("webLinkOfTheIssue"),
+            QStringLiteral("withoutChildrenTheSectionStaysAsItWas"),
+            QStringLiteral("withoutDataShowsWhyOrLoading"),
+        };
+        if (!defaultLayoutTests.contains(QString::fromLatin1(QTest::currentTestFunction())))
+            return;
+        FakeContext context;
+        const std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+        if (view->objectName() != QLatin1String("jira-issue-default-layout"))
+            QSKIP("The app replaces the layout of the Jira issue.");
+    }
+
+    // The issue model, which every layout draws.
+
+    void modelReadsTheIssue()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.source.status = statusOf(cloudIssue());
+        jira::IssueModel model(context);
+        model.follow(&context.source);
+        QVERIFY(model.hasData());
+        QCOMPARE(model.title(), QStringLiteral("OPS-7 Rotate the build server's certificates"));
+        QCOMPARE(model.status().text, QStringLiteral("In Review"));
+        QCOMPARE(model.status().role, StatusRole::Waiting);
+        QCOMPARE(model.type(), QStringLiteral("Task"));
+        QCOMPARE(model.pageAddress(), QUrl(kCloudBase + QStringLiteral("/browse/OPS-7")));
+
+        QStringList details;
+        for (const jira::IssueModel::Detail &detail : model.details())
+            details << detail.value;
+        for (const char *expected : {"Medium", "Ana Example", "Bruno Sample", "Sprint 12"})
+            QVERIFY2(details.contains(QLatin1String(expected)), expected);
+
+        QVERIFY(!model.description().isEmpty());
+
+        // Newest first.
+        const QList<jira::IssueModel::Comment> comments = model.comments();
+        QVERIFY(comments.size() > 5);
+        QVERIFY(comments.first().body.html.contains(QStringLiteral("Sixth comment"))
+                || comments.first().body.text.contains(QStringLiteral("Sixth comment")));
+
+        bool sawOps8 = false;
+        for (const jira::IssueModel::LinkedIssue &issue : model.linkedIssues()) {
+            if (issue.key == QLatin1String("OPS-8")) {
+                sawOps8 = true;
+                QCOMPARE(issue.address, QUrl(kCloudBase + QStringLiteral("/browse/OPS-8")));
+            }
+        }
+        QVERIFY(sawOps8);
+    }
+
+    void modelOnDataCenter()
+    {
+        FakeContext context;
+        useDataCenter(context, QStringLiteral("INFRA-1203"));
+        context.source.status = statusOf(dcIssue());
+        jira::IssueModel model(context);
+        model.follow(&context.source);
+        QCOMPARE(model.status().role, StatusRole::Good);
+        QCOMPARE(model.details().at(1).value, QStringLiteral("Unassigned"));
+        QVERIFY(model.linkedIssues().isEmpty());
+        QCOMPARE(model.moreChildren(), 0);
+    }
+
+    void modelMessagesAndTheSameAnswer()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        jira::IssueModel model(context);
+        QSignalSpy changed(&model, &jira::IssueModel::changed);
+        model.follow(&context.source);
+        QVERIFY(!model.hasData());
+        QCOMPARE(model.message(), QStringLiteral("Loading…"));
+
+        ItemStatus failed;
+        failed.state = ItemStatus::State::NoToken;
+        failed.message = QStringLiteral("Token not set");
+        context.source.push(failed);
+        QCOMPARE(model.message(), QStringLiteral("Token not set"));
+
+        context.source.push(statusOf(cloudIssue()));
+        QVERIFY(model.hasData());
+        const qsizetype count = changed.size();
+
+        // The same answer again says nothing, so a selection stays.
+        context.source.push(statusOf(cloudIssue()));
+        QCOMPARE(changed.size(), count);
+    }
+
+    void modelSectionsFollowTheirFields()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        context.itemConfig.insert(QStringLiteral("showComments"), false);
+        jira::IssueModel model(context);
+        QVERIFY(!model.isSectionShown(QStringLiteral("comments")));
+        QVERIFY(model.isSectionShown(QStringLiteral("links")));
+    }
+
+    // Whichever layout the build compiled in: it is made, draws every kind of
+    // status, and goes.
+    void everyLayoutDrawsEveryState()
+    {
+        FakeContext context;
+        useCloud(context, QStringLiteral("OPS-7"));
+        std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
+        QVERIFY(view);
+        view->show();
+        context.source.push(statusOf(cloudIssue()));
+        ItemStatus failed;
+        failed.message = QStringLiteral("Token not set");
+        context.source.push(failed);
+        useDataCenter(context, QStringLiteral("INFRA-1203"));
+        context.source.push(statusOf(dcIssue()));
+        QCoreApplication::processEvents();
+        view.reset();
+    }
+
     // The issue view.
 
     void issueDrawsFromStatus()
