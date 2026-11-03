@@ -762,5 +762,45 @@
         <source>This item has no server.</source>
         <translation>Este item não tem servidor.</translation>
     </message>
+    <message>
+        <source>Set the repositories in the item&apos;s settings.</source>
+        <translation>Defina os repositórios nas configurações do item.</translation>
+    </message>
+    <message>
+        <source>One per line, as owner/repo.</source>
+        <translation>Um por linha, como dono/repositório.</translation>
+    </message>
+    <message>
+        <source>Filters at the start</source>
+        <translation>Filtros ao abrir</translation>
+    </message>
+    <message>
+        <source>Repositories to show, as owner/repo. Empty shows all.</source>
+        <translation>Repositórios a mostrar, como dono/repositório. Vazio mostra todos.</translation>
+    </message>
+    <message>
+        <source>Such as Failed or Running, as the Status filter shows them. Empty shows all.</source>
+        <translation>Como Failed ou Running, como o filtro de status os mostra. Vazio mostra todos.</translation>
+    </message>
+    <message>
+        <source>Workflow names, such as CI. Empty shows all.</source>
+        <translation>Nomes de workflows, como CI. Vazio mostra todos.</translation>
+    </message>
+    <message>
+        <source>GitHub PR List (several repositories)</source>
+        <translation>Lista de PRs do GitHub (vários repositórios)</translation>
+    </message>
+    <message>
+        <source>A table of the pull requests of the repositories you name, such as those that wait for your review, with a filter on the repository.</source>
+        <translation>Uma tabela de pull requests dos repositórios que você indicar, como os que aguardam a sua revisão, com um filtro por repositório.</translation>
+    </message>
+    <message>
+        <source>GitHub Actions Run List (several repositories)</source>
+        <translation>Lista de execuções do GitHub Actions (vários repositórios)</translation>
+    </message>
+    <message>
+        <source>A table of the Actions runs of the repositories you name, newest first: all of them, those you started, or those of a branch, with a filter on the repository.</source>
+        <translation>Uma tabela de execuções do Actions dos repositórios que você indicar, as mais novas primeiro: todas, as que você iniciou ou as de uma branch, com um filtro por repositório.</translation>
+    </message>
 </context>
 </TS>

@@ -664,5 +664,49 @@
         <comment>link that opens a row</comment>
         <translation>Abrir</translation>
     </message>
+    <message>
+        <source>Set the projects in the item&apos;s settings.</source>
+        <translation>Defina os projetos nas configurações do item.</translation>
+    </message>
+    <message>
+        <source>Projects</source>
+        <translation>Projetos</translation>
+    </message>
+    <message>
+        <source>One per line, as group/project.</source>
+        <translation>Um por linha, como grupo/projeto.</translation>
+    </message>
+    <message>
+        <source>Filters at the start</source>
+        <translation>Filtros ao abrir</translation>
+    </message>
+    <message>
+        <source>Project</source>
+        <translation>Projeto</translation>
+    </message>
+    <message>
+        <source>Projects to show, as group/project. Empty shows all.</source>
+        <translation>Projetos a mostrar, como grupo/projeto. Vazio mostra todos.</translation>
+    </message>
+    <message>
+        <source>Such as Failed or Running, as the Status filter shows them. Empty shows all.</source>
+        <translation>Como Failed ou Running, como o filtro de status os mostra. Vazio mostra todos.</translation>
+    </message>
+    <message>
+        <source>GitLab MR List (several projects)</source>
+        <translation>Lista de MRs do GitLab (vários projetos)</translation>
+    </message>
+    <message>
+        <source>A table of the merge requests of the projects you name, such as those that wait for your review, with a filter on the project.</source>
+        <translation>Uma tabela de merge requests dos projetos que você indicar, como as que aguardam sua revisão, com um filtro por projeto.</translation>
+    </message>
+    <message>
+        <source>GitLab CI Pipeline List (several projects)</source>
+        <translation>Lista de pipelines de CI do GitLab (vários projetos)</translation>
+    </message>
+    <message>
+        <source>A table of the pipelines of the projects you name, newest first: all of them, those you started, or those of a branch, with a filter on the project.</source>
+        <translation>Uma tabela de pipelines dos projetos que você indicar, os mais novos primeiro: todos, os que você iniciou ou os de uma branch, com um filtro por projeto.</translation>
+    </message>
 </context>
 </TS>
