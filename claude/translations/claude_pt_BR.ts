@@ -175,5 +175,37 @@
         <source>Copy session ID</source>
         <translation>Copiar ID da sessão</translation>
     </message>
+    <message>
+        <source>5 h %1 %</source>
+        <translation>5 h %1 %</translation>
+    </message>
+    <message>
+        <source>week %1 %</source>
+        <translation>semana %1 %</translation>
+    </message>
+    <message>
+        <source>Limits</source>
+        <translation>Limites</translation>
+    </message>
+    <message>
+        <source>Needs permission</source>
+        <translation>Aguardando permissão</translation>
+    </message>
+    <message>
+        <source>Tool</source>
+        <translation>Ferramenta</translation>
+    </message>
+    <message>
+        <source>Model</source>
+        <translation>Modelo</translation>
+    </message>
+    <message>
+        <source>Context</source>
+        <translation>Contexto</translation>
+    </message>
+    <message>
+        <source>Cost</source>
+        <translation>Custo</translation>
+    </message>
 </context>
 </TS>
