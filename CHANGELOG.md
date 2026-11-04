@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Added
+
+- Claude agents (`claude.agents`), a list of the Claude Code sessions on this device, with their title, status and repository, for one or more accounts. It runs `claude agents --json` and shows no session text. See decision 0143 in mirante-core.
+
 ### Changed
 
 - In a narrow GitHub Run List, the Workflow column hides first, then Branch, then Repository. Before, Repository hid first and Branch never hid.
