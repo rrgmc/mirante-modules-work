@@ -226,7 +226,7 @@ Other text from the server goes in labels with `Qt::PlainText`. A `&` in an issu
 
 **The list.** It has a model, `ListModel`, and a layout that an app can replace; see [layouts](#layouts). The default layout is an `ItemListView` with the columns Key, Summary, Status, Assignee, Updated, the [extra fields](#extra-fields) and Links, sorted on Updated. The extra fields hide first in a narrow cell, the last of them first, then Assignee, Updated, Status and Key. Summary and Links stay. The status's pill takes its role from the status category: `done` is Good, `indeterminate` is Waiting, otherwise Neutral. Keys sort by number, so `OPS-9` comes before `OPS-10`. Updated reads as `compactDate()` and sorts by the real date. A click on a row only selects it: there is no preview.
 
-- **Web link.** `listWebUrl()`, `<baseUrl>/issues/?jql=<query>`, above the table. It is hidden when the query cannot be built.
+- **Web link.** `listWebUrl()`, `<baseUrl>/issues/?jql=<query>`, given to `ItemContext::setWebLink()`, so the cell header's **Open in browser** button opens it. It is hidden when the query cannot be built.
 - **Row links.** "Web" opens `<baseUrl>/browse/<key>` in the external browser. "Open" works as Open page above. "Add" calls `ItemContext::addItemToTask()` with the type `jira.issue.summary`, the key as its name and `{"key": <key>}`. Without a site only "Add" is there. The column sorts by the key.
 - **Row menu.** The same, as "Web", "Open page" and "Add to task as item", then "Copy link", which copies `<baseUrl>/browse/<key>`.
 - **Pages.** `setPageSize()` with the item's `pageSize`. The rows fetched are the item's `limit`.

@@ -716,18 +716,16 @@ private slots:
         QCOMPARE(browser.catcher.urls, QList<QUrl>{QUrl(kCloudBase + QStringLiteral("/browse/OPS-7"))});
     }
 
+    // The cell header opens the issue's page, so the view has no Web link.
     void webLinkOfTheIssue()
     {
-        BrowserGuard browser;
         FakeContext context;
         useDataCenter(context, QStringLiteral("INFRA-1203"));
         context.source.status = statusOf(dcIssue());
         std::unique_ptr<QWidget> view(jira::createIssueView(context, nullptr));
 
-        const QUrl expected(kDcBase + QStringLiteral("/browse/INFRA-1203"));
-        QCOMPARE(actionsOf(view.get())->webLink(), expected);
-        view->findChild<QPushButton *>(QStringLiteral("web"))->click();
-        QCOMPARE(browser.catcher.urls, QList<QUrl>{expected});
+        QCOMPARE(context.webLink, QUrl(kDcBase + QStringLiteral("/browse/INFRA-1203")));
+        QVERIFY(actionsOf(view.get())->webLink().isEmpty());
     }
 
     void linkedIssueOpensInTheBrowser()
@@ -1084,7 +1082,7 @@ private slots:
         problem.message = QStringLiteral("Set the Jira project key in the project's settings.");
         context.source.push(problem);
         QVERIFY(shownText(view.get()).contains(problem.message));
-        QVERIFY(static_cast<ItemListView *>(view.get())->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
     }
 
     void listKeepsItsRowsWithAnError()
@@ -1102,9 +1100,9 @@ private slots:
         QVERIFY(!shownText(view.get()).contains(QStringLiteral("No answer")));
     }
 
+    // The cell header opens the list's page, so the view has no Web link.
     void listWebLink()
     {
-        BrowserGuard browser;
         FakeContext context;
         useDataCenter(context, QString());
         context.itemConfig = {{QStringLiteral("preset"), QStringLiteral("recentlyUpdated")}};
@@ -1112,13 +1110,11 @@ private slots:
         context.source.status = listStatusOf(readJson(QFINDTESTDATA("tests/data/search-list-dc.json")));
         std::unique_ptr<QWidget> view(jira::createListView(context, nullptr));
 
-        const QUrl link = static_cast<ItemListView *>(view.get())->webLink();
+        const QUrl link = context.webLink;
         QCOMPARE(link.path(), QStringLiteral("/jira/issues/"));
         QCOMPARE(QUrlQuery(link).queryItemValue(QStringLiteral("jql"), QUrl::FullyDecoded),
                  QStringLiteral("project = \"OPS\" AND updated >= -7d ORDER BY updated DESC"));
-
-        view->findChild<QPushButton *>(QStringLiteral("web"))->click();
-        QCOMPARE(browser.catcher.urls, QList<QUrl>{link});
+        QVERIFY(static_cast<ItemListView *>(view.get())->webLink().isEmpty());
     }
 
     // There is no preview any more, so selecting a row asks for nothing.

@@ -247,7 +247,7 @@ private slots:
         QCoreApplication::processEvents();
 
         QVERIFY(!table(view)->isColumnHidden(MrProject));
-        QVERIFY(list(view)->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(MrProject)));
         QVERIFY(filter);
         QCOMPARE(rowCount(view), 1);
@@ -969,7 +969,7 @@ private slots:
         show(view);
 
         QVERIFY(!table(view)->isColumnHidden(PipelineProject));
-        QVERIFY(list(view)->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineProject)));
         QVERIFY(filter);
         QCOMPARE(rowCount(view), 2);
@@ -1127,7 +1127,7 @@ private slots:
         FakeContext context;
         context.itemConfig = pipelineConfig();
         View view(createPipelineListView(context, nullptr));
-        QCOMPARE(list(view)->webLink(), QUrl(kBase + QStringLiteral("/acme/backend/-/pipelines")));
+        QCOMPARE(context.webLink, QUrl(kBase + QStringLiteral("/acme/backend/-/pipelines")));
     }
 
     // Without a project there is no link, and the status's message shows.
@@ -1139,7 +1139,7 @@ private slots:
         View view(createPipelineListView(context, nullptr));
         show(view);
 
-        QVERIFY(list(view)->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         QVERIFY(shownText(view).contains(context.source.status.message));
         QVERIFY(!table(view)->isVisible());
         QVERIFY(context.client.requests().isEmpty());
@@ -1306,7 +1306,7 @@ private slots:
         View view(isMergeRequest ? createMergeRequestListView(context, nullptr)
                                  : createIssueListView(context, nullptr));
 
-        QCOMPARE(list(view)->webLink(), expected);
+        QCOMPARE(context.webLink, expected);
     }
 
     // Without data, and with old data.
