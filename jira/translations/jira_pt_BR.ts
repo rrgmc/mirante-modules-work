@@ -44,8 +44,8 @@
         <translation>Defina a chave do projeto do Jira nas configurações do projeto.</translation>
     </message>
     <message>
-        <source>Set the Jira base URL in this profile&apos;s Modules &gt; Jira &gt; General Configuration, in the Profiles menu.</source>
-        <translation>Defina a URL base do Jira em Módulos &gt; Jira &gt; Configuração geral deste perfil, no menu Perfis.</translation>
+        <source>Set the Jira base URL in Profiles &gt; Manage Profiles…, under this profile&apos;s Jira.</source>
+        <translation>Defina a URL base do Jira em Perfis &gt; Gerenciar perfis…, no Jira deste perfil.</translation>
     </message>
     <message>
         <source>Set the issue key in the item&apos;s settings.</source>
