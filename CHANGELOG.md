@@ -9,6 +9,7 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 ### Added
 
 - Claude agents (`claude.agents`), a list of the Claude Code sessions on this device, with their title, status and repository, for one or more accounts. It runs `claude agents --json` and shows no session text. See decision 0143 in mirante-core.
+- `mirante-bridge`, an optional Claude Code plugin in `claude/plugin`. Its hooks and status line wrapper write each session's latest event and status line input into an exchange folder. Claude agents then shows each session's tool, model and effort, context use and cost, says "Needs permission" when a session waits for one, and shows each account's 5-hour and weekly rate limits above the table. The list refreshes when the folder changes. See [the bridge plugin](claude/README.md#the-bridge-plugin) and decision 0148 in mirante-core.
 
 ### Changed
 
