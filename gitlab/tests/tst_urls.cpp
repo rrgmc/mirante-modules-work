@@ -56,7 +56,7 @@ QJsonObject config(const QString &project, const QJsonValue &iid)
 }
 
 const QString noServer =
-    QStringLiteral("Set the GitLab base URL in this profile's Modules > GitLab > General Configuration, in the Profiles menu.");
+    QStringLiteral("Set the GitLab base URL in Profiles > Manage Profiles…, under this profile's GitLab.");
 const QString noConfig = QStringLiteral("Set the project and number in the item's settings.");
 
 } // namespace

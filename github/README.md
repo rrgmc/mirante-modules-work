@@ -323,7 +323,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `repository` uses the project's `github.repository` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitHub base URL in this profile's Modules > GitHub > General Configuration, in the Profiles menu.";
+- with a base URL that is not an `http` or `https` address: "Set the GitHub base URL in Profiles > Manage Profiles…, under this profile's GitHub.";
 - without a repository or a number: "Set the repository and number in the item's settings."
 
 The tests are in `tests/tst_urls.cpp`.
@@ -425,7 +425,7 @@ The project setting `repository`, "GitHub repository", a text field registered w
 
 ## Settings screens
 
-The module calls itself "GitHub", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitHub. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitHubSettings.cpp`:
+The module calls itself "GitHub", so the Profiles > Manage Profiles… window shows "GitHub" under each profile, with the profile's GitHub accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitHubSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
@@ -437,6 +437,6 @@ The repositories list has an **Add from Server…** button. It asks `user/repos`
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.github.general`, and synced. They hold no token.
 
-A profile can also hold other accounts of the module, added with **Add Account…** in its Modules submenu. Each has its own web address, token and repositories, under `accounts.github` of the profile, with its token under `<workspace id>/<profile id>/github/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
+A profile can also hold other accounts of the module, added with **Add Account** on the module's page in Profiles > Manage Profiles…. Each has its own web address, token and repositories, under `accounts.github` of the profile, with its token under `<workspace id>/<profile id>/github/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
 
 The `repository` field of every type offers the repositories of the profile the item uses, in an editable drop-down list, through `fieldsForProfile(profileId)` and `withRepositories()`. Each is trimmed, slashes at its start and end are removed, and empty or repeated ones are left out, by `repositoryNames()`. Any other repository can still be typed. The tests are in `tests/tst_settings.cpp`.

@@ -252,7 +252,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in this profile's Modules > GitLab > General Configuration, in the Profiles menu.";
+- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in Profiles > Manage Profiles…, under this profile's GitLab.";
 - without a project or a number: "Set the project and number in the item's settings."
 
 ## Items from a link
@@ -322,7 +322,7 @@ The project setting `project`, "GitLab project path", a text field registered wi
 
 ## Settings screens
 
-The module calls itself "GitLab", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitLab. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
+The module calls itself "GitLab", so the Profiles > Manage Profiles… window shows "GitLab" under each profile, with the profile's GitLab accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
@@ -334,6 +334,6 @@ The project paths list has an **Add from Server…** button. It asks `api/v4/pro
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The screen is opened for one profile at a time. See decisions [0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md) and [0054](../../../docs/decisions/0054-module-settings-replace-connections.md), which replaced connections with the base URL.
 
-A profile can also hold other accounts of the module, added with **Add Account…** in its Modules submenu. Each has its own server, token and project paths, under `accounts.gitlab` of the profile, with its token under `<workspace id>/<profile id>/gitlab/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
+A profile can also hold other accounts of the module, added with **Add Account** on the module's page in Profiles > Manage Profiles…. Each has its own server, token and project paths, under `accounts.gitlab` of the profile, with its token under `<workspace id>/<profile id>/gitlab/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
 
 The `project` field of every type offers the paths of the profile the item uses, in an editable drop-down list. The types do this in `fieldsForProfile(profileId)`, which the item dialog calls with the profile the edited item would use; `fields()` offers none. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, and again when another profile is chosen in it, so a change shows the next time the dialog opens.

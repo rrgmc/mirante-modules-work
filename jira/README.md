@@ -20,7 +20,7 @@ Since M3 the types declare their configuration fields, so items can be created a
 
 `jira.issue.page` asks the core for a web view with `ItemContext::createWebView`. `JiraUrls.cpp` builds the address `<baseUrl>/browse/<key>` from the base URL of the [General Configuration](#settings-screens) of the item's profile, read with `ItemContext::moduleSettings()`, without doubling a slash at its end. When something is missing, the cell shows a message instead:
 
-- without a base URL, or with one that is not an `http` or `https` address: "Set the Jira base URL in this profile's Modules > Jira > General Configuration, in the Profiles menu.";
+- without a base URL, or with one that is not an `http` or `https` address: "Set the Jira base URL in Profiles > Manage Profiles…, under this profile's Jira.";
 - without an issue key: "Set the issue key in the item's settings."
 
 ## Items from a link
@@ -82,7 +82,7 @@ Since M5 the project dialog has a Jira section with one field, registered with `
 
 ## Settings screens
 
-The module calls itself "Jira", so each profile's Modules submenu shows Profiles > <profile> > Modules > Jira. It has one [settings screen](../../../docs/modules.md#settings-screens), in `JiraSettings.cpp`:
+The module calls itself "Jira", so the Profiles > Manage Profiles… window shows "Jira" under each profile, with the profile's Jira accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `JiraSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
@@ -94,7 +94,7 @@ The module calls itself "Jira", so each profile's Modules submenu shows Profiles
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.jira.general`, and synced. See decisions [0054](../../../docs/decisions/0054-module-settings-replace-connections.md) and [0060](../../../docs/decisions/0060-jira-cloud-or-data-center-by-setting.md).
 
-A profile can also hold other accounts of the module, added with **Add Account…** in its Modules submenu. Each has its own site, deployment, email, token and extra fields, under `accounts.jira` of the profile, with its token under `<workspace id>/<profile id>/jira/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
+A profile can also hold other accounts of the module, added with **Add Account** on the module's page in Profiles > Manage Profiles…. Each has its own site, deployment, email, token and extra fields, under `accounts.jira` of the profile, with its token under `<workspace id>/<profile id>/jira/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
 
 ## Server and authentication
 

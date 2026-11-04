@@ -141,8 +141,8 @@ public:
         const QUrl webBase = webBaseOf(context.moduleSettings(kGeneralScreen));
         if (!webBase.isValid() || webBase.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("github", "Set the GitHub base URL in this profile's Modules > GitHub > "
-                                                      "General Configuration, in the Profiles menu."),
+                QCoreApplication::translate("github", "Set the GitHub base URL in Profiles > Manage Profiles…, "
+                                                      "under this profile's GitHub."),
                 parent);
         }
         const QUrl url = m_pageUrl(webBase, context.config(), context.projectSetting(kProjectSettingKey));

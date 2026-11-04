@@ -124,8 +124,8 @@ public:
         const QUrl site = baseUrlOf(context.moduleSettings(kGeneralScreen));
         if (site.isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("jira", "Set the Jira base URL in this profile's Modules > Jira > "
-                                                    "General Configuration, in the Profiles menu."),
+                QCoreApplication::translate("jira", "Set the Jira base URL in Profiles > Manage Profiles…, "
+                                                    "under this profile's Jira."),
                 parent);
         }
         const QUrl url = issueUrl(site, context.config());

@@ -114,8 +114,8 @@
         <translation>Defina a origem nas configurações do item.</translation>
     </message>
     <message>
-        <source>Set the GitHub base URL in this profile&apos;s Modules &gt; GitHub &gt; General Configuration, in the Profiles menu.</source>
-        <translation>Defina a URL base do GitHub em Módulos &gt; GitHub &gt; Configuração geral deste perfil, no menu Perfis.</translation>
+        <source>Set the GitHub base URL in Profiles &gt; Manage Profiles…, under this profile&apos;s GitHub.</source>
+        <translation>Defina a URL base do GitHub em Perfis &gt; Gerenciar perfis…, no GitHub deste perfil.</translation>
     </message>
     <message>
         <source>Set the repository and number in the item&apos;s settings.</source>
