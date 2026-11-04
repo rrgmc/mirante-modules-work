@@ -10,6 +10,7 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 - GitHub, GitLab and Jira work with several accounts in one profile. An item of another account offers that account's repositories or project paths in its form, and a pasted link is read with the server of the account it belongs to. It needs the core with decision 0146. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md).
 - Claude agents (`claude.agents`), a list of the Claude Code sessions on this device, with their title, status and repository, for one or more accounts. It runs `claude agents --json` and shows no session text. See decision 0143 in mirante-core.
+- The GitHub Status and GitLab Status item types show the health of github.com and gitlab.com, from their public status pages: the overall state, open incidents with their latest update, planned maintenance and the components that do not work. An open incident needs attention, and notifies when it is major or critical. They need no token. See [GitHub Status](github/README.md#github-status) and [GitLab Status](gitlab/README.md#gitlab-status).
 
 ### Changed
 

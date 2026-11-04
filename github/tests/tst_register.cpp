@@ -67,6 +67,7 @@ private slots:
                         {QStringLiteral("GitHub Issue (page)"), QStringLiteral("Issue")});
         expected.insert(QStringLiteral("github.issue.list"),
                         {QStringLiteral("GitHub Issue List"), QStringLiteral("Issues")});
+        expected.insert(QStringLiteral("github.status"), {QStringLiteral("GitHub Status"), QStringLiteral("Status")});
 
         QStringList ids;
         for (const mirante::ItemType *type : registry.types())
@@ -152,6 +153,8 @@ private slots:
                                           QStringLiteral("showComments")});
         expected.insert(QStringLiteral("github.issue.page"), single);
         expected.insert(QStringLiteral("github.issue.list"), list);
+        expected.insert(QStringLiteral("github.status"),
+                        {QStringLiteral("showMaintenance"), QStringLiteral("showAllComponents")});
 
         for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
             const mirante::ItemType &type = registry.type(it.key());
@@ -338,6 +341,9 @@ private slots:
         expected.insert(QStringLiteral("github.issue.list"),
                         QStringLiteral("A table of issues in a repository, an owner or everywhere, such as those "
                                        "assigned to you."));
+        expected.insert(QStringLiteral("github.status"),
+                        QStringLiteral("The health of github.com, from githubstatus.com: open incidents, planned "
+                                       "maintenance and components that do not work as they should."));
         for (auto it = expected.cbegin(); it != expected.cend(); ++it)
             QCOMPARE(registry.type(it.key()).description(), it.value());
     }
@@ -380,6 +386,7 @@ private slots:
         sections.insert(QStringLiteral("github.pr.list"), {QStringLiteral("showChecks"), QStringLiteral("showReviews")});
         sections.insert(QStringLiteral("github.issue.summary"),
                         {QStringLiteral("showDetails"), QStringLiteral("showLabels"), QStringLiteral("showComments")});
+        sections.insert(QStringLiteral("github.status"), {QStringLiteral("showMaintenance")});
         for (auto it = sections.cbegin(); it != sections.cend(); ++it) {
             const QJsonObject defaults = mirante::defaultConfig(registry.type(it.key()).fields());
             for (const QString &key : it.value()) {
@@ -399,6 +406,11 @@ private slots:
         registerGitHub(registry);
 
         for (const mirante::ItemType *type : registry.types()) {
+            // The status of github.com belongs to no repository.
+            if (type->id() == QLatin1String("github.status")) {
+                QVERIFY(fieldOf(*type, QStringLiteral("repository")).key.isEmpty());
+                continue;
+            }
             // A list over several repositories has a list of them instead.
             if (type->id().endsWith(QLatin1String(".multilist"))) {
                 const mirante::Field repositories = fieldOf(*type, QStringLiteral("repositories"));

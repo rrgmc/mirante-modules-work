@@ -18,14 +18,15 @@ The module is built like the [gitlab module](../gitlab/README.md), and this READ
 | `github.issue.summary` | GitHub Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `github.issue.page` | GitHub Issue (page) | web | The web page of one issue, on the GitHub server of the item's profile. |
 | `github.issue.list` | GitHub Issue List | native | A table of issues in a repository, an owner or everywhere, such as those assigned to you. |
+| `github.status` | GitHub Status | native | The health of github.com, from githubstatus.com: open incidents, planned maintenance and components that do not work as they should. |
 
-The short names are "PR", "PRs", "Run", "Runs", "Issue" and "Issues". A page type has the short name of its summary, as in the gitlab module.
+The short names are "PR", "PRs", "Run", "Runs", "Issue", "Issues" and "Status". A page type has the short name of its summary, as in the gitlab module.
 
 The module calls itself "GitHub" and describes itself as: "Pull requests, Actions runs and issues from GitHub or GitHub Enterprise Server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
 Its UUID is `6be6a6eb-abdb-41f6-addb-14dd5f6cb935`. It is at version 0.1.0, by Rangel Reale. Help > Modules also shows these, and the module's homepage. See [decision 0089](../../../docs/decisions/0089-module-identity.md).
 
-Every type reports a [status](#status) and takes [pasted links](#items-from-a-link). The two page types show their page in a web view. The summaries have [native views](#summary-views), and the lists have [tables with links on each row](#list-views).
+Every type reports a [status](#status). Every type but [GitHub Status](#github-status) takes [pasted links](#items-from-a-link) and talks to the server of the item's profile. The two page types show their page in a web view. The summaries have [native views](#summary-views), and the lists have [tables with links on each row](#list-views).
 
 ## Server
 
@@ -384,6 +385,43 @@ The tests are in `tests/tst_urls.cpp` and `tests/tst_from_url.cpp`.
 - **Without it:** one `searchIssues()` with `is:pr is:open in:title (<key1> OR <key2> …)` and a `repo:` qualifier for each repository of the profile's General Configuration, up to 100. GitHub's search also matches the key's words apart, so the title is checked for the key again. The repository of a row comes from its `repository_url`. Without listed repositories it finds nothing, without a request, because a search without `repo:` would cover all of GitHub.
 
 Each match is a `github.pr.summary` with `repository` and `number`. It is named `#42` in the setting's repository, else `owner/repo#42`. A failed request finds nothing. The finder finishes once, after the reply, with each pull request once, in the order of the keys.
+
+## GitHub Status
+
+`github.status` shows the health of github.com. `GitHubServiceStatus.cpp` holds all of it.
+
+It reads the public summary of the status page, `https://www.githubstatus.com/api/v2/summary.json`, a [Statuspage](https://www.githubstatus.com/api) document. The request goes through the [status cache](../../../docs/integrations.md#polling-and-caching) like any status, at the poll interval, but it does not use the profile's server: the page needs no token, so the module makes the request itself with a `QNetworkAccessManager` of its own. It sends no token and no cookie. The type has no fields that name a repository, and takes no pasted link.
+
+`readServiceSummary()` turns the summary into the status's data, and is tested on a recorded answer in `tests/data/service_summary.json`:
+
+| Data | From the summary |
+|---|---|
+| `indicator` | `status.indicator`: `none`, `minor`, `major`, `critical` or `maintenance` |
+| `description` | `status.description`, such as "All Systems Operational" |
+| `page` | `page.url` |
+| `components` | `components`, without groups, and without those marked `only_show_if_degraded` that work. The state is `operational`, `degraded_performance` (minor), `partial_outage` (major), `major_outage` (critical) or `under_maintenance` |
+| `incidents` | `incidents` that are not `resolved` or `postmortem`, with `impact`, `status`, `updated_at`, `shortlink` and the body of the newest of `incident_updates` |
+| `maintenances` | `scheduled_maintenances` that are not `completed`, with `scheduled_for` and `scheduled_until` |
+
+The view is a summary in the fixed layout of the view kit:
+
+- **Title:** the page's overall description, such as "All Systems Operational".
+- **State:** a pill for the overall level, "Operational", "Maintenance", "Minor", "Major" or "Critical", in the colours of the good, neutral, waiting and bad roles, and "Checked" with the time of the last answer.
+- **Actions:** "Refresh", which fetches at once. The **Open in browser** button of the cell header opens the status page.
+- **Incidents:** each open incident, its name linked to its page, a pill for its impact, its state, such as "Identified", the time of its last update, and the text of that update, up to 400 characters. "No open incidents." when there are none.
+- **Planned maintenance:** each maintenance that runs now or is to come, with its window. Hidden when there is none, or when `showMaintenance` is off.
+- **Components:** each component with a pill for its state. Only those that do not work, unless `showAllComponents` is on. "All components are operational." when none is shown.
+
+Old data stays through an error, which the cell's header shows. Before the first answer the view says "Loading…".
+
+Every open incident needs attention, with the key `incident:<id>` and the text "GitHub: <incident name>". It notifies when its impact is major or critical. A page that is degraded without an open incident needs attention too, with the key `indicator:<level>`, and notifies from major. Planned maintenance needs no attention. The type never reports itself closed.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `showMaintenance` | boolean | true | Show the planned maintenance. |
+| `showAllComponents` | boolean | false | Show the components that work, too. |
+
+Only the public service is covered. A GitLab server of your own, or GitHub Enterprise Server, has no such page.
 
 ## Configuration
 

@@ -704,5 +704,141 @@
         <source>Internal</source>
         <translation>Interno</translation>
     </message>
+    <message>
+        <source>GitLab Status</source>
+        <translation>Status do GitLab</translation>
+    </message>
+    <message>
+        <source>The health of gitlab.com, from status.gitlab.com: open incidents, planned maintenance and components that do not work as they should.</source>
+        <translation>A saúde do gitlab.com, segundo o status.gitlab.com: incidentes abertos, manutenção planejada e componentes que não funcionam como deveriam.</translation>
+    </message>
+    <message>
+        <source>Show the planned maintenance</source>
+        <translation>Mostrar a manutenção planejada</translation>
+    </message>
+    <message>
+        <source>Show the components that work too</source>
+        <translation>Mostrar também os componentes que funcionam</translation>
+    </message>
+    <message>
+        <source>Operational</source>
+        <translation>Operacional</translation>
+    </message>
+    <message>
+        <source>Planned maintenance</source>
+        <translation>Manutenção planejada</translation>
+    </message>
+    <message>
+        <source>Degraded performance</source>
+        <translation>Desempenho degradado</translation>
+    </message>
+    <message>
+        <source>Partial service disruption</source>
+        <translation>Interrupção parcial do serviço</translation>
+    </message>
+    <message>
+        <source>Service disruption</source>
+        <translation>Interrupção do serviço</translation>
+    </message>
+    <message>
+        <source>Security event</source>
+        <translation>Evento de segurança</translation>
+    </message>
+    <message>
+        <source>Investigating</source>
+        <translation>Investigando</translation>
+    </message>
+    <message>
+        <source>Identified</source>
+        <translation>Identificado</translation>
+    </message>
+    <message>
+        <source>Monitoring</source>
+        <translation>Monitorando</translation>
+    </message>
+    <message>
+        <source>Resolved</source>
+        <translation>Resolvido</translation>
+    </message>
+    <message>
+        <source>Scheduled</source>
+        <translation>Agendada</translation>
+    </message>
+    <message>
+        <source>In progress</source>
+        <translation>Em andamento</translation>
+    </message>
+    <message>
+        <source>Verifying</source>
+        <translation>Verificando</translation>
+    </message>
+    <message>
+        <source>Completed</source>
+        <translation>Concluída</translation>
+    </message>
+    <message>
+        <source>Maintenance</source>
+        <translation>Manutenção</translation>
+    </message>
+    <message>
+        <source>Minor</source>
+        <translation>Leve</translation>
+    </message>
+    <message>
+        <source>Major</source>
+        <translation>Grave</translation>
+    </message>
+    <message>
+        <source>Critical</source>
+        <translation>Crítico</translation>
+    </message>
+    <message>
+        <source>%1 to %2</source>
+        <translation>%1 a %2</translation>
+    </message>
+    <message>
+        <source>Updated %1</source>
+        <translation>Atualizado %1</translation>
+    </message>
+    <message>
+        <source>No open incidents.</source>
+        <translation>Nenhum incidente aberto.</translation>
+    </message>
+    <message>
+        <source>All components are operational.</source>
+        <translation>Todos os componentes estão operacionais.</translation>
+    </message>
+    <message>
+        <source>Checked %1</source>
+        <translation>Verificado %1</translation>
+    </message>
+    <message>
+        <source>Incidents</source>
+        <translation>Incidentes</translation>
+    </message>
+    <message>
+        <source>Components</source>
+        <translation>Componentes</translation>
+    </message>
+    <message>
+        <source>GitLab: %1</source>
+        <translation>GitLab: %1</translation>
+    </message>
+    <message>
+        <source>All systems operational</source>
+        <translation>Todos os sistemas operacionais</translation>
+    </message>
+    <message>
+        <source>The GitLab status page did not answer: %1</source>
+        <translation>A página de status do GitLab não respondeu: %1</translation>
+    </message>
+    <message>
+        <source>The GitLab status page gave an answer that cannot be read.</source>
+        <translation>A página de status do GitLab deu uma resposta que não pode ser lida.</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Atualizar</translation>
+    </message>
 </context>
 </TS>

@@ -34,6 +34,7 @@ private slots:
         expected.insert(QStringLiteral("gitlab.issue.summary"), QStringLiteral("GitLab Issue (summary)"));
         expected.insert(QStringLiteral("gitlab.issue.page"), QStringLiteral("GitLab Issue (page)"));
         expected.insert(QStringLiteral("gitlab.issue.list"), QStringLiteral("GitLab Issue List"));
+        expected.insert(QStringLiteral("gitlab.status"), QStringLiteral("GitLab Status"));
 
         QStringList ids;
         for (const mirante::ItemType *type : registry.types())
@@ -113,6 +114,8 @@ private slots:
                                           QStringLiteral("showComments")});
         expected.insert(QStringLiteral("gitlab.issue.page"), single);
         expected.insert(QStringLiteral("gitlab.issue.list"), list);
+        expected.insert(QStringLiteral("gitlab.status"),
+                        {QStringLiteral("showMaintenance"), QStringLiteral("showAllComponents")});
 
         for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
             const mirante::ItemType &type = registry.type(it.key());
