@@ -1,6 +1,6 @@
 {
   "qt": [],
-  "core": { "repo": "https://github.com/rrgmc/mirante-core", "ref": "5e8c35a1d650be158eee7c72d5d652c18d64e711" },
+  "core": { "repo": "https://github.com/rrgmc/mirante-core", "ref": "166f25bfa84891068180dfd8a678ef52ed48600b" },
   "modules": [
     {
       "name": "mirante_modules_work",
