@@ -696,5 +696,13 @@
         <source>A table of the pipelines of the projects you name, newest first: all of them, those you started, or those of a branch, with a filter on the project.</source>
         <translation>Uma tabela de pipelines dos projetos que você indicar, os mais novos primeiro: todos, os que você iniciou ou os de uma branch, com um filtro por projeto.</translation>
     </message>
+    <message>
+        <source>Private</source>
+        <translation>Privado</translation>
+    </message>
+    <message>
+        <source>Internal</source>
+        <translation>Interno</translation>
+    </message>
 </context>
 </TS>

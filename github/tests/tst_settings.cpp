@@ -4,6 +4,7 @@
 #include "../GitHubSettings.h"
 
 #include <mirante/FieldValidation.h>
+#include <mirante/testing/FakeApiClient.h>
 #include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/ItemEditor.h>
@@ -36,6 +37,68 @@ class TestSettings : public QObject
     Q_OBJECT
 
 private slots:
+    // "Add from Server…" lists the token's repositories, every page of them.
+    void listsRepositoriesFromTheServer()
+    {
+        mirante::testing::TestRegistrar registry;
+        registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
+        const mirante::SettingsScreen *screen = registry.settingsScreens(QStringLiteral("github")).front();
+        QCOMPARE(screen->serverChoiceFields(), QStringList{QStringLiteral("repositories")});
+
+        mirante::testing::FakeApiClient server;
+        server.setSynchronous(true);
+        const QJsonArray repos{
+            QJsonObject{{QStringLiteral("full_name"), QStringLiteral("rrgmc/karaokemachine")}},
+            QJsonObject{{QStringLiteral("full_name"), QStringLiteral("rrgmc/secret")}, {QStringLiteral("private"), true}},
+            QJsonObject{{QStringLiteral("full_name"), QStringLiteral("rrgmc/old")},
+                        {QStringLiteral("private"), true},
+                        {QStringLiteral("archived"), true}},
+            QJsonObject{{QStringLiteral("name"), QStringLiteral("no full name")}}};
+        server.setJson(mirante::testing::FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("user/repos"),
+                                                           mirante::modules::github::repositoriesQuery()),
+                       QJsonDocument(repos));
+
+        std::vector<mirante::ServerChoice> choices;
+        QString error = QStringLiteral("not called");
+        QObject receiver;
+        screen->listServerChoices(QStringLiteral("repositories"), server, &receiver,
+                                  [&](const std::vector<mirante::ServerChoice> &values, const QString &message) {
+                                      choices = values;
+                                      error = message;
+                                  });
+        QVERIFY(error.isEmpty());
+        QCOMPARE(choices.size(), std::size_t(3));
+        QCOMPARE(choices[0].value, QStringLiteral("rrgmc/karaokemachine"));
+        QVERIFY(choices[0].detail.isEmpty());
+        QCOMPARE(choices[1].detail, QStringLiteral("Private"));
+        QCOMPARE(choices[2].detail, QStringLiteral("Private, Archived"));
+        QCOMPARE(server.requests().size(), 1);
+        QVERIFY(server.requests().front().options.followLinks);
+        QCOMPARE(server.requests().front().options.maxRows, 1000);
+    }
+
+    void repositoryListErrorIsShown()
+    {
+        mirante::testing::TestRegistrar registry;
+        registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
+        const mirante::SettingsScreen *screen = registry.settingsScreens(QStringLiteral("github")).front();
+
+        mirante::testing::FakeApiClient server;
+        server.setSynchronous(true);
+        server.failAll(mirante::ApiReply::Error::Refused, QStringLiteral("Token refused (401)"));
+        bool called = false;
+        QString error;
+        QObject receiver;
+        screen->listServerChoices(QStringLiteral("repositories"), server, &receiver,
+                                  [&](const std::vector<mirante::ServerChoice> &values, const QString &message) {
+                                      called = true;
+                                      QVERIFY(values.empty());
+                                      error = message;
+                                  });
+        QVERIFY(called);
+        QCOMPARE(error, QStringLiteral("Token refused (401)"));
+    }
+
     void registersTheGeneralScreen()
     {
         mirante::testing::TestRegistrar registry;

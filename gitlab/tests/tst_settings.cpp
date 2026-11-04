@@ -3,6 +3,7 @@
 #include "../GitLabSettings.h"
 
 #include <mirante/FieldValidation.h>
+#include <mirante/testing/FakeApiClient.h>
 #include <mirante/testing/TestRegistrar.h>
 
 #include <mirante/ItemEditor.h>
@@ -24,6 +25,48 @@ class TestSettings : public QObject
     Q_OBJECT
 
 private slots:
+    // "Add from Server…" lists the projects the token's user is a member of.
+    void listsProjectsFromTheServer()
+    {
+        mirante::testing::TestRegistrar registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+        const mirante::SettingsScreen *screen = registry.settingsScreens(QStringLiteral("gitlab")).front();
+        QCOMPARE(screen->serverChoiceFields(), QStringList{QStringLiteral("projects")});
+
+        mirante::testing::FakeApiClient server;
+        server.setSynchronous(true);
+        const QJsonArray projects{
+            QJsonObject{{QStringLiteral("path_with_namespace"), QStringLiteral("group/public")},
+                        {QStringLiteral("visibility"), QStringLiteral("public")}},
+            QJsonObject{{QStringLiteral("path_with_namespace"), QStringLiteral("group/sub/private")},
+                        {QStringLiteral("visibility"), QStringLiteral("private")}},
+            QJsonObject{{QStringLiteral("path_with_namespace"), QStringLiteral("group/internal")},
+                        {QStringLiteral("visibility"), QStringLiteral("internal")}}};
+        server.setJson(mirante::testing::FakeApiClient::key(QStringLiteral("GET"), QStringLiteral("api/v4/projects"),
+                                                           mirante::modules::gitlab::projectsQuery()),
+                       QJsonDocument(projects));
+
+        std::vector<mirante::ServerChoice> choices;
+        QString error = QStringLiteral("not called");
+        QObject receiver;
+        screen->listServerChoices(QStringLiteral("projects"), server, &receiver,
+                                  [&](const std::vector<mirante::ServerChoice> &values, const QString &message) {
+                                      choices = values;
+                                      error = message;
+                                  });
+        QVERIFY(error.isEmpty());
+        QCOMPARE(choices.size(), std::size_t(3));
+        QCOMPARE(choices[0].value, QStringLiteral("group/public"));
+        QVERIFY(choices[0].detail.isEmpty());
+        QCOMPARE(choices[1].value, QStringLiteral("group/sub/private"));
+        QCOMPARE(choices[1].detail, QStringLiteral("Private"));
+        QCOMPARE(choices[2].detail, QStringLiteral("Internal"));
+        const QUrlQuery query = server.requests().front().query;
+        QCOMPARE(query.queryItemValue(QStringLiteral("membership")), QStringLiteral("true"));
+        QCOMPARE(query.queryItemValue(QStringLiteral("archived")), QStringLiteral("false"));
+        QVERIFY(server.requests().front().options.followLinks);
+    }
+
     void registersTheGeneralScreen()
     {
         mirante::testing::TestRegistrar registry;
