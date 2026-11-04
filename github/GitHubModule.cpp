@@ -65,7 +65,11 @@ public:
     std::vector<Field> fields() const override { return m_fields; }
     std::vector<Field> fieldsForProfile(const QString &profileId) const override
     {
-        return withRepositories(m_fields, m_settings, profileId);
+        return fieldsForAccount(profileId, QString());
+    }
+    std::vector<Field> fieldsForAccount(const QString &profileId, const QString &accountId) const override
+    {
+        return withRepositories(m_fields, m_settings, profileId, accountId);
     }
     Rendering rendering() const override { return Rendering::Native; }
 
@@ -90,10 +94,15 @@ public:
         return m_view ? m_view(context, parent) : nullptr;
     }
 
-    // An address below the web base of the profile, or on github.com.
+    // An address below the web base of the profile's account, or on github.com.
     std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
-        return matchUrl(m_id, url, {webBaseOf(m_settings.values(profileId, kGeneralScreen))});
+        return fromUrlForAccount(url, profileId, QString());
+    }
+    std::optional<UrlMatch> fromUrlForAccount(const QUrl &url, const QString &profileId,
+                                              const QString &accountId) const override
+    {
+        return matchUrl(m_id, url, {webBaseOf(m_settings.accountValues(profileId, accountId, kGeneralScreen))});
     }
 
 private:

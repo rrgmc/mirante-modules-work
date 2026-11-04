@@ -85,10 +85,11 @@ Field makeProjectSetting();
 // without slashes at its start and end. Empty and repeated ones are left out.
 QStringList repositoryNames(const QJsonObject &general);
 
-// The fields, with the repositories configured in the profile offered in
-// each "repository" field, and under "Add from List…" in each "repositories"
-// field. See decision 0139 in mirante-core.
+// The fields, with the repositories configured in the profile's account
+// offered in each "repository" field, and under "Add from List…" in each
+// "repositories" field. An empty accountId is the default account. See
+// decisions 0139 and 0146 in mirante-core.
 std::vector<Field> withRepositories(std::vector<Field> fields, const ModuleSettings &settings,
-                                    const QString &profileId);
+                                    const QString &profileId, const QString &accountId = QString());
 
 } // namespace mirante::modules::github
