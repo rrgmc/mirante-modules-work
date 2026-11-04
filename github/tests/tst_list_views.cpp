@@ -1102,7 +1102,7 @@ private slots:
         context.source.status = runs();
         View view(createRunListView(context, nullptr));
         view->show();
-        const QList<int> order{RunActor, RunStarted, RunWorkflow, RunNumber, RunStatus};
+        const QList<int> order{RunWorkflow, RunBranch, RunActor, RunStarted, RunNumber, RunStatus};
         int hiddenBefore = 0;
         for (int width = 1400; width >= 100; width -= 20) {
             view->resize(width, 400);
@@ -1116,7 +1116,6 @@ private slots:
             hiddenBefore = hidden;
         }
         QVERIFY(hiddenBefore > 1);
-        QVERIFY(!table(view)->isColumnHidden(RunBranch));
     }
 
     void runFilterOnStatus()
@@ -1226,6 +1225,28 @@ private slots:
         QCOMPARE(cellText(view, 0, RunRepository), QStringLiteral("acme/backend"));
         emit list(view)->rowLinkActivated(QStringLiteral("18800000003"), QStringLiteral("web"));
         QCOMPARE(m_opened, QList<QUrl>{QUrl(kBase + QStringLiteral("/acme/web/actions/runs/18800000003"))});
+    }
+
+    // Over several repositories, Repository stays after Workflow and Branch hide.
+    void runRepositoryHidesAfterWorkflowAndBranch()
+    {
+        FakeContext context;
+        context.itemConfig = QJsonObject{
+            {QStringLiteral("repositories"), QJsonArray{QStringLiteral("acme/backend"), QStringLiteral("acme/web")}}};
+        context.source.status = runs();
+        View view(createRunMultiListView(context, nullptr));
+        view->show();
+        bool repositoryOutlivedBoth = false;
+        for (int width = 1400; width >= 100; width -= 20) {
+            view->resize(width, 400);
+            QCoreApplication::processEvents();
+            const bool repositoryHidden = table(view)->isColumnHidden(RunRepository);
+            const bool bothHidden = table(view)->isColumnHidden(RunWorkflow) && table(view)->isColumnHidden(RunBranch);
+            if (repositoryHidden)
+                QVERIFY2(bothHidden, qPrintable(QString::number(width)));
+            repositoryOutlivedBoth = repositoryOutlivedBoth || (bothHidden && !repositoryHidden);
+        }
+        QVERIFY(repositoryOutlivedBoth);
     }
 
     void runAdd_data()
