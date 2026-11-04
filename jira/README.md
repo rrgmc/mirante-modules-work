@@ -228,6 +228,6 @@ Other text from the server goes in labels with `Qt::PlainText`. A `&` in an issu
 - **Row links.** "Web" opens `<baseUrl>/browse/<key>` in the external browser. "Open" works as Open page above. "Add" calls `ItemContext::addItemToTask()` with the type `jira.issue.summary`, the key as its name and `{"key": <key>}`. Without a site only "Add" is there. The column sorts by the key.
 - **Row menu.** The same, as "Web", "Open page" and "Add to task as item", then "Copy link", which copies `<baseUrl>/browse/<key>`.
 - **Pages.** `setPageSize()` with the item's `pageSize`. The rows fetched are the item's `limit`.
-- **Filter.** `addFilter()` on Status. The choice is not saved.
+- **Filter.** `addFilter()` on Status. It keeps the user's last choice in the item's `statusFilter`, an array of texts, with `ListModel::keepFilter()`, and starts with it through `filterDefault()` and `setFilterDefault()`. `statusFilter` is the type's only view key, so writing it keeps the view.
 
 The tests are in `tests/tst_views.cpp`, with a fake context and status source. A handler stands in for the external browser, so nothing opens. The tests of the issue view and of the list skip when an app replaces their layout; the tests of the models run in every build.

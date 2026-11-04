@@ -59,6 +59,21 @@ private slots:
         }
     }
 
+    // A list's view writes its filters' keys without being made again. The
+    // form does not show them.
+    void listsKeepTheirFilters()
+    {
+        mirante::testing::TestRegistrar registry;
+        registry.registerModule(QStringLiteral("gitlab"), &mirante::modules::gitlab::registerModule);
+
+        const QStringList keys{QStringLiteral("projectFilter"), QStringLiteral("statusFilter")};
+        for (const mirante::ItemType *type : registry.types()) {
+            const bool isList = type->id().endsWith(QLatin1String(".list"))
+                || type->id().endsWith(QLatin1String(".multilist"));
+            QCOMPARE(type->viewKeys(), isList ? keys : QStringList());
+        }
+    }
+
     void fieldKeys()
     {
         mirante::testing::TestRegistrar registry;
@@ -84,15 +99,14 @@ private slots:
         expected.insert(QStringLiteral("gitlab.pipeline.list"),
                         QStringList{QStringLiteral("project"), QStringLiteral("source"), QStringLiteral("branch"),
                                     QStringLiteral("iid")}
-                            + sizes + QStringList{QStringLiteral("statusFilter")});
+                            + sizes);
         expected.insert(QStringLiteral("gitlab.pipeline.multilist"),
                         QStringList{QStringLiteral("projects"), QStringLiteral("source"), QStringLiteral("branch")}
-                            + sizes + QStringList{QStringLiteral("projectFilter"), QStringLiteral("statusFilter")});
+                            + sizes);
         expected.insert(QStringLiteral("gitlab.mr.multilist"),
                         QStringList{QStringLiteral("projects"), QStringLiteral("preset"), QStringLiteral("filter")}
                             + sizes
-                            + QStringList{QStringLiteral("showPipeline"), QStringLiteral("showApprovals"),
-                                          QStringLiteral("projectFilter")});
+                            + QStringList{QStringLiteral("showPipeline"), QStringLiteral("showApprovals")});
         expected.insert(QStringLiteral("gitlab.issue.summary"),
                         single
                             + QStringList{QStringLiteral("showDetails"), QStringLiteral("showLabels"),

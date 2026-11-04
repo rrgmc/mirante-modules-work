@@ -69,6 +69,13 @@ public:
     }
     Rendering rendering() const override { return Rendering::Native; }
 
+    // A list's view keeps the choices of its filters in the configuration.
+    QStringList viewKeys() const override
+    {
+        return m_id.endsWith(QLatin1String(".list")) || m_id.endsWith(QLatin1String(".multilist")) ? listViewKeys()
+                                                                                                     : QStringList();
+    }
+
     bool hasStatus() const override { return m_fetch != nullptr; }
     void fetchStatus(StatusJob &job) const override
     {
@@ -277,37 +284,6 @@ Field repositoriesField()
     return field;
 }
 
-// The values a view filter of a list chooses at the start, one per line, as
-// its drop-down shows them. Empty is "All". The key is <column>Filter; see
-// ListModel::filterDefault().
-Field filterDefaultField(const QString &column, const QString &label, const QString &help)
-{
-    Field field = makeField(column + QStringLiteral("Filter"), label, Field::Type::TextList);
-    field.help = help;
-    field.group = QCoreApplication::translate("github", "Filters at the start");
-    return field;
-}
-
-Field repositoryFilterField()
-{
-    return filterDefaultField(QStringLiteral("repository"), QCoreApplication::translate("github", "Repository"),
-                              QCoreApplication::translate("github", "Repositories to show, as owner/repo. Empty "
-                                                                    "shows all."));
-}
-
-// A run list's filters at the start, after the Repository one of a list over
-// several repositories.
-std::vector<Field> runFilterDefaultFields()
-{
-    return {
-        filterDefaultField(QStringLiteral("status"), QCoreApplication::translate("github", "Status"),
-                           QCoreApplication::translate("github", "Such as Failed or Running, as the Status filter "
-                                                                 "shows them. Empty shows all.")),
-        filterDefaultField(QStringLiteral("workflow"), QCoreApplication::translate("github", "Workflow"),
-                           QCoreApplication::translate("github", "Workflow names, such as CI. Empty shows all.")),
-    };
-}
-
 std::vector<Field> runListFields()
 {
     std::vector<Field> fields{
@@ -323,7 +299,7 @@ std::vector<Field> runListFields()
         linkedPullRequestField(),
         workflowField(),
     };
-    return withSections(withSections(std::move(fields), listSizeFields()), runFilterDefaultFields());
+    return withSections(std::move(fields), listSizeFields());
 }
 
 // Without a pull request, a workflow file or a scope, which fit one
@@ -339,9 +315,7 @@ std::vector<Field> runMultiListFields()
                      QCoreApplication::translate("github", "Of a branch")}),
         branchField(),
     };
-    fields = withSections(std::move(fields), listSizeFields());
-    fields.push_back(repositoryFilterField());
-    return withSections(std::move(fields), runFilterDefaultFields());
+    return withSections(std::move(fields), listSizeFields());
 }
 
 // A pull request list's fields with repositoriesField() in place of the
@@ -354,7 +328,6 @@ std::vector<Field> pullRequestMultiListFields(const std::vector<Field> &listFiel
             && field.key != QLatin1String("owner"))
             fields.push_back(field);
     }
-    fields.push_back(repositoryFilterField());
     return fields;
 }
 

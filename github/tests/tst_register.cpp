@@ -97,6 +97,22 @@ private slots:
         }
     }
 
+    // A list's view writes its filters' keys without being made again. The
+    // form does not show them.
+    void listsKeepTheirFilters()
+    {
+        mirante::testing::TestRegistrar registry;
+        registerGitHub(registry);
+
+        const QStringList keys{QStringLiteral("repositoryFilter"), QStringLiteral("statusFilter"),
+                               QStringLiteral("workflowFilter")};
+        for (const mirante::ItemType *type : registry.types()) {
+            const bool isList = type->id().endsWith(QLatin1String(".list"))
+                || type->id().endsWith(QLatin1String(".multilist"));
+            QCOMPARE(type->viewKeys(), isList ? keys : QStringList());
+        }
+    }
+
     void fieldKeys()
     {
         mirante::testing::TestRegistrar registry;
@@ -119,19 +135,17 @@ private slots:
         expected.insert(QStringLiteral("github.run"),
                         {QStringLiteral("repository"), QStringLiteral("branchSource"), QStringLiteral("branch"),
                          QStringLiteral("number"), QStringLiteral("workflow")});
-        const QStringList runFilters{QStringLiteral("statusFilter"), QStringLiteral("workflowFilter")};
         expected.insert(QStringLiteral("github.run.list"),
                         QStringList{QStringLiteral("repository"), QStringLiteral("source"), QStringLiteral("branch"),
                                     QStringLiteral("number"), QStringLiteral("workflow")}
-                            + sizes + runFilters);
+                            + sizes);
         expected.insert(QStringLiteral("github.run.multilist"),
                         QStringList{QStringLiteral("repositories"), QStringLiteral("source"), QStringLiteral("branch")}
-                            + sizes + QStringList{QStringLiteral("repositoryFilter")} + runFilters);
+                            + sizes);
         expected.insert(QStringLiteral("github.pr.multilist"),
                         QStringList{QStringLiteral("repositories"), QStringLiteral("preset"), QStringLiteral("filter")}
                             + sizes
-                            + QStringList{QStringLiteral("showChecks"), QStringLiteral("showReviews"),
-                                          QStringLiteral("repositoryFilter")});
+                            + QStringList{QStringLiteral("showChecks"), QStringLiteral("showReviews")});
         expected.insert(QStringLiteral("github.issue.summary"),
                         single
                             + QStringList{QStringLiteral("showDetails"), QStringLiteral("showLabels"),

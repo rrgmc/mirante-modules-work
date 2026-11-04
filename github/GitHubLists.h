@@ -35,9 +35,17 @@ int listPageSize(const QJsonObject &config);
 QStringList configuredRepositories(const QJsonObject &config);
 
 // The values that a view filter of a list chooses at the start: the item's
-// TextList field <column>Filter, such as statusFilter, trimmed, without empty
-// ones. Empty means "All".
+// key <column>Filter, such as statusFilter, an array of texts, trimmed, without
+// empty ones. Empty means "All". The view keeps the user's last choice there;
+// the item's form does not show it.
 QStringList filterDefault(const QJsonObject &config, const QString &column);
+// config with the values of a view filter on a column, as filterDefault()
+// reads them. Empty values remove the key.
+QJsonObject withFilter(QJsonObject config, const QString &column, const QStringList &values);
+// The keys of the view filters of the lists, which the view writes itself:
+// repositoryFilter, statusFilter and workflowFilter. See decision 0081 in
+// mirante-core.
+QStringList listViewKeys();
 
 // Why a pull request or issue list's scope is not complete, such as "Set the
 // repository in the item's settings.", or empty when it is. An absent scope is

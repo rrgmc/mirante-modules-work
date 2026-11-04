@@ -68,6 +68,13 @@ public:
     }
     Rendering rendering() const override { return Rendering::Native; }
 
+    // A list's view keeps the choices of its filters in the configuration.
+    QStringList viewKeys() const override
+    {
+        return m_id.endsWith(QLatin1String(".list")) || m_id.endsWith(QLatin1String(".multilist")) ? listViewKeys()
+                                                                                                     : QStringList();
+    }
+
     bool hasStatus() const override { return m_fetch != nullptr; }
     void fetchStatus(StatusJob &job) const override
     {
@@ -237,31 +244,6 @@ Field projectsField()
     return field;
 }
 
-// The values a view filter of a list chooses at the start, one per line, as
-// its drop-down shows them. Empty is "All". The key is <column>Filter; see
-// ListModel::filterDefault().
-Field filterDefaultField(const QString &column, const QString &label, const QString &help)
-{
-    Field field = makeField(column + QStringLiteral("Filter"), label, Field::Type::TextList);
-    field.help = help;
-    field.group = QCoreApplication::translate("gitlab", "Filters at the start");
-    return field;
-}
-
-Field projectFilterField()
-{
-    return filterDefaultField(QStringLiteral("project"), QCoreApplication::translate("gitlab", "Project"),
-                              QCoreApplication::translate("gitlab", "Projects to show, as group/project. Empty "
-                                                                    "shows all."));
-}
-
-Field statusFilterField()
-{
-    return filterDefaultField(QStringLiteral("status"), QCoreApplication::translate("gitlab", "Status"),
-                              QCoreApplication::translate("gitlab", "Such as Failed or Running, as the Status filter "
-                                                                    "shows them. Empty shows all."));
-}
-
 // Empty means kDefaultBranch, which the placeholder shows.
 Field branchField()
 {
@@ -301,7 +283,7 @@ std::vector<Field> pipelineListFields()
         makeField(QStringLiteral("iid"), QCoreApplication::translate("gitlab", "Merge request number"),
                   Field::Type::Integer),
     };
-    return withSections(withSections(std::move(fields), listSizeFields()), {statusFilterField()});
+    return withSections(std::move(fields), listSizeFields());
 }
 
 // Without a merge request number, which fits one project only.
@@ -316,7 +298,7 @@ std::vector<Field> pipelineMultiListFields()
                      QCoreApplication::translate("gitlab", "Of a branch")}),
         branchField(),
     };
-    return withSections(withSections(std::move(fields), listSizeFields()), {projectFilterField(), statusFilterField()});
+    return withSections(std::move(fields), listSizeFields());
 }
 
 // A merge request list's fields with projectsField() in place of the scope,
@@ -329,7 +311,6 @@ std::vector<Field> mergeRequestMultiListFields(const std::vector<Field> &listFie
             && field.key != QLatin1String("group"))
             fields.push_back(field);
     }
-    fields.push_back(projectFilterField());
     return fields;
 }
 

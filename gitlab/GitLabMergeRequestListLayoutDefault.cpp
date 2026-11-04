@@ -59,8 +59,7 @@ public:
         setColumnVisible(ApprovalsColumn, model.isColumnShown(QStringLiteral("approvals")));
         setColumnVisible(ProjectColumn, model.spansProjects());
         if (model.spansProjects()) {
-            addFilter(ProjectColumn, QCoreApplication::translate("gitlab", "Project"));
-            setFilterDefault(ProjectColumn, model.filterDefault(QStringLiteral("project")));
+            addKeptFilter(ProjectColumn, QCoreApplication::translate("gitlab", "Project"), QStringLiteral("project"));
         }
         start();
     }

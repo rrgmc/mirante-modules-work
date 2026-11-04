@@ -1135,11 +1135,18 @@ private slots:
         filter->setCurrentIndex(filter->findText(QStringLiteral("Failed")));
         QCOMPARE(rowCount(view), 1);
         QCOMPARE(cellText(view, 0, RunNumber), QStringLiteral("#88"));
+        // The item keeps the choice for the next start.
+        QCOMPARE(context.itemConfig.value(QStringLiteral("statusFilter")).toArray(),
+                 QJsonArray{QStringLiteral("Failed")});
 
         // It survives new rows.
         context.source.change(runs());
         QCOMPARE(rowCount(view), 1);
         QCOMPARE(filter->currentText(), QStringLiteral("Failed"));
+
+        // "All" keeps nothing.
+        filter->setCurrentIndex(0);
+        QVERIFY(!context.itemConfig.contains(QStringLiteral("statusFilter")));
     }
 
     void runFilterOnWorkflow()

@@ -771,22 +771,6 @@
         <translation>Um por linha, como dono/repositório.</translation>
     </message>
     <message>
-        <source>Filters at the start</source>
-        <translation>Filtros ao abrir</translation>
-    </message>
-    <message>
-        <source>Repositories to show, as owner/repo. Empty shows all.</source>
-        <translation>Repositórios a mostrar, como dono/repositório. Vazio mostra todos.</translation>
-    </message>
-    <message>
-        <source>Such as Failed or Running, as the Status filter shows them. Empty shows all.</source>
-        <translation>Como Failed ou Running, como o filtro de status os mostra. Vazio mostra todos.</translation>
-    </message>
-    <message>
-        <source>Workflow names, such as CI. Empty shows all.</source>
-        <translation>Nomes de workflows, como CI. Vazio mostra todos.</translation>
-    </message>
-    <message>
         <source>GitHub PR List (several repositories)</source>
         <translation>Lista de PRs do GitHub (vários repositórios)</translation>
     </message>

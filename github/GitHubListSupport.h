@@ -64,6 +64,9 @@ protected:
 
     // Draws the model now, and follows it.
     void start();
+    // A filter on a column that starts with the user's last choice, kept in
+    // the item's <name>Filter. See ListModel::keepFilter().
+    void addKeptFilter(int column, const QString &label, const QString &name);
     // The cells of one row, in the order of the columns.
     virtual QList<widgets::ListCell> rowCells(const QString &key) const = 0;
     // "Web", "Open" and "Add", as far as the row allows, sorted by sortKey.
@@ -79,6 +82,8 @@ private:
     QLabel *m_emptyLine;
     // The cells of each row as last drawn.
     QHash<QString, QList<widgets::ListCell>> m_drawn;
+    // The name of each column's kept filter, by column.
+    QHash<int, QString> m_keptFilters;
     // setRows() also changes visibleKeys(), and draw() tells the model after it.
     bool m_drawing = false;
 };

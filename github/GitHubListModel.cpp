@@ -51,6 +51,14 @@ QStringList ListModel::filterDefault(const QString &column) const
     return github::filterDefault(config(), column);
 }
 
+void ListModel::keepFilter(const QString &column, const QStringList &values)
+{
+    const QJsonObject current = config();
+    const QJsonObject next = withFilter(current, column, values);
+    if (next != current)
+        m_context->updateConfig(next);
+}
+
 void ListModel::openWeb(const QString &key)
 {
     const QUrl address = m_rows.value(key).address;
