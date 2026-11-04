@@ -1,0 +1,11 @@
+{
+  "name": "mirante",
+  "owner": { "name": "Rangel Reale" },
+  "plugins": [
+    {
+      "name": "mirante-bridge",
+      "source": "./",
+      "description": "Reports each Claude Code session's activity, model and usage to Mirante's Claude agents list."
+    }
+  ]
+}
