@@ -274,7 +274,7 @@ void showStatus(widgets::SummaryView *view, ItemContext &context, const ItemStat
     view->setStateRow(state);
 
     const QUrl page(data.value(QStringLiteral("page")).toString());
-    view->actions()->setWebLink(page);
+    context.setWebLink(page);
 
     view->setSection(QStringLiteral("incidents"), QCoreApplication::translate("github", "Incidents"),
                      entriesWidget(data.value(QStringLiteral("incidents")).toArray(), false, nullptr));

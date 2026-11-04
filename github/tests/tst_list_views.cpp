@@ -276,7 +276,7 @@ private slots:
         QCOMPARE(cellText(view, 0, PrRepository), QStringLiteral("acme/website"));
         filter->setCurrentIndex(0);
         QCOMPARE(rowCount(view), 3);
-        QCOMPARE(list(view)->webLink().path(), QStringLiteral("/pulls"));
+        QCOMPARE(context.webLink.path(), QStringLiteral("/pulls"));
     }
 
     void oneRepositoryHasNoRepositoryColumn()
@@ -1212,7 +1212,7 @@ private slots:
         show(view);
 
         QVERIFY(!table(view)->isColumnHidden(RunRepository));
-        QVERIFY(list(view)->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(RunRepository)));
         QVERIFY(filter);
         QCOMPARE(filter->count(), 3);
@@ -1333,7 +1333,7 @@ private slots:
         View view(createRunListView(context, nullptr));
         show(view);
 
-        QCOMPARE(list(view)->webLink(), QUrl(kBase + QStringLiteral("/acme/backend/actions")));
+        QCOMPARE(context.webLink, QUrl(kBase + QStringLiteral("/acme/backend/actions")));
         chooseFromMenu(view, QStringLiteral("18800000003"), QStringLiteral("Add to task as item"));
         QCOMPARE(context.added.first().config.value(QStringLiteral("repository")).toString(),
                  QStringLiteral("acme/backend"));
@@ -1391,7 +1391,7 @@ private slots:
         FakeContext context;
         context.itemConfig = itemConfig;
         View view(createRunListView(context, nullptr));
-        QCOMPARE(list(view)->webLink(), expected);
+        QCOMPARE(context.webLink, expected);
     }
 
     void runDescription()
@@ -1419,7 +1419,7 @@ private slots:
         View view(createRunListView(context, nullptr));
         show(view);
 
-        QVERIFY(list(view)->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         QVERIFY(shownText(view).contains(context.source.status.message));
         QVERIFY(!table(view)->isVisible());
         QVERIFY(context.client.requests().isEmpty());
@@ -1598,7 +1598,7 @@ private slots:
         context.general.insert(QStringLiteral("baseUrl"), baseUrl);
         View view(isPullRequest ? createPullRequestListView(context, nullptr) : createIssueListView(context, nullptr));
 
-        const QUrl link = list(view)->webLink();
+        const QUrl link = context.webLink;
         if (path.isEmpty()) {
             QVERIFY(link.isEmpty());
             return;

@@ -151,9 +151,9 @@ QStringList projectPaths(const QJsonObject &general)
 }
 
 std::vector<Field> withProjectPaths(std::vector<Field> fields, const ModuleSettings &settings,
-                                    const QString &profileId)
+                                    const QString &profileId, const QString &accountId)
 {
-    const QStringList paths = projectPaths(settings.values(profileId, kGeneralScreen));
+    const QStringList paths = projectPaths(settings.accountValues(profileId, accountId, kGeneralScreen));
     for (Field &field : fields) {
         if (field.key == QLatin1String("project") || field.key == QLatin1String("projects"))
             field.suggestions = paths;

@@ -137,7 +137,7 @@ Each summary has two parts: a **model**, which the module keeps, and a **layout*
 
 - **Drawing.** `follow()` reads the item's status now and at each change, and says `changed()`. With no data, `hasData()` is false and `message()` says "Loading…" or the status's message. With old data it keeps that data through an error. A status without data, with `State::None` and a message, replaces the old data.
 - **Actions.** `runAction()` clears the last error, marks the action busy and makes the request. After a success it refreshes the status. A failure sets `error()` to the reply's message, and a `403` to "The token cannot do this. It needs write access to Actions." A default layout shows these in its action row.
-- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address.
+- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address. The model gives it to `ItemContext::setWebLink()` whenever it changes, so the cell header's **Open in browser** button opens it, whatever the layout.
 - **Dialogs** are on the heap, as in the gitlab module.
 
 The pull request summary offers "Open page" and "Web", and no re-run: a check run can be re-run only by the GitHub App that made it. See decision 0102. Its sections:
@@ -324,7 +324,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `repository` uses the project's `github.repository` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitHub base URL in this profile's Modules > GitHub > General Configuration, in the Profiles menu.";
+- with a base URL that is not an `http` or `https` address: "Set the GitHub base URL in Profiles > Manage Profiles…, under this profile's GitHub.";
 - without a repository or a number: "Set the repository and number in the item's settings."
 
 The tests are in `tests/tst_urls.cpp`.
@@ -407,7 +407,7 @@ The view is a summary in the fixed layout of the view kit:
 
 - **Title:** the page's overall description, such as "All Systems Operational".
 - **State:** a pill for the overall level, "Operational", "Maintenance", "Minor", "Major" or "Critical", in the colours of the good, neutral, waiting and bad roles, and "Checked" with the time of the last answer.
-- **Actions:** "Refresh", which fetches at once, and the "Web" link to the status page.
+- **Actions:** "Refresh", which fetches at once. The **Open in browser** button of the cell header opens the status page.
 - **Incidents:** each open incident, its name linked to its page, a pill for its impact, its state, such as "Identified", the time of its last update, and the text of that update, up to 400 characters. "No open incidents." when there are none.
 - **Planned maintenance:** each maintenance that runs now or is to come, with its window. Hidden when there is none, or when `showMaintenance` is off.
 - **Components:** each component with a pill for its state. Only those that do not work, unless `showAllComponents` is on. "All components are operational." when none is shown.
@@ -463,7 +463,7 @@ The project setting `repository`, "GitHub repository", a text field registered w
 
 ## Settings screens
 
-The module calls itself "GitHub", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitHub. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitHubSettings.cpp`:
+The module calls itself "GitHub", so the Profiles > Manage Profiles… window shows "GitHub" under each profile, with the profile's GitHub accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitHubSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
@@ -474,5 +474,7 @@ The module calls itself "GitHub", so each profile's Modules submenu shows Profil
 The repositories list has an **Add from Server…** button. It asks `user/repos`, sorted by name, in pages of 100 up to 1,000, with the base URL and token in the dialog, saved or not. The list shows each repository's `full_name`, marked "Private" or "Archived" where that applies. See [decision 0138](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0138-add-list-values-from-the-server.md) in the core.
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.github.general`, and synced. They hold no token.
+
+A profile can also hold other accounts of the module, added with **Add Account** on the module's page in Profiles > Manage Profiles…. Each has its own web address, token and repositories, under `accounts.github` of the profile, with its token under `<workspace id>/<profile id>/github/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
 
 The `repository` field of every type offers the repositories of the profile the item uses, in an editable drop-down list, through `fieldsForProfile(profileId)` and `withRepositories()`. Each is trimmed, slashes at its start and end are removed, and empty or repeated ones are left out, by `repositoryNames()`. Any other repository can still be typed. The tests are in `tests/tst_settings.cpp`.

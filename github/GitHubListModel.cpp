@@ -24,6 +24,8 @@ ListModel::ListModel(ItemContext &context, const QString &emptyText, const QUrl 
     , m_description(description)
     , m_message(QCoreApplication::translate("github", "Loading…"))
 {
+    // The cell header's "Open in browser" button opens the list's page.
+    m_context->setWebLink(m_pageAddress);
 }
 
 ListModel::~ListModel() = default;

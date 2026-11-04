@@ -103,7 +103,7 @@ Each summary has two parts: a **model**, which the module keeps, and a **layout*
 
 - **Drawing.** `follow()` reads the item's status now and at each change, and says `changed()`. With no data, `hasData()` is false and `message()` says "Loading…" or the status's message. With old data it keeps that data through an error, because the cell header shows the problem. A status without data, with `State::None` and a message, such as "The main folder is not on a branch.", replaces the old data, since the item has nothing to show.
 - **Actions.** `runAction()` clears the last error, marks the action busy and makes the request. After a success it refreshes the status. A failure sets `error()` to `reply.message`, and a `403` to "The token cannot do this. It needs the api scope." A default layout shows these in its action row.
-- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address.
+- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address. The model gives it to `ItemContext::setWebLink()` whenever it changes, so the cell header's **Open in browser** button opens it, whatever the layout.
 - **Dialogs.** The questions before cancelling and triggering run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
 
 The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline`, `trigger-pipeline`, `merge-request` and `open-page`. A job's buttons are `log-<job id>`, `retry-job-<job id>` and `play-job-<job id>`. They are not in the action row, so the default layout disables them while `isBusy()` says their request runs. The merge request summary's link to its pipeline is `pipeline-web`.
@@ -253,7 +253,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in this profile's Modules > GitLab > General Configuration, in the Profiles menu.";
+- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in Profiles > Manage Profiles…, under this profile's GitLab.";
 - without a project or a number: "Set the project and number in the item's settings."
 
 ## Items from a link
@@ -319,7 +319,7 @@ The view is a summary in the fixed layout of the view kit:
 
 - **Title:** the page's overall description, such as "All systems operational".
 - **State:** a pill for the overall level, "Operational", "Maintenance", "Minor", "Major" or "Critical", in the colours of the good, neutral, waiting and bad roles, and "Checked" with the time of the last answer.
-- **Actions:** "Refresh", which fetches at once, and the "Web" link to the status page.
+- **Actions:** "Refresh", which fetches at once. The **Open in browser** button of the cell header opens the status page.
 - **Incidents:** each open incident, its name linked to its page, a pill for its impact, its state, such as "Identified", the time of its last update, and the text of that update, up to 400 characters. "No open incidents." when there are none.
 - **Planned maintenance:** each maintenance that runs now or is to come, with its window. Hidden when there is none, or when `showMaintenance` is off.
 - **Components:** each component with a pill for its state. Only those that do not work, unless `showAllComponents` is on. "All components are operational." when none is shown.
@@ -368,7 +368,7 @@ The project setting `project`, "GitLab project path", a text field registered wi
 
 ## Settings screens
 
-The module calls itself "GitLab", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitLab. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
+The module calls itself "GitLab", so the Profiles > Manage Profiles… window shows "GitLab" under each profile, with the profile's GitLab accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
@@ -379,5 +379,7 @@ The module calls itself "GitLab", so each profile's Modules submenu shows Profil
 The project paths list has an **Add from Server…** button. It asks `api/v4/projects` for the projects the token's user is a member of, without archived ones, sorted by path, in pages of 100 up to 1,000, with the base URL and token in the dialog, saved or not. The list shows each project's `path_with_namespace`, marked "Private" or "Internal" where that applies. See [decision 0138](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0138-add-list-values-from-the-server.md) in the core.
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The screen is opened for one profile at a time. See decisions [0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md) and [0054](../../../docs/decisions/0054-module-settings-replace-connections.md), which replaced connections with the base URL.
+
+A profile can also hold other accounts of the module, added with **Add Account** on the module's page in Profiles > Manage Profiles…. Each has its own server, token and project paths, under `accounts.gitlab` of the profile, with its token under `<workspace id>/<profile id>/gitlab/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
 
 The `project` field of every type offers the paths of the profile the item uses, in an editable drop-down list. The types do this in `fieldsForProfile(profileId)`, which the item dialog calls with the profile the edited item would use; `fields()` offers none. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, and again when another profile is chosen in it, so a change shows the next time the dialog opens.

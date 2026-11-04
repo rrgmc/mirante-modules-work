@@ -104,7 +104,6 @@ DefaultListLayout::DefaultListLayout(ListModel &model, const QString &view, QWid
     layout()->addWidget(m_emptyLine);
     m_emptyLine->hide();
 
-    setWebLink(model.pageAddress());
     setDescription(model.description());
     setPageSize(model.pageSize());
     connect(this, &ItemListView::filterChanged, this, [this](int column, const QStringList &values) {

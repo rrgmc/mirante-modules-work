@@ -40,8 +40,8 @@
         <translation>Nenhuma merge request</translation>
     </message>
     <message>
-        <source>Set the GitLab base URL in this profile&apos;s Modules &gt; GitLab &gt; General Configuration, in the Profiles menu.</source>
-        <translation>Defina a URL base do GitLab em Módulos &gt; GitLab &gt; Configuração geral deste perfil, no menu Perfis.</translation>
+        <source>Set the GitLab base URL in Profiles &gt; Manage Profiles…, under this profile&apos;s GitLab.</source>
+        <translation>Defina a URL base do GitLab em Perfis &gt; Gerenciar perfis…, no GitLab deste perfil.</translation>
     </message>
     <message>
         <source>Set the project and number in the item&apos;s settings.</source>

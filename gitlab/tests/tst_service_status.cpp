@@ -209,6 +209,8 @@ private slots:
             dynamic_cast<mirante::widgets::StatusPill *>(view->findChild<QLabel *>(QStringLiteral("indicator")));
         QVERIFY(indicator);
         QCOMPARE(indicator->role(), mirante::widgets::StatusRole::Bad);
+        // The status page is the cell header's web link.
+        QCOMPARE(context.webLink, QUrl(QStringLiteral("https://status.gitlab.com")));
         QVERIFY(hasLabelContaining(*view, QStringLiteral("Delays in hosted runners on Linux")));
         QVERIFY(hasLabelContaining(*view, QStringLiteral("Database upgrade")));
         QVERIFY(labelTexts(*view).contains(QStringLiteral("API")));

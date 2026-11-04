@@ -82,12 +82,17 @@ public:
         return m_view ? m_view(context, parent) : nullptr;
     }
 
-    // An address on the profile's site, or on any site whose addresses look
-    // like Jira's.
+    // An address on the site of the profile's account, or on any site whose
+    // addresses look like Jira's.
     std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
+        return fromUrlForAccount(url, profileId, QString());
+    }
+    std::optional<UrlMatch> fromUrlForAccount(const QUrl &url, const QString &profileId,
+                                              const QString &accountId) const override
+    {
         QList<QUrl> baseUrls;
-        const QUrl site = baseUrlOf(m_settings.values(profileId, kGeneralScreen));
+        const QUrl site = baseUrlOf(m_settings.accountValues(profileId, accountId, kGeneralScreen));
         if (!site.isEmpty())
             baseUrls << site;
         return matchUrl(m_id, url, baseUrls);
@@ -119,8 +124,8 @@ public:
         const QUrl site = baseUrlOf(context.moduleSettings(kGeneralScreen));
         if (site.isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("jira", "Set the Jira base URL in this profile's Modules > Jira > "
-                                                    "General Configuration, in the Profiles menu."),
+                QCoreApplication::translate("jira", "Set the Jira base URL in Profiles > Manage Profiles…, "
+                                                    "under this profile's Jira."),
                 parent);
         }
         const QUrl url = issueUrl(site, context.config());

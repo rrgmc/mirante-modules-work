@@ -232,7 +232,6 @@ void addOpenPage(widgets::SummaryView *view, SummaryModel &model)
 
 void showPageAddress(widgets::SummaryView *view, const SummaryModel &model)
 {
-    view->actions()->setWebLink(model.pageAddress());
     view->actions()->setActionVisible(kOpenPage, !model.pageAddress().isEmpty());
 }
 

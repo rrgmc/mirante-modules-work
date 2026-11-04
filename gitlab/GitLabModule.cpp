@@ -65,7 +65,11 @@ public:
     std::vector<Field> fields() const override { return m_fields; }
     std::vector<Field> fieldsForProfile(const QString &profileId) const override
     {
-        return withProjectPaths(m_fields, m_settings, profileId);
+        return fieldsForAccount(profileId, QString());
+    }
+    std::vector<Field> fieldsForAccount(const QString &profileId, const QString &accountId) const override
+    {
+        return withProjectPaths(m_fields, m_settings, profileId, accountId);
     }
     Rendering rendering() const override { return Rendering::Native; }
 
@@ -90,11 +94,16 @@ public:
         return m_view ? m_view(context, parent) : nullptr;
     }
 
-    // An address on the profile's server, or on any server whose addresses
-    // look like GitLab's.
+    // An address on the server of the profile's account, or on any server
+    // whose addresses look like GitLab's.
     std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
-        return matchUrl(m_id, url, {baseUrlOf(m_settings.values(profileId, kGeneralScreen))});
+        return fromUrlForAccount(url, profileId, QString());
+    }
+    std::optional<UrlMatch> fromUrlForAccount(const QUrl &url, const QString &profileId,
+                                              const QString &accountId) const override
+    {
+        return matchUrl(m_id, url, {baseUrlOf(m_settings.accountValues(profileId, accountId, kGeneralScreen))});
     }
 
 private:
@@ -175,8 +184,8 @@ public:
         const QUrl baseUrl = baseUrlOf(context.moduleSettings(kGeneralScreen));
         if (!baseUrl.isValid() || baseUrl.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("gitlab", "Set the GitLab base URL in this profile's Modules > GitLab > "
-                                                      "General Configuration, in the Profiles menu."),
+                QCoreApplication::translate("gitlab", "Set the GitLab base URL in Profiles > Manage Profiles…, "
+                                                      "under this profile's GitLab."),
                 parent);
         }
         const QUrl url = m_pageUrl(baseUrl, context.config(), context.projectSetting(kProjectSettingKey));
