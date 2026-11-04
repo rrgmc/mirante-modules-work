@@ -172,9 +172,9 @@ QStringList repositoryNames(const QJsonObject &general)
 }
 
 std::vector<Field> withRepositories(std::vector<Field> fields, const ModuleSettings &settings,
-                                    const QString &profileId)
+                                    const QString &profileId, const QString &accountId)
 {
-    const QStringList names = repositoryNames(settings.values(profileId, kGeneralScreen));
+    const QStringList names = repositoryNames(settings.accountValues(profileId, accountId, kGeneralScreen));
     for (Field &field : fields) {
         if (field.key == kProjectSettingKey || field.key == kRepositoriesKey)
             field.suggestions = names;
