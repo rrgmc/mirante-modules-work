@@ -12,7 +12,7 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ### Changed
 
-- The Web link of GitHub, GitLab and Jira summaries and lists is the **Open in browser** button of the cell header, and no longer a "Web" button in the view. The models give it with `ItemContext::setWebLink()`, so a replaced layout keeps it too. It needs the core with decision 0146.
+- The Web link of GitHub, GitLab and Jira summaries and lists is the **Open in browser** button of the cell header, and no longer a "Web" button in the view. The models give it with `ItemContext::setWebLink()`, so a replaced layout keeps it too. It needs the core with decision 0147.
 
 - In a narrow GitHub Run List, the Workflow column hides first, then Branch, then Repository. Before, Repository hid first and Branch never hid.
 
