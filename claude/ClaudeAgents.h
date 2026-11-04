@@ -7,6 +7,7 @@
 #include <mirante/Status.h>
 
 #include <QDateTime>
+#include <QHash>
 #include <QJsonObject>
 #include <QList>
 #include <QString>
@@ -74,6 +75,34 @@ QStringList agentArguments(const QJsonObject &config, const QString &folderPath)
 // summary such as "3 agents · 1 needs input". Fails only when every account
 // failed. headOf gives the branch of a working tree's top folder.
 ItemStatus agentsStatus(const QList<AccountResult> &results, const std::function<QString(const QString &)> &headOf);
+
+// What the mirante-bridge plugin wrote for one session: its latest hook event
+// and its latest status line input, each with the file's modified time. See
+// plugin/README.md and decision 0148 in mirante-core.
+struct BridgeSession
+{
+    QJsonObject hook;       // event, tool, notification
+    QDateTime hookAt;       // invalid when there is no hook file
+    QJsonObject status;     // the status line input as Claude Code gave it
+    QDateTime statusAt;     // invalid when there is no status file
+};
+
+// The exchange folder: MIRANTE_CLAUDE_DIR, or ~/.mirante/claude/sessions.
+QString bridgeFolder();
+
+// The sessions in the exchange folder, by session id. A file that is not a
+// JSON object is skipped. A file last changed more than seven days before now
+// is deleted and skipped. A missing folder gives none.
+QHash<QString, BridgeSession> readBridge(const QString &folder, const QDateTime &now);
+
+// Adds the bridge's data to an Ok status of agentsStatus(): to each row with
+// files, tool (while it works, after a PreToolUse event), waitingFor
+// ("permission", while it needs input, after a permission request), model,
+// effort, contextPercent and costUsd; and data.limits, one object per account
+// with the rate limits of its newest status file. A hook event from before
+// the session started is ignored, and a rate-limit window that has reset
+// before now is left out.
+void mergeBridge(ItemStatus &status, const QHash<QString, BridgeSession> &sessions, const QDateTime &now);
 
 // The program, found on the PATH or where Claude Code's installers put it.
 // Empty when it is not installed.
