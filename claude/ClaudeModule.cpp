@@ -1,10 +1,13 @@
 // The claude module: Claude sessions as items. See README.md.
+#include "ClaudeAgentsFetch.h"
+#include "ClaudeAgentsView.h"
 #include "ClaudeUrls.h"
 
 #include <mirante/Fields.h>
 #include <mirante/ItemContext.h>
 #include <mirante/ItemType.h>
 #include <mirante/Module.h>
+#include <mirante/Status.h>
 
 #include <QCoreApplication>
 #include <QUrl>
@@ -77,6 +80,46 @@ public:
     }
 };
 
+// The Claude Code sessions on this device, from `claude agents --json`, in the
+// core's table. See decision 0143 in mirante-core.
+class AgentsItemType : public ClaudeItemType
+{
+public:
+    using ClaudeItemType::ClaudeItemType;
+
+    bool hasStatus() const override { return true; }
+    void fetchStatus(StatusJob &job) const override { fetchAgents(job); }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        return createAgentsView(context, parent);
+    }
+};
+
+std::vector<Field> agentsFields()
+{
+    Field folder;
+    folder.key = QStringLiteral("folder");
+    folder.label = QCoreApplication::translate("claude", "Folder");
+    folder.type = Field::Type::Folder;
+    folder.help = QCoreApplication::translate("claude", "Only sessions in this project folder. Empty lists all.");
+
+    Field finished;
+    finished.key = QStringLiteral("includeFinished");
+    finished.label = QCoreApplication::translate("claude", "Show finished background sessions");
+    finished.type = Field::Type::Bool;
+    finished.defaultValue = false;
+
+    Field accounts;
+    accounts.key = QStringLiteral("accounts");
+    accounts.label = QCoreApplication::translate("claude", "Accounts");
+    accounts.type = Field::Type::TextList;
+    accounts.placeholder = QStringLiteral("~/.claude-work");
+    accounts.help = QCoreApplication::translate("claude", "Claude Code config folders on this device, one per "
+                                                          "account. Empty uses the default account.");
+    return {folder, finished, accounts};
+}
+
 std::vector<Field> webFields()
 {
     Field url;
@@ -93,7 +136,8 @@ std::vector<Field> webFields()
 void registerModule(ModuleRegistrar &registrar)
 {
     registrar.setModuleName(QCoreApplication::translate("claude", "Claude"));
-    registrar.setModuleDescription(QCoreApplication::translate("claude", "Claude sessions on claude.ai."));
+    registrar.setModuleDescription(
+        QCoreApplication::translate("claude", "Claude sessions on claude.ai, and the Claude agents on this device."));
     registrar.setModuleUuid(QUuid(QStringLiteral("00caf22e-8d0f-431f-8832-17a09c048ac2")));
     registrar.setModuleVersion(QStringLiteral("0.1.0"));
     registrar.setModuleAuthor(QStringLiteral("Rangel Reale"));
@@ -104,6 +148,12 @@ void registerModule(ModuleRegistrar &registrar)
         QCoreApplication::translate("claude", "A Claude session on claude.ai, such as a Remote Control or cloud "
                                               "session, in a web view."),
         webFields()));
+    registrar.addItemType(std::make_unique<AgentsItemType>(
+        QStringLiteral("claude.agents"), QCoreApplication::translate("claude", "Claude agents"),
+        QCoreApplication::translate("claude", "Agents"),
+        QCoreApplication::translate("claude", "The Claude Code sessions on this device, with their title, status "
+                                              "and repository. No session text."),
+        agentsFields()));
 }
 
 } // namespace mirante::modules::claude
