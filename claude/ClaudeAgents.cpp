@@ -136,7 +136,13 @@ QString accountLabel(const QString &configFolder)
 {
     if (configFolder.isEmpty())
         return QCoreApplication::translate("claude", "Default");
-    const QString name = QFileInfo(QDir::cleanPath(QDir::fromNativeSeparators(configFolder))).fileName();
+    // The setting is synced, so a folder may come from another platform:
+    // both separators count everywhere.
+    QString folder = configFolder;
+    folder.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    while (folder.size() > 1 && folder.endsWith(QLatin1Char('/')))
+        folder.chop(1);
+    const QString name = folder.section(QLatin1Char('/'), -1);
     return name.isEmpty() ? configFolder : name;
 }
 
