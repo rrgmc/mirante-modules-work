@@ -677,20 +677,8 @@
         <translation>Um por linha, como grupo/projeto.</translation>
     </message>
     <message>
-        <source>Filters at the start</source>
-        <translation>Filtros ao abrir</translation>
-    </message>
-    <message>
         <source>Project</source>
         <translation>Projeto</translation>
-    </message>
-    <message>
-        <source>Projects to show, as group/project. Empty shows all.</source>
-        <translation>Projetos a mostrar, como grupo/projeto. Vazio mostra todos.</translation>
-    </message>
-    <message>
-        <source>Such as Failed or Running, as the Status filter shows them. Empty shows all.</source>
-        <translation>Como Failed ou Running, como o filtro de status os mostra. Vazio mostra todos.</translation>
     </message>
     <message>
         <source>GitLab MR List (several projects)</source>

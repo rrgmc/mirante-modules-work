@@ -243,9 +243,9 @@ Values in the query, the login and the branches, are encoded with `GitHubClient:
 - **Pull requests** come from one search, as for one repository: `searchQuery()` puts one `repo:<repository>` for each, which GitHub joins with OR. `allOpen` adds nothing, as the repositories already narrow the search. The Web link is `<web>/pulls?q=<query>`, and the description names the repositories, joined by commas.
 - **Runs** have no request for several repositories, so `fetchRunMultiListStatus()` asks `workflowRuns()` once per repository, each up to `limit`. The rows are joined, sorted by `created_at`, newest first, and cut to `limit`. Its sources are `all`, `mine` and `branch`; `mine` reads the user once, and an empty branch reads each repository's own `default_branch`. The first repository that fails fails the list, with its name before the message, such as "acme/web: Forbidden (403)". The list has no Web link, as GitHub has no page for the runs of several repositories.
 
-### Filters at the start
+### Kept filters
 
-The filters above a table start with the values of the item's TextList fields `<column>Filter`: `statusFilter` and `workflowFilter` for the run lists, and `repositoryFilter` for the lists over several repositories. `filterDefault()` reads them, trimmed, without empty values. The values are those that the drop-down shows, such as "Failed" or "CI". A value that no row has is chosen once a row has it. Once the user chooses in the drop-down, the item's values no longer apply to that view. The form shows these fields in a group, "Filters at the start".
+Each filter above a table keeps the user's last choice. When the user changes a filter, the view writes the chosen values to the item's key `<column>Filter`, an array of texts: `statusFilter` and `workflowFilter` for the run lists, and `repositoryFilter` for the lists over several repositories. `keepFilter()` writes the key, and an empty choice, "All", removes it. `filterDefault()` reads it at the next start, trimmed, without empty values. A value that no row has is chosen once a row has it. The keys are the list types' `viewKeys()`, so writing them keeps the view, as [decision 0081](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0081-views-that-keep-their-own-keys.md) in the core says. They live in the item's configuration, so they sync with it. The item's form does not show them.
 
 The tests are in `tests/tst_list_query.cpp`, on `pr_search.json`, `issue_search.json` and `run_list.json`, written by hand in the shape of GitHub's API.
 
@@ -278,7 +278,7 @@ The pull request model, `PullRequestListModel`, also reads each row's checks and
 
 The Run List makes no further requests. Its Run column reads `#<run_number>`, but sorts by the run's `id`, because run numbers count per workflow and ids grow across them. Status is a pill, as in the [run view](#status-pills). Started is `run_started_at`, else `created_at`. The filters are Status and Workflow.
 
-A list over several repositories shows a Repository column after the Title or Run column, with a filter on it before the others. A list of one repository hides that column and has no such filter. Each filter starts with the item's values, as [filters at the start](#filters-at-the-start) says.
+A list over several repositories shows a Repository column after the Title or Run column, with a filter on it before the others. A list of one repository hides that column and has no such filter. Each filter keeps the user's last choice, as [kept filters](#kept-filters) says.
 
 The table's cells draw text from a server as plain text. The tests of the models are in `tests/tst_list_models.cpp`, and those of the default layouts in `tests/tst_list_views.cpp`, with a fake context and a fake status source from `tests/ListTestSupport.h`, on `pr_search.json`, `issue_search.json`, `run_list.json`, the status tests' data, and `listview_*.json`. The layouts' tests skip when an app replaces a list layout; the models' tests run in every build.
 
@@ -298,7 +298,8 @@ An app can replace the whole layout of each list when it builds Mirante, as for 
 - `description()`, `pageAddress()`, `emptyText()` and `pageSize()`: the line above the table, the list's page on the site, what an empty list says, and the rows a page shows.
 - `config()` and `isColumnShown(column)`: the item's settings, and its `show<Column>` fields, on when absent.
 - `spansRepositories()`: whether the list is over several repositories, so that the layout shows each row's repository.
-- `filterDefault(column)`: the values a filter on a column starts with, from the item's `<column>Filter` field. Empty means all rows.
+- `filterDefault(column)`: the values a filter on a column starts with, from the item's `<column>Filter` key. Empty means all rows.
+- `keepFilter(column, values)`: keeps the values the user chose in a filter on a column, for the next start.
 - `keys()` and `row(key)`: each row's key, GitHub's row object, its page and whether it can be added.
 - `openWeb(key)`, `openPage(key)`, `addToTask(key)` and `copyLink(key)`.
 - `setVisibleRows(keys)`, which a layout calls after each `changed()` and whenever the rows it shows change. Only the pull request model reads more for them; it says `rowChanged(key)` when an answer comes.
@@ -414,9 +415,9 @@ The keys of each type, in the order the form shows them:
 - `github.pr.list`: `scope`, `repository`, `owner`, `preset`, `filter`, `limit`, `pageSize`, `showChecks`, `showReviews`.
 - `github.issue.list`: `scope`, `repository`, `owner`, `preset`, `filter`, `limit`, `pageSize`.
 - `github.run`: `repository`, `branchSource`, `branch`, `number`, `workflow`.
-- `github.run.list`: `repository`, `source`, `branch`, `number`, `workflow`, `limit`, `pageSize`, `statusFilter`, `workflowFilter`.
-- `github.pr.multilist`: `repositories`, `preset`, `filter`, `limit`, `pageSize`, `showChecks`, `showReviews`, `repositoryFilter`.
-- `github.run.multilist`: `repositories`, `source`, `branch`, `limit`, `pageSize`, `repositoryFilter`, `statusFilter`, `workflowFilter`.
+- `github.run.list`: `repository`, `source`, `branch`, `number`, `workflow`, `limit`, `pageSize`.
+- `github.pr.multilist`: `repositories`, `preset`, `filter`, `limit`, `pageSize`, `showChecks`, `showReviews`.
+- `github.run.multilist`: `repositories`, `source`, `branch`, `limit`, `pageSize`.
 
 ## Settings
 

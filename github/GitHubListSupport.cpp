@@ -107,9 +107,21 @@ DefaultListLayout::DefaultListLayout(ListModel &model, const QString &view, QWid
     setWebLink(model.pageAddress());
     setDescription(model.description());
     setPageSize(model.pageSize());
+    connect(this, &ItemListView::filterChanged, this, [this](int column, const QStringList &values) {
+        const auto name = m_keptFilters.constFind(column);
+        if (name != m_keptFilters.constEnd())
+            m_model.keepFilter(*name, values);
+    });
 }
 
 DefaultListLayout::~DefaultListLayout() = default;
+
+void DefaultListLayout::addKeptFilter(int column, const QString &label, const QString &name)
+{
+    addFilter(column, label);
+    setFilterDefault(column, m_model.filterDefault(name));
+    m_keptFilters.insert(column, name);
+}
 
 void DefaultListLayout::start()
 {

@@ -1,7 +1,8 @@
 // The default of the extension point "listlayout": the core's table, with the
 // columns Key, Summary, Status, Assignee, Updated, the extra fields and Links,
-// and a filter on Status. It is compiled only when the app names no extension
-// for "listlayout". See README.md#layouts.
+// and a filter on Status, which starts with the user's last choice. It is
+// compiled only when the app names no extension for "listlayout". See
+// README.md#layouts.
 #include "JiraListLayout.h"
 
 #include <mirante/widgets/CompactDate.h>
@@ -81,6 +82,7 @@ public:
         for (int i = 0; i < extraFields.size(); ++i)
             setColumnVisible(FirstExtraColumn + i, false);
         addFilter(StatusColumn, QCoreApplication::translate("jira", "Status"));
+        setFilterDefault(StatusColumn, model.filterDefault(QStringLiteral("status")));
         setPageSize(model.pageSize());
         setDescription(model.description());
 
@@ -88,6 +90,10 @@ public:
                 [this](const QString &key, const QString &link) { activateLink(key, link); });
         connect(this, &widgets::ItemListView::rowMenuRequested, this,
                 [this](const QString &key, const QPoint &globalPos) { showRowMenu(key, globalPos); });
+        connect(this, &widgets::ItemListView::filterChanged, this, [this](int column, const QStringList &values) {
+            if (column == StatusColumn)
+                m_model.keepFilter(QStringLiteral("status"), values);
+        });
         connect(&model, &ListModel::changed, this, [this] { draw(); });
         draw();
     }

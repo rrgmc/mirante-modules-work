@@ -297,6 +297,21 @@ QStringList filterDefault(const QJsonObject &config, const QString &column)
     return values;
 }
 
+QJsonObject withFilter(QJsonObject config, const QString &column, const QStringList &values)
+{
+    const QString key = column + QStringLiteral("Filter");
+    if (values.isEmpty())
+        config.remove(key);
+    else
+        config.insert(key, QJsonArray::fromStringList(values));
+    return config;
+}
+
+QStringList listViewKeys()
+{
+    return {QStringLiteral("projectFilter"), QStringLiteral("statusFilter")};
+}
+
 int listLimit(const QJsonObject &config)
 {
     return positiveNumber(config.value(QStringLiteral("limit")), kDefaultListLimit);

@@ -85,9 +85,13 @@ public:
     // filter on it.
     bool spansProjects() const { return m_span == ListSpan::Projects; }
     // The values a view filter on a column chooses at the start: the item's
-    // field <column>Filter. filterDefault("status") reads statusFilter. Empty
-    // means "All".
+    // key <column>Filter, which keepFilter() writes. filterDefault("status")
+    // reads statusFilter. Empty means "All".
     QStringList filterDefault(const QString &column) const;
+    // Keeps the values the user chose in a view filter on a column, so that
+    // the next start chooses them again. Empty means "All". The key is one of
+    // the type's view keys, so writing it does not make the view again.
+    void keepFilter(const QString &column, const QStringList &values);
 
     // The keys of the rows, in the order of GitLab's answer.
     QStringList keys() const { return m_keys; }

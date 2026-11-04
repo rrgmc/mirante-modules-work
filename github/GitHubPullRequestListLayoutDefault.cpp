@@ -64,8 +64,7 @@ public:
         setColumnVisible(ReviewsColumn, model.isColumnShown(QStringLiteral("reviews")));
         setColumnVisible(RepositoryColumn, model.spansRepositories());
         if (model.spansRepositories()) {
-            addFilter(RepositoryColumn, QCoreApplication::translate("github", "Repository"));
-            setFilterDefault(RepositoryColumn, model.filterDefault(QStringLiteral("repository")));
+            addKeptFilter(RepositoryColumn, QCoreApplication::translate("github", "Repository"), QStringLiteral("repository"));
         }
         start();
     }

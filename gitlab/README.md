@@ -192,9 +192,9 @@ Without a project, without a number for `mergeRequest`, or with an unknown `sour
 
 GitLab has no request for the merge requests or pipelines of several projects, so each list asks once per project, each up to `limit`, with the query of one project. The rows are joined, sorted newest first, by `updated_at` for merge requests and `created_at` for pipelines, and cut to `limit`. `reviewRequested` and `mine` read the user once. The pipeline sources are `all`, `mine` and `branch`. A pipeline row also gets `project_path` (`kRowProjectKey`), the path of its project, since GitLab's row has only `project_id`. The first project that fails fails the list, with its path before the message, such as "acme/web: Forbidden (403)". The lists have no Web link, as GitLab has no page for several projects, and the description names the projects, joined by commas.
 
-### Filters at the start
+### Kept filters
 
-The filters above a table start with the values of the item's TextList fields `<column>Filter`: `statusFilter` for the pipeline lists, and `projectFilter` for the lists over several projects. `filterDefault()` reads them, trimmed, without empty values. The values are those that the drop-down shows, such as "Failed". A value that no row has is chosen once a row has it. Once the user chooses in the drop-down, the item's values no longer apply to that view. The form shows these fields in a group, "Filters at the start".
+Each filter above a table keeps the user's last choice. When the user changes a filter, the view writes the chosen values to the item's key `<column>Filter`, an array of texts: `statusFilter` for the pipeline lists, and `projectFilter` for the lists over several projects. `keepFilter()` writes the key, and an empty choice, "All", removes it. `filterDefault()` reads it at the next start, trimmed, without empty values. A value that no row has is chosen once a row has it. The keys are the list types' `viewKeys()`, so writing them keeps the view, as [decision 0081](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0081-views-that-keep-their-own-keys.md) in the core says. They live in the item's configuration, so they sync with it. The item's form does not show them.
 
 The tests are in `tests/tst_list_query.cpp`, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`, written by hand in the shape of GitLab's API.
 
@@ -217,7 +217,7 @@ The merge request model, `MergeRequestListModel`, also reads each row's head pip
 
 The pipeline model makes no further requests, so Author and Started show what the list's answer holds. GitLab leaves `user` and `started_at` out of its list answers, so Author usually shows a dash, and Started falls back to `created_at`. "Add" reads `refs/merge-requests/<iid>/head`, `/merge` and `/train` as that merge request, and any other ref as a branch.
 
-A list over several projects shows a Project column after the Title or Id column, with a filter on it before the others. A list of one project hides that column and has no such filter. Each filter starts with the item's values, as [filters at the start](#filters-at-the-start) says.
+A list over several projects shows a Project column after the Title or Id column, with a filter on it before the others. A list of one project hides that column and has no such filter. Each filter keeps the user's last choice, as [kept filters](#kept-filters) says.
 
 The table's cells draw text from a server as plain text. The tests of the models are in `tests/tst_list_models.cpp`, and those of the default layouts in `tests/tst_list_views.cpp`, with a fake context and a fake status source from `tests/ListTestSupport.h`, on `merge_request_list.json`, `issue_list.json` and `pipeline_list.json`. The layouts' tests skip when an app replaces a list layout; the models' tests run in every build.
 
@@ -231,7 +231,7 @@ An app can replace the whole layout of each list when it builds Mirante, as for 
 | `mergerequestlistlayout` | `makeMergeRequestListLayout()` in `GitLabMergeRequestListLayout.h` | `MergeRequestListModel` | `GitLabMergeRequestListLayoutDefault.cpp` |
 | `pipelinelistlayout` | `makePipelineListLayout()` in `GitLabPipelineListLayout.h` | `PipelineListModel` | `GitLabPipelineListLayoutDefault.cpp` |
 
-**What every list model gives** (`ListModel`, in `GitLabListModel.h`): `hasData()` and `message()`; `description()`, `pageAddress()`, `emptyText()` and `pageSize()`; `config()` and `isColumnShown(column)`, which reads the `show<Column>` fields; `spansProjects()`, whether the list is over several projects; `filterDefault(column)`, the values a filter on a column starts with, from the item's `<column>Filter` field; `keys()` and `row(key)`, with GitLab's row object, its page and whether it can be added; the row actions `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`; and `setVisibleRows(keys)`, which a layout calls after each `changed()` and whenever the rows it shows change.
+**What every list model gives** (`ListModel`, in `GitLabListModel.h`): `hasData()` and `message()`; `description()`, `pageAddress()`, `emptyText()` and `pageSize()`; `config()` and `isColumnShown(column)`, which reads the `show<Column>` fields; `spansProjects()`, whether the list is over several projects; `filterDefault(column)`, the values a filter on a column starts with, from the item's `<column>Filter` key, and `keepFilter(column, values)`, which keeps the user's choice there; `keys()` and `row(key)`, with GitLab's row object, its page and whether it can be added; the row actions `openWeb()`, `openPage()`, `addToTask()` and `copyLink()`; and `setVisibleRows(keys)`, which a layout calls after each `changed()` and whenever the rows it shows change.
 
 **What each model adds:**
 
@@ -312,9 +312,9 @@ The keys of each type, in the order the form shows them:
 - `gitlab.mr.summary`, `gitlab.mr.page`, `gitlab.issue.summary`, `gitlab.issue.page`: `project`, `iid`.
 - `gitlab.mr.list`, `gitlab.issue.list`: `scope`, `project`, `group`, `preset`, `filter`, `limit`, `pageSize`.
 - `gitlab.pipeline`: `project`, `branchSource`, `branch`, `iid`.
-- `gitlab.pipeline.list`: `project`, `source`, `branch`, `iid`, `limit`, `pageSize`, `statusFilter`.
-- `gitlab.mr.multilist`: `projects`, `preset`, `filter`, `limit`, `pageSize`, `showPipeline`, `showApprovals`, `projectFilter`.
-- `gitlab.pipeline.multilist`: `projects`, `source`, `branch`, `limit`, `pageSize`, `projectFilter`, `statusFilter`.
+- `gitlab.pipeline.list`: `project`, `source`, `branch`, `iid`, `limit`, `pageSize`.
+- `gitlab.mr.multilist`: `projects`, `preset`, `filter`, `limit`, `pageSize`, `showPipeline`, `showApprovals`.
+- `gitlab.pipeline.multilist`: `projects`, `source`, `branch`, `limit`, `pageSize`.
 
 ## Settings
 

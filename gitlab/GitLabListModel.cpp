@@ -43,6 +43,14 @@ QStringList ListModel::filterDefault(const QString &column) const
     return gitlab::filterDefault(config(), column);
 }
 
+void ListModel::keepFilter(const QString &column, const QStringList &values)
+{
+    const QJsonObject current = config();
+    const QJsonObject next = withFilter(current, column, values);
+    if (next != current)
+        m_context->updateConfig(next);
+}
+
 bool ListModel::isColumnShown(const QString &column) const
 {
     if (column.isEmpty())
