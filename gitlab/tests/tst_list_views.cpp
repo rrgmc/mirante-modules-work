@@ -998,11 +998,18 @@ private slots:
         filter->setCurrentIndex(filter->findText(QStringLiteral("Failed")));
         QCOMPARE(rowCount(view), 2);
         QCOMPARE(cellText(view, 0, PipelineId), QStringLiteral("9104"));
+        // The item keeps the choice for the next start.
+        QCOMPARE(context.itemConfig.value(QStringLiteral("statusFilter")).toArray(),
+                 QJsonArray{QStringLiteral("Failed")});
 
         // It survives new rows.
         context.source.change(pipelines());
         QCOMPARE(rowCount(view), 2);
         QCOMPARE(filter->currentText(), QStringLiteral("Failed"));
+
+        // "All" keeps nothing.
+        filter->setCurrentIndex(0);
+        QVERIFY(!context.itemConfig.contains(QStringLiteral("statusFilter")));
     }
 
     void pipelineAdd_data()

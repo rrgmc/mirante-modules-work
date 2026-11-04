@@ -6,6 +6,11 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Changed
+
+- A list's filters keep the user's last choice. Changing a filter writes it to the item's `statusFilter`, `workflowFilter`, `repositoryFilter` or `projectFilter`, and the next start chooses it again. The item's form no longer shows these keys in a "Filters at the start" group. Jira's Status filter keeps its choice too, in `statusFilter`. Items that set these keys in the form keep their values. See [kept filters](github/README.md#kept-filters).
+- The list layouts' interface: the GitHub, GitLab and Jira `ListModel` have `keepFilter(column, values)`; Jira's also has `filterDefault(column)`. An app's own list layout keeps building, and keeps no choice until it calls them. The modules need the core's `ItemListView::filterChanged()`.
+
 ## [0.10.0] - 2026-11-03
 
 Lists can cover several repositories or projects, and a list's filters can start with values from its settings.

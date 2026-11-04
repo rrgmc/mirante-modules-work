@@ -61,6 +61,13 @@ public:
     std::vector<Field> fields() const override { return m_fields; }
     Rendering rendering() const override { return Rendering::Native; }
 
+    // A list's view keeps the choice of its Status filter in the
+    // configuration. See ListModel::keepFilter().
+    QStringList viewKeys() const override
+    {
+        return m_id == QLatin1String("jira.list") ? QStringList{QStringLiteral("statusFilter")} : QStringList();
+    }
+
     bool hasStatus() const override { return m_fetch != nullptr; }
     void fetchStatus(StatusJob &job) const override
     {

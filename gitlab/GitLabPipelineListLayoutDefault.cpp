@@ -1,6 +1,7 @@
 // The default of the extension point "pipelinelistlayout": the core's table,
 // with the columns Id, Project, Status, Ref, Author, Started and Links, and a
-// filter on Status, which starts with the item's statusFilter. Project, and a
+// filter on Status, which keeps the user's last choice in the item's
+// statusFilter. Project, and a
 // filter on it, show only in a list over several projects. It is compiled only
 // when the app names no extension for "pipelinelistlayout". See README.md#list-layouts.
 #include "GitLabListSupport.h"
@@ -33,11 +34,9 @@ public:
                    IdColumn);
         setColumnVisible(ProjectColumn, model.spansProjects());
         if (model.spansProjects()) {
-            addFilter(ProjectColumn, QCoreApplication::translate("gitlab", "Project"));
-            setFilterDefault(ProjectColumn, model.filterDefault(QStringLiteral("project")));
+            addKeptFilter(ProjectColumn, QCoreApplication::translate("gitlab", "Project"), QStringLiteral("project"));
         }
-        addFilter(StatusColumn, QCoreApplication::translate("gitlab", "Status"));
-        setFilterDefault(StatusColumn, model.filterDefault(QStringLiteral("status")));
+        addKeptFilter(StatusColumn, QCoreApplication::translate("gitlab", "Status"), QStringLiteral("status"));
         start();
     }
 

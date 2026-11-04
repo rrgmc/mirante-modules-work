@@ -111,7 +111,7 @@ public:
     {
         return screenId == QLatin1String("general") ? general : QJsonObject();
     }
-    void updateConfig(const QJsonObject &) override {}
+    void updateConfig(const QJsonObject &config) override { itemConfig = config; }
     void showPage(const QUrl &url) override { shownPages << url; }
     QString addItemToTask(const QString &typeId, const QString &name, const QJsonObject &config) override
     {
@@ -1256,6 +1256,16 @@ private slots:
         const QAbstractItemModel *model = tableOf(view.get())->model();
         QCOMPARE(model->rowCount(), 1);
         QCOMPARE(model->index(0, 0).data().toString(), QStringLiteral("OPS-10"));
+        // The item keeps the choice, and the next view starts with it.
+        QCOMPARE(context.itemConfig.value(QStringLiteral("statusFilter")).toArray(),
+                 QJsonArray{QStringLiteral("To Do")});
+        std::unique_ptr<QWidget> next(jira::createListView(context, nullptr));
+        QCOMPARE(next->findChild<QComboBox *>(QStringLiteral("filter.2"))->currentText(), QStringLiteral("To Do"));
+        QCOMPARE(tableOf(next.get())->model()->rowCount(), 1);
+
+        // "All" keeps nothing.
+        filter->setCurrentIndex(0);
+        QVERIFY(!context.itemConfig.contains(QStringLiteral("statusFilter")));
     }
 
     void pageSizeFromTheField_data()

@@ -74,6 +74,30 @@ int ListModel::pageSize() const
     return listPageSize(config());
 }
 
+QStringList ListModel::filterDefault(const QString &column) const
+{
+    QStringList values;
+    for (const QJsonValue &value : config().value(column + QStringLiteral("Filter")).toArray()) {
+        const QString text = value.toString().trimmed();
+        if (!text.isEmpty())
+            values << text;
+    }
+    return values;
+}
+
+void ListModel::keepFilter(const QString &column, const QStringList &values)
+{
+    const QJsonObject current = config();
+    QJsonObject next = current;
+    const QString key = column + QStringLiteral("Filter");
+    if (values.isEmpty())
+        next.remove(key);
+    else
+        next.insert(key, QJsonArray::fromStringList(values));
+    if (next != current)
+        m_context->updateConfig(next);
+}
+
 ListModel::Issue ListModel::issue(const QString &key) const
 {
     for (const Issue &issue : m_issues) {

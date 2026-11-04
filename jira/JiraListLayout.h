@@ -76,6 +76,14 @@ public:
     QUrl pageAddress() const;
     // The rows a page shows, from the item's pageSize field.
     int pageSize() const;
+    // The values a view filter on a column chooses at the start: the item's
+    // key <column>Filter, which keepFilter() writes. filterDefault("status")
+    // reads statusFilter. Empty means "All".
+    QStringList filterDefault(const QString &column) const;
+    // Keeps the values the user chose in a view filter on a column, so that
+    // the next start chooses them again. Empty means "All". The key is one of
+    // the type's view keys, so writing it does not make the view again.
+    void keepFilter(const QString &column, const QStringList &values);
     // The names of the extra fields of the module's settings.
     QStringList extraFields() const { return m_extraFields; }
     // Whether the site has each extra field, in the order of extraFields().
