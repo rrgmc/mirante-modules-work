@@ -33,11 +33,12 @@ public:
         : DefaultListLayout(model, QStringLiteral("run-list"), parent)
         , m_model(model)
     {
+        // In a narrow list, Workflow hides first, then Branch, then Repository.
         setColumns({{QCoreApplication::translate("github", "Run"), 2},
                     {QCoreApplication::translate("github", "Repository"), 6},
-                    {QCoreApplication::translate("github", "Workflow"), 3},
+                    {QCoreApplication::translate("github", "Workflow"), 8},
                     {QCoreApplication::translate("github", "Status"), 1},
-                    {QCoreApplication::translate("github", "Branch"), 0, true},
+                    {QCoreApplication::translate("github", "Branch"), 7, true},
                     {QCoreApplication::translate("github", "Actor"), 5},
                     {QCoreApplication::translate("github", "Started"), 4},
                     {QCoreApplication::translate("github", "Links"), 0}},
