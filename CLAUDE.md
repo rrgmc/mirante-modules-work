@@ -4,7 +4,10 @@ The first-party modules of Mirante for work: GitHub, GitLab, Jira and Claude, on
 
 ## Git workflow
 
-Each piece of work happens in its own Git worktree, with its own branch. Never edit files in the main checkout on `master` directly.
+Several sessions may work on this repository at the same time, so each piece of work happens in its own Git worktree, with its own branch.
+
+- Before the first edit, create a worktree with its own branch: `EnterWorktree` in Claude Code, or `git worktree add -b <branch> .claude/worktrees/<branch> origin/master`. A new branch in the main checkout is not enough, so never run `git checkout` or `git switch` there.
+- Never edit files in the main checkout on `master` directly. It stays clean, so other sessions can branch from it.
 
 Changes reach `master` only through a pull request. Never merge a pull request on your own: only the user merges. When the user asks for the merge, use a merge commit (`gh pr merge <number> --merge`).
 
