@@ -200,10 +200,11 @@ private slots:
             return QStringList{QStringLiteral("no project field")};
         };
 
-        // A list over several projects has no project field.
+        // A list over several projects has no project field, and neither has
+        // the status of the service.
         QList<const mirante::ItemType *> types;
         for (const mirante::ItemType *type : registry.types()) {
-            if (!type->id().endsWith(QLatin1String(".multilist")))
+            if (!type->id().endsWith(QLatin1String(".multilist")) && !type->id().endsWith(QLatin1String(".status")))
                 types << type;
         }
         for (const mirante::ItemType *type : types)

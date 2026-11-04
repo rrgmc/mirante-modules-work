@@ -7,6 +7,7 @@
 #include "GitLabMergeRequestView.h"
 #include "GitLabPipelineListView.h"
 #include "GitLabPipelineView.h"
+#include "GitLabServiceStatus.h"
 #include "GitLabSettings.h"
 #include "GitLabStatus.h"
 #include "GitLabUrls.h"
@@ -106,6 +107,48 @@ private:
     const ModuleSettings &m_settings;
     FetchStatus m_fetch;
     CreateView m_view;
+};
+
+// The GitLab Status type: the health of gitlab.com, from its public status
+// page. It reads no setting of the profile and takes no pasted link. See
+// GitLabServiceStatus.h.
+class ServiceStatusItemType : public ItemType
+{
+public:
+    QString id() const override { return QStringLiteral("gitlab.status"); }
+    QString name() const override { return QCoreApplication::translate("gitlab", "GitLab Status"); }
+    QIcon icon() const override { return QIcon(QStringLiteral(":/modules/gitlab/icons/gitlab.svg")); }
+    QString shortName() const override { return QCoreApplication::translate("gitlab", "Status"); }
+    QString description() const override
+    {
+        return QCoreApplication::translate("gitlab", "The health of gitlab.com, from status.gitlab.com: open "
+                                                     "incidents, planned maintenance and components that do not "
+                                                     "work as they should.");
+    }
+    Rendering rendering() const override { return Rendering::Native; }
+
+    std::vector<Field> fields() const override
+    {
+        Field maintenance;
+        maintenance.key = QStringLiteral("showMaintenance");
+        maintenance.label = QCoreApplication::translate("gitlab", "Show the planned maintenance");
+        maintenance.type = Field::Type::Bool;
+        maintenance.defaultValue = true;
+        Field components;
+        components.key = QStringLiteral("showAllComponents");
+        components.label = QCoreApplication::translate("gitlab", "Show the components that work too");
+        components.type = Field::Type::Bool;
+        components.defaultValue = false;
+        return {maintenance, components};
+    }
+
+    bool hasStatus() const override { return true; }
+    void fetchStatus(StatusJob &job) const override { fetchServiceStatus(job); }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        return createServiceStatusView(context, parent);
+    }
 };
 
 // Builds a page address from the server's base URL, the item's configuration
@@ -429,6 +472,8 @@ void registerModule(ModuleRegistrar &registrar)
                     QCoreApplication::translate("gitlab", "Created by me"),
                     QCoreApplication::translate("gitlab", "All open")}),
         settings, &fetchIssueListStatus, &createIssueListView));
+
+    registrar.addItemType(std::make_unique<ServiceStatusItemType>());
 
     registrar.addQuickAddHandler(std::make_unique<GitLabQuickAddHandler>());
     registrar.addRelatedItemFinder(std::make_unique<GitLabRelatedItemFinder>());

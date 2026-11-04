@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Added
+
+- The GitHub Status and GitLab Status item types show the health of github.com and gitlab.com, from their public status pages: the overall state, open incidents with their latest update, planned maintenance and the components that do not work. An open incident needs attention, and notifies when it is major or critical. They need no token. See [GitHub Status](github/README.md#github-status) and [GitLab Status](gitlab/README.md#gitlab-status).
+
 ### Changed
 
 - In a narrow GitHub Run List, the Workflow column hides first, then Branch, then Repository. Before, Repository hid first and Branch never hid.

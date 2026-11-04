@@ -1,0 +1,122 @@
+{
+  "page": {
+    "id": "kctbh9vrtdwd",
+    "name": "GitHub",
+    "url": "https://www.githubstatus.com",
+    "time_zone": "Etc/UTC",
+    "updated_at": "2026-11-04T17:01:11.534Z"
+  },
+  "components": [
+    {
+      "id": "8l4ygp009s5s",
+      "name": "Git Operations",
+      "status": "operational",
+      "position": 1,
+      "group_id": null,
+      "group": false,
+      "only_show_if_degraded": false
+    },
+    {
+      "id": "br0l2tvcx85d",
+      "name": "Actions",
+      "status": "partial_outage",
+      "position": 7,
+      "group_id": null,
+      "group": false,
+      "only_show_if_degraded": false
+    },
+    {
+      "id": "vg70hn9s2tyj",
+      "name": "Pages",
+      "status": "degraded_performance",
+      "position": 9,
+      "group_id": null,
+      "group": false,
+      "only_show_if_degraded": false
+    },
+    {
+      "id": "pjmpxvq2cmr2",
+      "name": "Copilot",
+      "status": "operational",
+      "position": 10,
+      "group_id": null,
+      "group": false,
+      "only_show_if_degraded": false
+    },
+    {
+      "id": "grp1",
+      "name": "A group",
+      "status": "major_outage",
+      "group": true,
+      "group_id": null,
+      "only_show_if_degraded": false,
+      "position": 9
+    },
+    {
+      "id": "hid1",
+      "name": "Hidden unless degraded",
+      "status": "operational",
+      "group": false,
+      "group_id": null,
+      "only_show_if_degraded": true,
+      "position": 10
+    }
+  ],
+  "incidents": [
+    {
+      "id": "xr3myzj7ms51",
+      "name": "Incident with Actions and Pages",
+      "status": "identified",
+      "impact": "major",
+      "shortlink": "https://stspg.io/pjgptg3cfc6n",
+      "created_at": "2026-11-04T16:05:31.580Z",
+      "updated_at": "2026-11-04T16:48:03.140Z",
+      "incident_updates": [
+        {
+          "id": "u2",
+          "status": "identified",
+          "body": "We are seeing delays in Actions jobs and Pages builds.",
+          "created_at": "2026-11-04T16:48:03.140Z"
+        },
+        {
+          "id": "u1",
+          "status": "investigating",
+          "body": "We are investigating reports of degraded performance.",
+          "created_at": "2026-11-04T16:05:31.580Z"
+        }
+      ]
+    },
+    {
+      "id": "old1",
+      "name": "A resolved incident",
+      "status": "resolved",
+      "impact": "minor",
+      "shortlink": "",
+      "created_at": "2026-11-04T10:00:00.000Z",
+      "updated_at": "2026-11-04T11:00:00.000Z",
+      "incident_updates": []
+    }
+  ],
+  "scheduled_maintenances": [
+    {
+      "id": "m1",
+      "name": "Database maintenance",
+      "status": "scheduled",
+      "impact": "maintenance",
+      "shortlink": "https://stspg.io/m1",
+      "scheduled_for": "2026-11-08T02:00:00.000Z",
+      "scheduled_until": "2026-11-08T04:00:00.000Z",
+      "incident_updates": [
+        {
+          "id": "mu1",
+          "body": "Planned maintenance of a database cluster.",
+          "status": "scheduled"
+        }
+      ]
+    }
+  ],
+  "status": {
+    "indicator": "major",
+    "description": "Partial System Outage"
+  }
+}
