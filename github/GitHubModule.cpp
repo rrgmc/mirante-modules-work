@@ -7,6 +7,7 @@
 #include "GitHubQuickAdd.h"
 #include "GitHubRunListView.h"
 #include "GitHubRunView.h"
+#include "GitHubServiceStatus.h"
 #include "GitHubSettings.h"
 #include "GitHubStatus.h"
 #include "GitHubUrls.h"
@@ -65,7 +66,11 @@ public:
     std::vector<Field> fields() const override { return m_fields; }
     std::vector<Field> fieldsForProfile(const QString &profileId) const override
     {
-        return withRepositories(m_fields, m_settings, profileId);
+        return fieldsForAccount(profileId, QString());
+    }
+    std::vector<Field> fieldsForAccount(const QString &profileId, const QString &accountId) const override
+    {
+        return withRepositories(m_fields, m_settings, profileId, accountId);
     }
     Rendering rendering() const override { return Rendering::Native; }
 
@@ -90,10 +95,15 @@ public:
         return m_view ? m_view(context, parent) : nullptr;
     }
 
-    // An address below the web base of the profile, or on github.com.
+    // An address below the web base of the profile's account, or on github.com.
     std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
-        return matchUrl(m_id, url, {webBaseOf(m_settings.values(profileId, kGeneralScreen))});
+        return fromUrlForAccount(url, profileId, QString());
+    }
+    std::optional<UrlMatch> fromUrlForAccount(const QUrl &url, const QString &profileId,
+                                              const QString &accountId) const override
+    {
+        return matchUrl(m_id, url, {webBaseOf(m_settings.accountValues(profileId, accountId, kGeneralScreen))});
     }
 
 private:
@@ -106,6 +116,48 @@ private:
     const ModuleSettings &m_settings;
     FetchStatus m_fetch;
     CreateView m_view;
+};
+
+// The GitHub Status type: the health of github.com, from its public status
+// page. It reads no setting of the profile and takes no pasted link. See
+// GitHubServiceStatus.h.
+class ServiceStatusItemType : public ItemType
+{
+public:
+    QString id() const override { return QStringLiteral("github.status"); }
+    QString name() const override { return QCoreApplication::translate("github", "GitHub Status"); }
+    QIcon icon() const override { return QIcon(QStringLiteral(":/modules/github/icons/github.svg")); }
+    QString shortName() const override { return QCoreApplication::translate("github", "Status"); }
+    QString description() const override
+    {
+        return QCoreApplication::translate("github", "The health of github.com, from githubstatus.com: open "
+                                                     "incidents, planned maintenance and components that do not "
+                                                     "work as they should.");
+    }
+    Rendering rendering() const override { return Rendering::Native; }
+
+    std::vector<Field> fields() const override
+    {
+        Field maintenance;
+        maintenance.key = QStringLiteral("showMaintenance");
+        maintenance.label = QCoreApplication::translate("github", "Show the planned maintenance");
+        maintenance.type = Field::Type::Bool;
+        maintenance.defaultValue = true;
+        Field components;
+        components.key = QStringLiteral("showAllComponents");
+        components.label = QCoreApplication::translate("github", "Show the components that work too");
+        components.type = Field::Type::Bool;
+        components.defaultValue = false;
+        return {maintenance, components};
+    }
+
+    bool hasStatus() const override { return true; }
+    void fetchStatus(StatusJob &job) const override { fetchServiceStatus(job); }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        return createServiceStatusView(context, parent);
+    }
 };
 
 // Builds a page address from the web base, the item's configuration and the
@@ -132,8 +184,8 @@ public:
         const QUrl webBase = webBaseOf(context.moduleSettings(kGeneralScreen));
         if (!webBase.isValid() || webBase.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("github", "Set the GitHub base URL in this profile's Modules > GitHub > "
-                                                      "General Configuration, in the Profiles menu."),
+                QCoreApplication::translate("github", "Set the GitHub base URL in Profiles > Manage Profiles…, "
+                                                      "under this profile's GitHub."),
                 parent);
         }
         const QUrl url = m_pageUrl(webBase, context.config(), context.projectSetting(kProjectSettingKey));
@@ -446,6 +498,8 @@ void registerModule(ModuleRegistrar &registrar)
                     QCoreApplication::translate("github", "Created by me"),
                     QCoreApplication::translate("github", "All open")}),
         settings, &fetchIssueListStatus, &createIssueListView));
+
+    registrar.addItemType(std::make_unique<ServiceStatusItemType>());
 
     registrar.addQuickAddHandler(std::make_unique<GitHubQuickAddHandler>());
     registrar.addRelatedItemFinder(std::make_unique<GitHubRelatedItemFinder>());

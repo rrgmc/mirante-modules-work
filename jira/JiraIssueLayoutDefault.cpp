@@ -151,7 +151,6 @@ public:
         setObjectName(QStringLiteral("jira-issue-default-layout"));
         actions()->addLinkAction(kOpenPage, QCoreApplication::translate("jira", "Open page"),
                                  QCoreApplication::translate("jira", "Page"), [this] { m_model.openPage(); });
-        actions()->setWebLink(model.pageAddress());
         for (const QString &section : {kDetails, kDescription, kComments, kLinks})
             setSectionVisible(section, model.isSectionShown(section));
 

@@ -103,7 +103,7 @@ private slots:
         QTest::addColumn<QString>("message");
 
         const QString noSite =
-            QStringLiteral("Set the Jira base URL in this profile's Modules > Jira > General Configuration, in the Profiles menu.");
+            QStringLiteral("Set the Jira base URL in Profiles > Manage Profiles…, under this profile's Jira.");
         const QString noKey = QStringLiteral("Set the issue key in the item's settings.");
         const QString server = QStringLiteral("https://jira.example.com/");
         QTest::newRow("cloud") << QStringLiteral("https://acme.atlassian.net") << keyConfig("PROJ-1")

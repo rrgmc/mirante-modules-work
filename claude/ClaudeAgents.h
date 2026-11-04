@@ -78,7 +78,7 @@ ItemStatus agentsStatus(const QList<AccountResult> &results, const std::function
 
 // What the mirante-bridge plugin wrote for one session: its latest hook event
 // and its latest status line input, each with the file's modified time. See
-// plugin/README.md and decision 0148 in mirante-core.
+// plugin/README.md and decision 0150 in mirante-core.
 struct BridgeSession
 {
     QJsonObject hook;       // event, tool, notification

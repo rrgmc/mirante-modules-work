@@ -1,0 +1,128 @@
+{
+  "result": {
+    "status_overall": {
+      "updated": "2026-11-04T15:00:00.000Z",
+      "status": "Partial Service Disruption",
+      "status_code": 400
+    },
+    "status": [
+      {
+        "id": "5b36dc6502d06804c0834a07",
+        "name": "Website",
+        "status": "Operational",
+        "status_code": 100,
+        "containers": [
+          {
+            "id": "5b36e11140e76c04b7220a31",
+            "name": "Google Compute Engine",
+            "updated": "2026-10-23T17:04:35.752Z",
+            "status": "Operational",
+            "status_code": 100
+          }
+        ],
+        "updated": "2026-10-23T17:04:35.752Z"
+      },
+      {
+        "id": "5b36e05f02d06804c0834a09",
+        "name": "API",
+        "status": "Degraded Performance",
+        "status_code": 300,
+        "containers": [
+          {
+            "id": "5b36e11140e76c04b7220a31",
+            "name": "Google Compute Engine",
+            "updated": "2026-10-16T17:24:52.435Z",
+            "status": "Operational",
+            "status_code": 100
+          }
+        ],
+        "updated": "2026-10-16T17:24:52.435Z"
+      },
+      {
+        "id": "5d2f74932676bc45e4927ead",
+        "name": "Git Operations",
+        "status": "Operational",
+        "status_code": 100,
+        "containers": [
+          {
+            "id": "5b36e11140e76c04b7220a31",
+            "name": "Google Compute Engine",
+            "updated": "2026-10-23T17:04:35.858Z",
+            "status": "Operational",
+            "status_code": 100
+          }
+        ],
+        "updated": "2026-10-23T17:04:35.858Z"
+      },
+      {
+        "id": "5b36e06c633e9004b3d624ad",
+        "name": "CI/CD - Hosted runners on Linux",
+        "status": "Partial Service Disruption",
+        "status_code": 400,
+        "containers": [
+          {
+            "id": "5b36e11140e76c04b7220a31",
+            "name": "Google Compute Engine",
+            "updated": "2026-10-16T17:24:52.440Z",
+            "status": "Operational",
+            "status_code": 100
+          }
+        ],
+        "updated": "2026-10-16T17:24:52.440Z"
+      }
+    ],
+    "incidents": [
+      {
+        "_id": "6729a0c1e3a1b20530a1f001",
+        "name": "Delays in hosted runners on Linux",
+        "datetime_open": "2026-11-04T14:00:00.000Z",
+        "messages": [
+          {
+            "_id": "m1",
+            "details": "We are investigating delays in picking up jobs.",
+            "state": 100,
+            "status": 300,
+            "datetime": "2026-11-04T14:00:00.000Z"
+          },
+          {
+            "_id": "m2",
+            "details": "The cause is known and a fix is being rolled out.",
+            "state": 200,
+            "status": 400,
+            "datetime": "2026-11-04T14:45:00.000Z"
+          }
+        ],
+        "components_affected": [
+          {
+            "_id": "x",
+            "name": "CI/CD - Hosted runners on Linux"
+          }
+        ],
+        "containers_affected": []
+      }
+    ],
+    "maintenance": {
+      "active": [],
+      "upcoming": [
+        {
+          "_id": "6729a0c1e3a1b20530a1f002",
+          "name": "Database upgrade",
+          "datetime_open": "2026-11-01T10:00:00.000Z",
+          "datetime_planned_start": "2026-11-08T02:00:00.000Z",
+          "datetime_planned_end": "2026-11-08T04:00:00.000Z",
+          "messages": [
+            {
+              "_id": "m3",
+              "details": "Planned upgrade of the main database.",
+              "state": 100,
+              "status": 200,
+              "datetime": "2026-11-01T10:00:00.000Z"
+            }
+          ],
+          "components_affected": [],
+          "containers_affected": []
+        }
+      ]
+    }
+  }
+}

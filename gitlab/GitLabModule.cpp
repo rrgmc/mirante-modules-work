@@ -7,6 +7,7 @@
 #include "GitLabMergeRequestView.h"
 #include "GitLabPipelineListView.h"
 #include "GitLabPipelineView.h"
+#include "GitLabServiceStatus.h"
 #include "GitLabSettings.h"
 #include "GitLabStatus.h"
 #include "GitLabUrls.h"
@@ -64,7 +65,11 @@ public:
     std::vector<Field> fields() const override { return m_fields; }
     std::vector<Field> fieldsForProfile(const QString &profileId) const override
     {
-        return withProjectPaths(m_fields, m_settings, profileId);
+        return fieldsForAccount(profileId, QString());
+    }
+    std::vector<Field> fieldsForAccount(const QString &profileId, const QString &accountId) const override
+    {
+        return withProjectPaths(m_fields, m_settings, profileId, accountId);
     }
     Rendering rendering() const override { return Rendering::Native; }
 
@@ -89,11 +94,16 @@ public:
         return m_view ? m_view(context, parent) : nullptr;
     }
 
-    // An address on the profile's server, or on any server whose addresses
-    // look like GitLab's.
+    // An address on the server of the profile's account, or on any server
+    // whose addresses look like GitLab's.
     std::optional<UrlMatch> fromUrl(const QUrl &url, const QString &profileId) const override
     {
-        return matchUrl(m_id, url, {baseUrlOf(m_settings.values(profileId, kGeneralScreen))});
+        return fromUrlForAccount(url, profileId, QString());
+    }
+    std::optional<UrlMatch> fromUrlForAccount(const QUrl &url, const QString &profileId,
+                                              const QString &accountId) const override
+    {
+        return matchUrl(m_id, url, {baseUrlOf(m_settings.accountValues(profileId, accountId, kGeneralScreen))});
     }
 
 private:
@@ -106,6 +116,48 @@ private:
     const ModuleSettings &m_settings;
     FetchStatus m_fetch;
     CreateView m_view;
+};
+
+// The GitLab Status type: the health of gitlab.com, from its public status
+// page. It reads no setting of the profile and takes no pasted link. See
+// GitLabServiceStatus.h.
+class ServiceStatusItemType : public ItemType
+{
+public:
+    QString id() const override { return QStringLiteral("gitlab.status"); }
+    QString name() const override { return QCoreApplication::translate("gitlab", "GitLab Status"); }
+    QIcon icon() const override { return QIcon(QStringLiteral(":/modules/gitlab/icons/gitlab.svg")); }
+    QString shortName() const override { return QCoreApplication::translate("gitlab", "Status"); }
+    QString description() const override
+    {
+        return QCoreApplication::translate("gitlab", "The health of gitlab.com, from status.gitlab.com: open "
+                                                     "incidents, planned maintenance and components that do not "
+                                                     "work as they should.");
+    }
+    Rendering rendering() const override { return Rendering::Native; }
+
+    std::vector<Field> fields() const override
+    {
+        Field maintenance;
+        maintenance.key = QStringLiteral("showMaintenance");
+        maintenance.label = QCoreApplication::translate("gitlab", "Show the planned maintenance");
+        maintenance.type = Field::Type::Bool;
+        maintenance.defaultValue = true;
+        Field components;
+        components.key = QStringLiteral("showAllComponents");
+        components.label = QCoreApplication::translate("gitlab", "Show the components that work too");
+        components.type = Field::Type::Bool;
+        components.defaultValue = false;
+        return {maintenance, components};
+    }
+
+    bool hasStatus() const override { return true; }
+    void fetchStatus(StatusJob &job) const override { fetchServiceStatus(job); }
+
+    QWidget *createView(ItemContext &context, QWidget *parent) const override
+    {
+        return createServiceStatusView(context, parent);
+    }
 };
 
 // Builds a page address from the server's base URL, the item's configuration
@@ -132,8 +184,8 @@ public:
         const QUrl baseUrl = baseUrlOf(context.moduleSettings(kGeneralScreen));
         if (!baseUrl.isValid() || baseUrl.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("gitlab", "Set the GitLab base URL in this profile's Modules > GitLab > "
-                                                      "General Configuration, in the Profiles menu."),
+                QCoreApplication::translate("gitlab", "Set the GitLab base URL in Profiles > Manage Profiles…, "
+                                                      "under this profile's GitLab."),
                 parent);
         }
         const QUrl url = m_pageUrl(baseUrl, context.config(), context.projectSetting(kProjectSettingKey));
@@ -429,6 +481,8 @@ void registerModule(ModuleRegistrar &registrar)
                     QCoreApplication::translate("gitlab", "Created by me"),
                     QCoreApplication::translate("gitlab", "All open")}),
         settings, &fetchIssueListStatus, &createIssueListView));
+
+    registrar.addItemType(std::make_unique<ServiceStatusItemType>());
 
     registrar.addQuickAddHandler(std::make_unique<GitLabQuickAddHandler>());
     registrar.addRelatedItemFinder(std::make_unique<GitLabRelatedItemFinder>());

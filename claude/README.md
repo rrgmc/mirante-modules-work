@@ -31,7 +31,7 @@ M7 added `claude.session.local`, a Claude Code session resumed in a terminal. [D
 
 ### The bridge plugin
 
-[`plugin/`](plugin/README.md) holds `mirante-bridge`, an optional Claude Code plugin. It adds what `claude agents --json` does not print. Its hooks and a status line wrapper write each session's latest event and status line input into an exchange folder: `MIRANTE_CLAUDE_DIR`, or `~/.mirante/claude/sessions`. The plugin's README says how to install it for each account. See [decision 0148](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0148-claude-bridge-plugin.md).
+[`plugin/`](plugin/README.md) holds `mirante-bridge`, an optional Claude Code plugin. It adds what `claude agents --json` does not print. Its hooks and a status line wrapper write each session's latest event and status line input into an exchange folder: `MIRANTE_CLAUDE_DIR`, or `~/.mirante/claude/sessions`. The plugin's README says how to install it for each account. See [decision 0150](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0150-claude-bridge-plugin.md).
 
 - **Reading.** After the command, the fetch reads the folder and joins the files to the rows by session id, in `mergeBridge()`. It reads only files the plugin writes, and deletes those older than seven days.
 - **Columns.** Tool, Model (with the effort, such as "Opus 5.5 · high"), Context (such as "42 %") and Cost (such as "$1.25"). Each shows only when a row has a value.

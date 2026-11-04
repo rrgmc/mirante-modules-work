@@ -1,6 +1,6 @@
 # mirante-bridge, a Claude Code plugin
 
-The plugin reports each Claude Code session's activity, model and usage to Mirante's Claude agents list (`claude.agents`). Without it, the list shows only what `claude agents --json` prints. See [the module's README](../README.md#the-bridge-plugin) and decision 0148 in mirante-core.
+The plugin reports each Claude Code session's activity, model and usage to Mirante's Claude agents list (`claude.agents`). Without it, the list shows only what `claude agents --json` prints. See [the module's README](../README.md#the-bridge-plugin) and decision 0150 in mirante-core.
 
 The plugin has two parts:
 

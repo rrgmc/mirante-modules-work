@@ -74,10 +74,11 @@ Field makeProjectSetting();
 // without slashes at its start and end. Empty and repeated paths are left out.
 QStringList projectPaths(const QJsonObject &general);
 
-// The fields, with the project paths configured in the profile offered in
-// each "project" field, and under "Add from List…" in each "projects" field.
-// See decision 0139 in mirante-core.
+// The fields, with the project paths configured in the profile's account
+// offered in each "project" field, and under "Add from List…" in each
+// "projects" field. An empty accountId is the default account. See decisions
+// 0139 and 0146 in mirante-core.
 std::vector<Field> withProjectPaths(std::vector<Field> fields, const ModuleSettings &settings,
-                                    const QString &profileId);
+                                    const QString &profileId, const QString &accountId = QString());
 
 } // namespace mirante::modules::gitlab

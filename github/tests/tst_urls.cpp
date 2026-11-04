@@ -232,8 +232,8 @@ private slots:
         badBase.itemConfig = item(QStringLiteral("acme/backend"), 42);
         type.createView(badBase, nullptr);
         QVERIFY(badBase.webPage.isEmpty());
-        QCOMPARE(badBase.message, QStringLiteral("Set the GitHub base URL in this profile's Modules > GitHub > "
-                                                 "General Configuration, in the Profiles menu."));
+        QCOMPARE(badBase.message, QStringLiteral("Set the GitHub base URL in Profiles > Manage Profiles…, "
+                                                 "under this profile's GitHub."));
 
         const QString incomplete = QStringLiteral("Set the repository and number in the item's settings.");
         PageContext noRepository;

@@ -453,7 +453,7 @@ private slots:
         QVERIFY(text.contains(QStringLiteral("bruno-author · ")
                               + QLocale().toString(written.toLocalTime(), QLocale::ShortFormat)));
         QVERIFY(text.contains(QStringLiteral("Fixed on the branch.")));
-        QCOMPARE(summary(view)->actions()->webLink(), QUrl(kIssueAddress));
+        QCOMPARE(context.webLink, QUrl(kIssueAddress));
     }
 
     void issueClosedEitherWayReadsClosed()
@@ -621,7 +621,7 @@ private slots:
         QCOMPARE(text.count(QStringLiteral("4 min 55 s")), 2);
         QCOMPARE(roleOf(view, QStringLiteral("Passed")), StatusRole::Good);
 
-        QCOMPARE(summary(view)->actions()->webLink(), QUrl(kRunAddress));
+        QCOMPARE(context.webLink, QUrl(kRunAddress));
     }
 
     void runPillsSwitchWithinTheGroup()
@@ -652,7 +652,7 @@ private slots:
         QVERIFY(runPillOf(view, 9102)->font().bold());
         QVERIFY(!runPillOf(view, 9103)->font().bold());
         // The actions and links follow what is shown. No request was needed.
-        QCOMPARE(summary(view)->actions()->webLink(),
+        QCOMPARE(context.webLink,
                  QUrl(QStringLiteral("https://github.com/acme/widgets/actions/runs/9102")));
         QVERIFY(context.client.requests().isEmpty());
         button(view, QStringLiteral("rerun-run"))->click();
@@ -1173,27 +1173,27 @@ private slots:
         FakeContext context;
         context.source.status = pullRequest();
         View fromData(createPullRequestView(context, nullptr));
-        QCOMPARE(summary(fromData)->actions()->webLink(), QUrl(kPrAddress));
-        QVERIFY(!button(fromData, QStringLiteral("web"))->isHidden());
+        QCOMPARE(context.webLink, QUrl(kPrAddress));
+        QVERIFY(button(fromData, QStringLiteral("web"))->isHidden());   // the cell header has it
 
         QJsonObject object = readObject(QStringLiteral("pull_request.json"));
         object.remove(QStringLiteral("html_url"));
         context.source.status = pullRequest(object);
         View built(createPullRequestView(context, nullptr));
-        QCOMPARE(summary(built)->actions()->webLink(), QUrl(kBuiltPrAddress));
+        QCOMPARE(context.webLink, QUrl(kBuiltPrAddress));
 
         // An address of another kind is not used.
         object.insert(QStringLiteral("html_url"), QStringLiteral("file:///etc/passwd"));
         context.source.status = pullRequest(object);
         View other(createPullRequestView(context, nullptr));
-        QCOMPARE(summary(other)->actions()->webLink(), QUrl(kBuiltPrAddress));
+        QCOMPARE(context.webLink, QUrl(kBuiltPrAddress));
 
         // Without any address, Web and Open page hide.
         object.remove(QStringLiteral("html_url"));
         context.general.insert(QStringLiteral("baseUrl"), QStringLiteral("not a server"));
         context.source.status = pullRequest(object);
         View none(createPullRequestView(context, nullptr));
-        QVERIFY(summary(none)->actions()->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         QVERIFY(button(none, QStringLiteral("web"))->isHidden());
         QVERIFY(!showsAction(none, QStringLiteral("open-page")));
     }
@@ -1204,13 +1204,13 @@ private slots:
         context.itemConfig.insert(QStringLiteral("number"), 7);
         context.source.status = issue();
         View fromData(createIssueView(context, nullptr));
-        QCOMPARE(summary(fromData)->actions()->webLink(), QUrl(kIssueAddress));
+        QCOMPARE(context.webLink, QUrl(kIssueAddress));
 
         QJsonObject object = readObject(QStringLiteral("issue.json"));
         object.remove(QStringLiteral("html_url"));
         context.source.status = issue({}, object);
         View built(createIssueView(context, nullptr));
-        QCOMPARE(summary(built)->actions()->webLink(), QUrl(QStringLiteral("https://built.example/acme/widgets/issues/7")));
+        QCOMPARE(context.webLink, QUrl(QStringLiteral("https://built.example/acme/widgets/issues/7")));
     }
 
     void branchWithoutRunsShowsAMessage()
@@ -1226,7 +1226,7 @@ private slots:
         QVERIFY(!summary(view)->isSectionVisible(QStringLiteral("jobs")));
         for (const char *id : {"rerun-failed", "rerun-run", "cancel-run", "pull-request", "open-page"})
             QVERIFY(!showsAction(view, QLatin1String(id)));
-        QVERIFY(summary(view)->actions()->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         QVERIFY(button(view, QStringLiteral("web"))->isHidden());
     }
 

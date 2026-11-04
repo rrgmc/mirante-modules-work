@@ -1,6 +1,6 @@
 #!/bin/sh
 # mirante-bridge: writes what Mirante's Claude agents list shows into the
-# exchange folder. See ../README.md and decision 0148 in mirante-core.
+# exchange folder. See ../README.md and decision 0150 in mirante-core.
 #
 #   mirante-hook.sh hook     a hook event on stdin
 #   mirante-hook.sh status   the status line input on stdin

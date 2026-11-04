@@ -353,7 +353,7 @@ private slots:
         QVERIFY(pipelinePill(view, 9000)->font().bold());
         QVERIFY(!pipelinePill(view, 9001)->font().bold());
         // The actions and links follow what is shown. No request was needed.
-        QCOMPARE(summary(view)->actions()->webLink(),
+        QCOMPARE(context.webLink,
                  QUrl(QStringLiteral("https://gitlab.example/acme/backend/-/pipelines/9000")));
         QVERIFY(context.client.requests().isEmpty());
         succeed(context, QStringLiteral("POST ") + kProject + QStringLiteral("/pipelines/9000/retry"));
@@ -1039,21 +1039,21 @@ private slots:
         FakeContext context;
         context.source.status = failedMergeRequest();
         View fromData(createMergeRequestView(context, nullptr));
-        QCOMPARE(summary(fromData)->actions()->webLink(), QUrl(kMrAddress));
-        QVERIFY(!button(fromData, QStringLiteral("web"))->isHidden());
+        QCOMPARE(context.webLink, QUrl(kMrAddress));
+        QVERIFY(button(fromData, QStringLiteral("web"))->isHidden());   // the cell header has it
 
         QJsonObject mergeRequest = readObject(QStringLiteral("merge_request.json"));
         mergeRequest.remove(QStringLiteral("web_url"));
         context.source.status = mergeRequestWith(mergeRequest, QJsonObject(), QJsonObject());
         View built(createMergeRequestView(context, nullptr));
-        QCOMPARE(summary(built)->actions()->webLink(),
+        QCOMPARE(context.webLink,
                  QUrl(QStringLiteral("https://built.example/acme/backend/-/merge_requests/42")));
 
         // An address of another kind is not used.
         mergeRequest.insert(QStringLiteral("web_url"), QStringLiteral("file:///etc/passwd"));
         context.source.status = mergeRequestWith(mergeRequest, QJsonObject(), QJsonObject());
         View other(createMergeRequestView(context, nullptr));
-        QCOMPARE(summary(other)->actions()->webLink(),
+        QCOMPARE(context.webLink,
                  QUrl(QStringLiteral("https://built.example/acme/backend/-/merge_requests/42")));
 
         // Without any address, Web and Open page hide.
@@ -1061,7 +1061,7 @@ private slots:
         context.general.insert(QStringLiteral("baseUrl"), QStringLiteral("not a server"));
         context.source.status = mergeRequestWith(mergeRequest, QJsonObject(), QJsonObject());
         View none(createMergeRequestView(context, nullptr));
-        QVERIFY(summary(none)->actions()->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         QVERIFY(button(none, QStringLiteral("web"))->isHidden());
         QVERIFY(!showsAction(none, QStringLiteral("open-page")));
     }
@@ -1072,13 +1072,13 @@ private slots:
         context.itemConfig.insert(QStringLiteral("iid"), 7);
         context.source.status = openIssue(QJsonArray());
         View fromData(createIssueView(context, nullptr));
-        QCOMPARE(summary(fromData)->actions()->webLink(), QUrl(kIssueAddress));
+        QCOMPARE(context.webLink, QUrl(kIssueAddress));
 
         QJsonObject issue = readObject(QStringLiteral("issue.json"));
         issue.remove(QStringLiteral("web_url"));
         context.source.status = issueStatus(issue);
         View built(createIssueView(context, nullptr));
-        QCOMPARE(summary(built)->actions()->webLink(),
+        QCOMPARE(context.webLink,
                  QUrl(QStringLiteral("https://built.example/acme/backend/-/issues/7")));
     }
 
@@ -1087,7 +1087,7 @@ private slots:
         FakeContext context;
         context.source.status = pipelineWithStatus(QStringLiteral("failed"));
         View view(createPipelineView(context, nullptr));
-        QCOMPARE(summary(view)->actions()->webLink(), QUrl(kPipelineAddress));
+        QCOMPARE(context.webLink, QUrl(kPipelineAddress));
     }
 
     void branchWithoutPipelinesShowsAMessage()
@@ -1104,7 +1104,7 @@ private slots:
         QVERIFY(!showsAction(view, QStringLiteral("retry-pipeline")));
         // A new one can still be started there.
         QVERIFY(showsAction(view, QStringLiteral("trigger-pipeline")));
-        QVERIFY(summary(view)->actions()->webLink().isEmpty());
+        QVERIFY(context.webLink.isEmpty());
         QVERIFY(button(view, QStringLiteral("web"))->isHidden());
         QVERIFY(!showsAction(view, QStringLiteral("open-page")));
     }

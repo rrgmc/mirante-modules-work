@@ -7,6 +7,7 @@
 
 #include <mirante/ItemType.h>
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QTest>
 
@@ -362,6 +363,31 @@ private slots:
         // A profile on github.com does not read another server.
         QVERIFY(!summary.fromUrl(link, QStringLiteral("default")));
         QVERIFY(summary.fromUrl(QUrl(QStringLiteral("https://github.com/acme/app/pull/3")), QStringLiteral("work")));
+    }
+
+    // Another account of the profile has its own web base and repositories.
+    // See decision 0146 in mirante-core.
+    void accountHasItsOwnServer()
+    {
+        mirante::testing::TestRegistrar registry;
+        registry.registerModule(QStringLiteral("github"), &mirante::modules::github::registerModule);
+        registry.setAccountReader([](const QString &, const QString &, const QString &accountId, const QString &) {
+            if (accountId == QLatin1String("ent"))
+                return QJsonObject{{QStringLiteral("baseUrl"), QStringLiteral("https://ghe.example/")},
+                                   {QStringLiteral("repositories"), QJsonArray{QStringLiteral("corp/app")}}};
+            return QJsonObject();
+        });
+        const mirante::ItemType &summary = registry.type(QStringLiteral("github.pr.summary"));
+        const QUrl link(QStringLiteral("https://ghe.example/corp/app/pull/7"));
+        QVERIFY(summary.fromUrlForAccount(link, QStringLiteral("work"), QStringLiteral("ent")));
+        QVERIFY(!summary.fromUrlForAccount(link, QStringLiteral("work"), QString()));
+
+        QStringList suggestions;
+        for (const mirante::Field &field : summary.fieldsForAccount(QStringLiteral("work"), QStringLiteral("ent"))) {
+            if (field.key == QLatin1String("repository"))
+                suggestions = field.suggestions;
+        }
+        QCOMPARE(suggestions, QStringList{QStringLiteral("corp/app")});
     }
 };
 

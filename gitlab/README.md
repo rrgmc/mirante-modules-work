@@ -16,12 +16,13 @@ GitLab merge requests, pipelines and issues as items. See [item types](../../../
 | `gitlab.issue.summary` | GitLab Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `gitlab.issue.page` | GitLab Issue (page) | web | The web page of one issue, on the GitLab server of the item's profile. |
 | `gitlab.issue.list` | GitLab Issue List | native | A table of issues in a project, a group or everywhere, such as those assigned to you. |
+| `gitlab.status` | GitLab Status | native | The health of gitlab.com, from status.gitlab.com: open incidents, planned maintenance and components that do not work as they should. |
 
 The module calls itself "GitLab" and describes itself as: "Merge requests, pipelines and issues from a GitLab server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
 Its UUID is `24254446-1d00-47a0-b8de-b7c5f286588a`. It is at version 0.1.0, by Rangel Reale. Help > Modules also shows these, and the module's homepage. See [decision 0089](../../../docs/decisions/0089-module-identity.md).
 
-Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). Since M6 the merge request, pipeline and issue summaries have [native views](#summary-views), and the lists have [tables with links on each row](#list-views).
+Since M3 the types declare their configuration fields, so items can be created and edited. Since M4 the two page types show their page in a web view. Since M5 the module describes its [server](#server), and the merge request, issue and pipeline types report a [status](#status). Since M6 the merge request, pipeline and issue summaries have [native views](#summary-views), and the lists have [tables with links on each row](#list-views). [GitLab Status](#gitlab-status) shows the health of gitlab.com, without the profile's server.
 
 ## Server
 
@@ -102,7 +103,7 @@ Each summary has two parts: a **model**, which the module keeps, and a **layout*
 
 - **Drawing.** `follow()` reads the item's status now and at each change, and says `changed()`. With no data, `hasData()` is false and `message()` says "Loading…" or the status's message. With old data it keeps that data through an error, because the cell header shows the problem. A status without data, with `State::None` and a message, such as "The main folder is not on a branch.", replaces the old data, since the item has nothing to show.
 - **Actions.** `runAction()` clears the last error, marks the action busy and makes the request. After a success it refreshes the status. A failure sets `error()` to `reply.message`, and a `403` to "The token cannot do this. It needs the api scope." A default layout shows these in its action row.
-- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address.
+- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address. The model gives it to `ItemContext::setWebLink()` whenever it changes, so the cell header's **Open in browser** button opens it, whatever the layout.
 - **Dialogs.** The questions before cancelling and triggering run an event loop of their own, and the view can be made again during it. So each is on the heap, and nothing runs afterwards if it or the view is gone.
 
 The action ids, which are also the buttons' object names, are `retry-pipeline`, `cancel-pipeline`, `trigger-pipeline`, `merge-request` and `open-page`. A job's buttons are `log-<job id>`, `retry-job-<job id>` and `play-job-<job id>`. They are not in the action row, so the default layout disables them while `isBusy()` says their request runs. The merge request summary's link to its pipeline is `pipeline-web`.
@@ -252,7 +253,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in this profile's Modules > GitLab > General Configuration, in the Profiles menu.";
+- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in Profiles > Manage Profiles…, under this profile's GitLab.";
 - without a project or a number: "Set the project and number in the item's settings."
 
 ## Items from a link
@@ -289,6 +290,51 @@ The pipeline type follows a branch, so a pipeline's id is not kept. The item dia
 
 Each match is a `gitlab.mr.summary` with `project`, from `references.full`, and `iid`. It is named `!42` in the project of the setting, else `group/project!42`. A failed request finds nothing for its keys. The finder finishes once, after every reply, with each merge request once, in the order of the keys.
 
+## GitLab Status
+
+`gitlab.status` shows the health of gitlab.com. `GitLabServiceStatus.cpp` holds all of it.
+
+status.gitlab.com is served by status.io, so the type reads status.io's public status API for the page's id, `https://api.status.io/1.0/status/5b36dc6502d06804c08349f7`. The request goes through the [status cache](../../../docs/integrations.md#polling-and-caching) like any status, at the poll interval, but it does not use the profile's server: the page needs no token, so the module makes the request itself with a `QNetworkAccessManager` of its own. It sends no token and no cookie. The type has no fields that name a project, and takes no pasted link.
+
+`readServiceSummary()` turns the answer into the status's data, and is tested on a recorded answer in `tests/data/service_status.json`. status.io gives each state a code, which the view puts on the same scale as GitHub's page:
+
+| Code | Text | Level |
+|---|---|---|
+| 100 | Operational | none |
+| 200 | Planned maintenance | maintenance |
+| 300 | Degraded performance | minor |
+| 400 | Partial service disruption | major |
+| 500 | Service disruption | critical |
+| 600 | Security event | critical |
+
+| Data | From the answer |
+|---|---|
+| `indicator` and `description` | `result.status_overall.status_code`; the description is "All systems operational" for 100, and the code's text otherwise |
+| `page` | `https://status.gitlab.com` |
+| `components` | `result.status`, each with its `status_code` |
+| `incidents` | `result.incidents`. The newest of `messages` gives the state (100 investigating, 200 identified, 300 monitoring), the impact from its `status`, at least minor, the time and the text. The link is `https://status.gitlab.com/pages/incident/<page id>/<_id>` |
+| `maintenances` | `result.maintenance.active`, in progress, then `result.maintenance.upcoming`, scheduled, with `datetime_planned_start` and `datetime_planned_end` |
+
+The view is a summary in the fixed layout of the view kit:
+
+- **Title:** the page's overall description, such as "All systems operational".
+- **State:** a pill for the overall level, "Operational", "Maintenance", "Minor", "Major" or "Critical", in the colours of the good, neutral, waiting and bad roles, and "Checked" with the time of the last answer.
+- **Actions:** "Refresh", which fetches at once. The **Open in browser** button of the cell header opens the status page.
+- **Incidents:** each open incident, its name linked to its page, a pill for its impact, its state, such as "Identified", the time of its last update, and the text of that update, up to 400 characters. "No open incidents." when there are none.
+- **Planned maintenance:** each maintenance that runs now or is to come, with its window. Hidden when there is none, or when `showMaintenance` is off.
+- **Components:** each component with a pill for its state. Only those that do not work, unless `showAllComponents` is on. "All components are operational." when none is shown.
+
+Old data stays through an error, which the cell's header shows. Before the first answer the view says "Loading…".
+
+Every open incident needs attention, with the key `incident:<id>` and the text "GitLab: <incident name>". It notifies when its impact is major or critical. A page that is degraded without an open incident needs attention too, with the key `indicator:<level>`, and notifies from major. Planned maintenance needs no attention. The type never reports itself closed.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `showMaintenance` | boolean | true | Show the planned maintenance. |
+| `showAllComponents` | boolean | false | Show the components that work, too. |
+
+Only the public service is covered. A GitLab server of your own, or GitHub Enterprise Server, has no such page.
+
 ## Configuration
 
 The keys each type stores in the item's configuration. "Required" means the item dialog refuses an empty value.
@@ -322,7 +368,7 @@ The project setting `project`, "GitLab project path", a text field registered wi
 
 ## Settings screens
 
-The module calls itself "GitLab", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitLab. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
+The module calls itself "GitLab", so the Profiles > Manage Profiles… window shows "GitLab" under each profile, with the profile's GitLab accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|
@@ -333,5 +379,7 @@ The module calls itself "GitLab", so each profile's Modules submenu shows Profil
 The project paths list has an **Add from Server…** button. It asks `api/v4/projects` for the projects the token's user is a member of, without archived ones, sorted by path, in pages of 100 up to 1,000, with the base URL and token in the dialog, saved or not. The list shows each project's `path_with_namespace`, marked "Private" or "Internal" where that applies. See [decision 0138](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0138-add-list-values-from-the-server.md) in the core.
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.gitlab.general`, and synced. They hold no token. The screen is opened for one profile at a time. See decisions [0050](../../../docs/decisions/0050-profiles-hold-logins-connections-and-settings.md) and [0054](../../../docs/decisions/0054-module-settings-replace-connections.md), which replaced connections with the base URL.
+
+A profile can also hold other accounts of the module, added with **Add Account** on the module's page in Profiles > Manage Profiles…. Each has its own server, token and project paths, under `accounts.gitlab` of the profile, with its token under `<workspace id>/<profile id>/gitlab/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md) in the core.
 
 The `project` field of every type offers the paths of the profile the item uses, in an editable drop-down list. The types do this in `fieldsForProfile(profileId)`, which the item dialog calls with the profile the edited item would use; `fields()` offers none. Each path is trimmed, slashes at its start and end are removed, and empty or repeated paths are left out. Any other path can still be typed. The list is read when the item dialog builds its form, and again when another profile is chosen in it, so a change shows the next time the dialog opens.
