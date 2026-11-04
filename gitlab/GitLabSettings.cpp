@@ -155,7 +155,7 @@ std::vector<Field> withProjectPaths(std::vector<Field> fields, const ModuleSetti
 {
     const QStringList paths = projectPaths(settings.values(profileId, kGeneralScreen));
     for (Field &field : fields) {
-        if (field.key == QLatin1String("project"))
+        if (field.key == QLatin1String("project") || field.key == QLatin1String("projects"))
             field.suggestions = paths;
     }
     return fields;

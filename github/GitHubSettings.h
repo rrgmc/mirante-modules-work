@@ -86,7 +86,8 @@ Field makeProjectSetting();
 QStringList repositoryNames(const QJsonObject &general);
 
 // The fields, with the repositories configured in the profile offered in
-// each "repository" field.
+// each "repository" field, and under "Add from List…" in each "repositories"
+// field. See decision 0139 in mirante-core.
 std::vector<Field> withRepositories(std::vector<Field> fields, const ModuleSettings &settings,
                                     const QString &profileId);
 
