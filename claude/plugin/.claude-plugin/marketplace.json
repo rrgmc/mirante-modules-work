@@ -1,6 +1,9 @@
 {
   "name": "mirante",
-  "owner": { "name": "Rangel Reale" },
+  "owner": {
+    "name": "Rangel Reale"
+  },
+  "description": "Claude Code plugins for Mirante.",
   "plugins": [
     {
       "name": "mirante-bridge",
