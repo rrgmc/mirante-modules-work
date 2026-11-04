@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-04
+
+Settings and list forms can add repositories and projects from the server or the profile, and lists keep the user's last filter choice. It needs the core's v0.8.6.
+
 ### Added
 
 - The GitHub and GitLab settings screens have an **Add from Server…** button under their lists of repositories and project paths. It lists those the token can reach, to check and add, so they need not be typed. It needs the core with decision 0138. See [GitHub settings screens](github/README.md#settings-screens) and [GitLab settings screens](gitlab/README.md#settings-screens).
@@ -60,7 +64,8 @@ The first release of the work modules on their own.
 - The modules `claude`, `github`, `gitlab` and `jira`, which moved from [`mirante-modules`](https://github.com/rrgmc/mirante-modules) with their history. See [decision 0133](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0133-work-modules-in-their-own-repository.md) in the core.
 - The repository builds alone, as an app of its own folders, with CI on Windows, macOS and Linux that checks the modules' includes and translations.
 
-[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/rrgmc/mirante-modules-work/tree/v0.8.0
