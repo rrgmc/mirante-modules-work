@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Added
+
+- GitHub, GitLab and Jira work with several accounts in one profile. An item of another account offers that account's repositories or project paths in its form, and a pasted link is read with the server of the account it belongs to. It needs the core with decision 0144. See [decision 0144](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0144-several-accounts-per-module.md).
+
 ### Changed
 
 - In a narrow GitHub Run List, the Workflow column hides first, then Branch, then Repository. Before, Repository hid first and Branch never hid.

@@ -94,6 +94,8 @@ The module calls itself "Jira", so each profile's Modules submenu shows Profiles
 
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.jira.general`, and synced. See decisions [0054](../../../docs/decisions/0054-module-settings-replace-connections.md) and [0060](../../../docs/decisions/0060-jira-cloud-or-data-center-by-setting.md).
 
+A profile can also hold other accounts of the module, added with **Add Account…** in its Modules submenu. Each has its own site, deployment, email, token and extra fields, under `accounts.jira` of the profile, with its token under `<workspace id>/<profile id>/jira/<account id>/token`. An item chooses its account in the item dialog, and a pasted link is read in the account whose server is on its host. See [decision 0144](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0144-several-accounts-per-module.md) in the core.
+
 ## Server and authentication
 
 `JiraServerType`, in `JiraServerType.cpp`, tells the core where the server is. The core then gives the module an `ApiClient` for each profile. See [servers and tokens](../../../docs/modules.md#servers-and-tokens).
