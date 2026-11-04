@@ -53,7 +53,11 @@ private:
     void runNext()
     {
         if (m_results.size() == m_accounts.size()) {
-            const ItemStatus status = agentsStatus(m_results, [this](const QString &top) { return m_job.gitHead(top); });
+            ItemStatus status = agentsStatus(m_results, [this](const QString &top) { return m_job.gitHead(top); });
+            // The bridge plugin's files are small and few, so they are read
+            // here at once.
+            const QDateTime now = QDateTime::currentDateTimeUtc();
+            mergeBridge(status, readBridge(bridgeFolder(), now), now);
             m_job.finish(status);
             deleteLater();
             return;

@@ -1,0 +1,8 @@
+{
+  "name": "mirante-bridge",
+  "version": "0.1.0",
+  "description": "Reports each Claude Code session's activity, model and usage to Mirante's Claude agents list, through files in an exchange folder.",
+  "author": { "name": "Rangel Reale" },
+  "homepage": "https://github.com/rrgmc/mirante-modules-work/tree/master/claude/plugin",
+  "license": "MIT"
+}

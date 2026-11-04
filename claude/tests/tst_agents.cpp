@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -97,6 +98,145 @@ class TestAgents : public QObject
     Q_OBJECT
 
 private slots:
+    // The fetch reads the bridge's folder: never the user's own.
+    void initTestCase()
+    {
+        QVERIFY(m_bridge.isValid());
+        qputenv("MIRANTE_CLAUDE_DIR", m_bridge.path().toUtf8());
+    }
+
+    void readsTheBridgeFolder()
+    {
+        QTemporaryDir temp;
+        const QString folder = temp.path();
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        writeFile(folder + QStringLiteral("/s-1.hook.json"), R"({"event":"PreToolUse","tool":"Bash"})");
+        writeFile(folder + QStringLiteral("/s-1.status.json"), R"({"session_id":"s-1"})");
+        writeFile(folder + QStringLiteral("/s-2.status.json"), "not json");
+        writeFile(folder + QStringLiteral("/s-3.hook.json"), R"({"event":"Stop"})");
+        writeFile(folder + QStringLiteral("/other.json"), "{}");
+        writeFile(folder + QStringLiteral("/.tmp.123"), "{}");
+        {
+            QFile old(folder + QStringLiteral("/s-3.hook.json"));
+            QVERIFY(old.open(QIODevice::ReadWrite));
+            QVERIFY(old.setFileTime(now.addDays(-8).toLocalTime(), QFileDevice::FileModificationTime));
+        }
+
+        const QHash<QString, BridgeSession> sessions = readBridge(folder, now);
+        QCOMPARE(sessions.size(), 1);
+        const BridgeSession session = sessions.value(QStringLiteral("s-1"));
+        QCOMPARE(session.hook.value(QStringLiteral("tool")).toString(), QStringLiteral("Bash"));
+        QVERIFY(session.hookAt.isValid());
+        QCOMPARE(session.status.value(QStringLiteral("session_id")).toString(), QStringLiteral("s-1"));
+        QVERIFY(session.statusAt.isValid());
+        // An old file is deleted; a bad one is kept for the next write.
+        QVERIFY(!QFile::exists(folder + QStringLiteral("/s-3.hook.json")));
+        QVERIFY(QFile::exists(folder + QStringLiteral("/s-2.status.json")));
+
+        QVERIFY(readBridge(temp.filePath(QStringLiteral("missing")), now).isEmpty());
+    }
+
+    void mergesTheBridge()
+    {
+        const QDateTime now = QDateTime::fromSecsSinceEpoch(1800000000, QTimeZone::UTC);
+        const QDateTime started = now.addSecs(-600);
+        AccountResult result{QString(),
+                             {Agent{QStringLiteral("work"), QStringLiteral("Works"), QString(), QStringLiteral("interactive"),
+                                    QStringLiteral("busy"), started},
+                              Agent{QStringLiteral("ask"), QStringLiteral("Asks"), QString(), QStringLiteral("interactive"),
+                                    QStringLiteral("waiting"), started},
+                              Agent{QStringLiteral("idle"), QStringLiteral("Rests"), QString(), QStringLiteral("interactive"),
+                                    QStringLiteral("idle"), started},
+                              Agent{QStringLiteral("none"), QStringLiteral("Plain"), QString(), QStringLiteral("interactive"),
+                                    QStringLiteral("busy"), started}},
+                             QString()};
+        mirante::ItemStatus status = agentsStatus({result}, nullptr);
+
+        QHash<QString, BridgeSession> sessions;
+        sessions.insert(QStringLiteral("work"),
+                        BridgeSession{QJsonObject{{QStringLiteral("event"), QStringLiteral("PreToolUse")},
+                                                  {QStringLiteral("tool"), QStringLiteral("Bash")}},
+                                      now.addSecs(-5),
+                                      QJsonDocument::fromJson(R"({
+                                          "model": {"id": "claude-opus-5-5", "display_name": "Opus 5.5"},
+                                          "effort": {"level": "high"},
+                                          "context_window": {"used_percentage": 42.5},
+                                          "cost": {"total_cost_usd": 1.25},
+                                          "rate_limits": {
+                                              "five_hour": {"used_percentage": 30, "resets_at": 1800003600},
+                                              "seven_day": {"used_percentage": 12, "resets_at": 1799999000}}})")
+                                          .object(),
+                                      now.addSecs(-60)});
+        sessions.insert(QStringLiteral("ask"),
+                        BridgeSession{QJsonObject{{QStringLiteral("event"), QStringLiteral("Notification")},
+                                                  {QStringLiteral("notification"), QStringLiteral("permission_prompt")}},
+                                      now.addSecs(-5),
+                                      QJsonDocument::fromJson(R"({
+                                          "model": {"id": "claude-haiku-5-5"},
+                                          "rate_limits": {"five_hour": {"used_percentage": 31, "resets_at": 1800003600}}})")
+                                          .object(),
+                                      now.addSecs(-10)});
+        // A tool event of a session that rests now: a late file.
+        sessions.insert(QStringLiteral("idle"),
+                        BridgeSession{QJsonObject{{QStringLiteral("event"), QStringLiteral("PreToolUse")},
+                                                  {QStringLiteral("tool"), QStringLiteral("Read")}},
+                                      now.addSecs(-5), QJsonObject(), QDateTime()});
+        mergeBridge(status, sessions, now);
+
+        const QJsonArray rows = status.data.value(QStringLiteral("rows")).toArray();
+        QCOMPARE(rows.size(), 4);
+        const QJsonObject work = rows.at(0).toObject();
+        QCOMPARE(work.value(QStringLiteral("tool")).toString(), QStringLiteral("Bash"));
+        QCOMPARE(work.value(QStringLiteral("model")).toString(), QStringLiteral("Opus 5.5"));
+        QCOMPARE(work.value(QStringLiteral("effort")).toString(), QStringLiteral("high"));
+        QCOMPARE(work.value(QStringLiteral("contextPercent")).toDouble(), 42.5);
+        QCOMPARE(work.value(QStringLiteral("costUsd")).toDouble(), 1.25);
+        QVERIFY(!work.contains(QStringLiteral("waitingFor")));
+
+        const QJsonObject ask = rows.at(1).toObject();
+        QCOMPARE(ask.value(QStringLiteral("waitingFor")).toString(), QStringLiteral("permission"));
+        QCOMPARE(ask.value(QStringLiteral("model")).toString(), QStringLiteral("claude-haiku-5-5"));
+        QVERIFY(!ask.contains(QStringLiteral("tool")));
+        QVERIFY(!ask.contains(QStringLiteral("costUsd")));
+
+        QVERIFY(!rows.at(2).toObject().contains(QStringLiteral("tool")));
+        QCOMPARE(rows.at(3).toObject(), agentsStatus({result}, nullptr).data.value(QStringLiteral("rows")).toArray().at(3).toObject());
+
+        // The account's newest status file wins, and the weekly window has
+        // reset there, so it is left out.
+        const QJsonArray limits = status.data.value(QStringLiteral("limits")).toArray();
+        QCOMPARE(limits.size(), 1);
+        const QJsonObject limit = limits.at(0).toObject();
+        QCOMPARE(limit.value(QStringLiteral("account")).toString(), QStringLiteral("Default"));
+        QCOMPARE(limit.value(QStringLiteral("fiveHourPercent")).toDouble(), 31.0);
+        QCOMPARE(limit.value(QStringLiteral("fiveHourResetsAt")).toDouble(), 1800003600000.0);
+        QVERIFY(!limit.contains(QStringLiteral("weeklyPercent")));
+    }
+
+    void ignoresHookEventsFromBeforeTheSession()
+    {
+        const QDateTime now = QDateTime::fromSecsSinceEpoch(1800000000, QTimeZone::UTC);
+        AccountResult result{QString(),
+                             {Agent{QStringLiteral("s"), QStringLiteral("Works"), QString(), QStringLiteral("interactive"),
+                                    QStringLiteral("busy"), now.addSecs(-10)}},
+                             QString()};
+        mirante::ItemStatus status = agentsStatus({result}, nullptr);
+        QHash<QString, BridgeSession> sessions;
+        sessions.insert(QStringLiteral("s"),
+                        BridgeSession{QJsonObject{{QStringLiteral("event"), QStringLiteral("PreToolUse")},
+                                                  {QStringLiteral("tool"), QStringLiteral("Bash")}},
+                                      now.addSecs(-60), QJsonObject(), QDateTime()});
+        mergeBridge(status, sessions, now);
+        QVERIFY(!status.data.value(QStringLiteral("rows")).toArray().at(0).toObject().contains(QStringLiteral("tool")));
+        QVERIFY(status.data.value(QStringLiteral("limits")).toArray().isEmpty());
+
+        // An error status is left alone.
+        mirante::ItemStatus error;
+        error.state = mirante::ItemStatus::State::Error;
+        mergeBridge(error, sessions, now);
+        QVERIFY(error.data.isEmpty());
+    }
+
     void parsesTheCommandsOutput()
     {
         QString error;
@@ -332,6 +472,9 @@ private slots:
         source.send(error);
         QCOMPARE(list->visibleKeys().size(), 2);
     }
+
+private:
+    QTemporaryDir m_bridge;
 };
 
 int main(int argc, char *argv[])

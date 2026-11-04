@@ -29,6 +29,17 @@ M7 added `claude.session.local`, a Claude Code session resumed in a terminal. [D
 - **Row menu.** "Show folder" opens the session's folder, and "Copy session ID" copies its id.
 - **Not listed.** Cloud sessions on claude.ai and Remote Control sessions of another computer. Claude has no documented API for them. Use Claude session (web) for those.
 
+### The bridge plugin
+
+[`plugin/`](plugin/README.md) holds `mirante-bridge`, an optional Claude Code plugin. It adds what `claude agents --json` does not print. Its hooks and a status line wrapper write each session's latest event and status line input into an exchange folder: `MIRANTE_CLAUDE_DIR`, or `~/.mirante/claude/sessions`. The plugin's README says how to install it for each account. See [decision 0150](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0150-claude-bridge-plugin.md).
+
+- **Reading.** After the command, the fetch reads the folder and joins the files to the rows by session id, in `mergeBridge()`. It reads only files the plugin writes, and deletes those older than seven days.
+- **Columns.** Tool, Model (with the effort, such as "Opus 5.5 · high"), Context (such as "42 %") and Cost (such as "$1.25"). Each shows only when a row has a value.
+- **Status.** A session that waits for a permission reads "Needs permission" instead of "Needs input".
+- **Rate limits.** The account's 5-hour and weekly use shows above the table, such as "Limits: 5 h 31 % · week 12 %", from the account's newest status file. A window that has reset is left out.
+- **Order of events.** The hooks run in the background, so a file may hold an older event than the latest. The command's state decides: a tool shows only while the session works, and "Needs permission" only while it needs input.
+- **Refresh.** The view watches the folder. A change refreshes the list, at most once every five seconds.
+
 ## Items from a link
 
 `claude.session.web` implements `fromUrl()`, through `matchUrl()` in `ClaudeUrls.cpp`. It takes any `http` or `https` address on `claude.ai` or one of its subdomains, stores it in `url`, and names the item "Claude session". See [decision 0049](../../../docs/decisions/0049-items-from-a-pasted-link.md). The tests are in `tests/tst_from_url.cpp`.
@@ -46,4 +57,4 @@ The keys the type stores in the item's configuration. "Required" means the item 
 
 ## Settings
 
-No settings screen and no device settings.
+No settings screen and no device settings. The bridge plugin's folder can be moved with the environment variable `MIRANTE_CLAUDE_DIR`, set for both Claude Code and Mirante.
