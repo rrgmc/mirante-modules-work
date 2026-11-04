@@ -252,7 +252,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `project` uses the project's `gitlab.project` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in this profile's Modules > GitLab > General Configuration, in the Profiles menu.";
+- with a base URL that is not an `http` or `https` address: "Set the GitLab base URL in Profiles > Manage Profiles…, under this profile's GitLab.";
 - without a project or a number: "Set the project and number in the item's settings."
 
 ## Items from a link
@@ -322,7 +322,7 @@ The project setting `project`, "GitLab project path", a text field registered wi
 
 ## Settings screens
 
-The module calls itself "GitLab", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitLab. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
+The module calls itself "GitLab", so the Profiles > Manage Profiles… window shows "GitLab" under each profile, with the profile's GitLab accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitLabSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|

@@ -14,6 +14,7 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 ### Changed
 
 - In a narrow GitHub Run List, the Workflow column hides first, then Branch, then Repository. Before, Repository hid first and Branch never hid.
+- The GitHub, GitLab and Jira messages for a missing base URL point to Profiles > Manage Profiles…, under the profile's module, instead of the old Modules submenu. The READMEs say the same. It needs the core with decision 0147, the Profiles window.
 
 ## [0.11.0] - 2026-11-04
 

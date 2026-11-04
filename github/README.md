@@ -323,7 +323,7 @@ The page types ask the core for a web view with `ItemContext::createWebView`. `G
 
 An empty `repository` uses the project's `github.repository` setting. When something is missing, the cell shows a message instead:
 
-- with a base URL that is not an `http` or `https` address: "Set the GitHub base URL in this profile's Modules > GitHub > General Configuration, in the Profiles menu.";
+- with a base URL that is not an `http` or `https` address: "Set the GitHub base URL in Profiles > Manage Profiles…, under this profile's GitHub.";
 - without a repository or a number: "Set the repository and number in the item's settings."
 
 The tests are in `tests/tst_urls.cpp`.
@@ -425,7 +425,7 @@ The project setting `repository`, "GitHub repository", a text field registered w
 
 ## Settings screens
 
-The module calls itself "GitHub", so each profile's Modules submenu shows Profiles > <profile> > Modules > GitHub. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitHubSettings.cpp`:
+The module calls itself "GitHub", so the Profiles > Manage Profiles… window shows "GitHub" under each profile, with the profile's GitHub accounts under it. Selecting an account shows its settings screen. It has one [settings screen](../../../docs/modules.md#settings-screens), in `GitHubSettings.cpp`:
 
 | Id | Name | Key | Type | Description |
 |---|---|---|---|---|

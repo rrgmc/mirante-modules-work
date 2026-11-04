@@ -141,8 +141,8 @@ public:
         const QUrl baseUrl = baseUrlOf(context.moduleSettings(kGeneralScreen));
         if (!baseUrl.isValid() || baseUrl.host().isEmpty()) {
             return context.createMessageView(
-                QCoreApplication::translate("gitlab", "Set the GitLab base URL in this profile's Modules > GitLab > "
-                                                      "General Configuration, in the Profiles menu."),
+                QCoreApplication::translate("gitlab", "Set the GitLab base URL in Profiles > Manage Profiles…, "
+                                                      "under this profile's GitLab."),
                 parent);
         }
         const QUrl url = m_pageUrl(baseUrl, context.config(), context.projectSetting(kProjectSettingKey));
