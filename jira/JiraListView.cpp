@@ -207,6 +207,8 @@ QUrl ListModel::issueAddress(const QString &key) const
 QWidget *createListView(ItemContext &context, QWidget *parent)
 {
     auto *model = new ListModel(context);
+    // The cell header's "Open in browser" button opens the list's page.
+    context.setWebLink(model->pageAddress());
     model->follow(context.status());
     QWidget *view = makeListLayout(*model, parent);
     model->attach(view);

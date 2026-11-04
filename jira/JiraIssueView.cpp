@@ -278,6 +278,8 @@ QUrl IssueModel::issueAddress(const QString &key) const
 QWidget *createIssueView(ItemContext &context, QWidget *parent)
 {
     auto *model = new IssueModel(context);
+    // The cell header's "Open in browser" button opens the issue's page.
+    context.setWebLink(model->pageAddress());
     model->follow(context.status());
     QWidget *view = makeIssueLayout(*model, parent);
     model->attach(view);

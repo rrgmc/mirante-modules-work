@@ -101,7 +101,6 @@ public:
 private:
     void draw()
     {
-        setWebLink(m_model.pageAddress());
         if (!m_model.hasData()) {
             setMessage(m_model.message());
             return;

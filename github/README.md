@@ -136,7 +136,7 @@ Each summary has two parts: a **model**, which the module keeps, and a **layout*
 
 - **Drawing.** `follow()` reads the item's status now and at each change, and says `changed()`. With no data, `hasData()` is false and `message()` says "Loading…" or the status's message. With old data it keeps that data through an error. A status without data, with `State::None` and a message, replaces the old data.
 - **Actions.** `runAction()` clears the last error, marks the action busy and makes the request. After a success it refreshes the status. A failure sets `error()` to the reply's message, and a `403` to "The token cannot do this. It needs write access to Actions." A default layout shows these in its action row.
-- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address.
+- **Open page.** `openPage()` calls `ItemContext::showPage()`, or opens the external browser if `Shift` is held. `pageAddress()` is the same address as the Web link, and both hide without a web address. The model gives it to `ItemContext::setWebLink()` whenever it changes, so the cell header's **Open in browser** button opens it, whatever the layout.
 - **Dialogs** are on the heap, as in the gitlab module.
 
 The pull request summary offers "Open page" and "Web", and no re-run: a check run can be re-run only by the GitHub App that made it. See decision 0102. Its sections:

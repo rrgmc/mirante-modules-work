@@ -130,6 +130,8 @@ QJsonValue SummaryModel::defaultProject() const
 void SummaryModel::setPageAddress(const QUrl &url)
 {
     m_pageAddress = isWebAddress(url) ? url : QUrl();
+    // The cell header's "Open in browser" button opens it.
+    m_context->setWebLink(m_pageAddress);
 }
 
 void SummaryModel::runAction(const QString &id, const Request &request)
