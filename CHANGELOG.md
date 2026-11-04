@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Changed
+
+- In a narrow GitHub Run List, the Workflow column hides first, then Branch, then Repository. Before, Repository hid first and Branch never hid.
+
 ## [0.11.0] - 2026-11-04
 
 Settings and list forms can add repositories and projects from the server or the profile, and lists keep the user's last filter choice. It needs the core's v0.8.6.
