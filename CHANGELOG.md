@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-04
+
+Several accounts per module, Claude agents with the mirante-bridge plugin, GitHub Status and GitLab Status, and web links in the cell header. It needs the core's v0.12.0.
+
 ### Added
 
 - GitHub, GitLab and Jira work with several accounts in one profile. An item of another account offers that account's repositories or project paths in its form, and a pasted link is read with the server of the account it belongs to. It needs the core with decision 0146. See [decision 0146](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0146-several-accounts-per-module.md).
@@ -16,7 +20,6 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 ### Changed
 
 - The Web link of GitHub, GitLab and Jira summaries and lists is the **Open in browser** button of the cell header, and no longer a "Web" button in the view. The models give it with `ItemContext::setWebLink()`, so a replaced layout keeps it too. It needs the core with decision 0148.
-
 - In a narrow GitHub Run List, the Workflow column hides first, then Branch, then Repository. Before, Repository hid first and Branch never hid.
 - The GitHub, GitLab and Jira messages for a missing base URL point to Profiles > Manage Profiles…, under the profile's module, instead of the old Modules submenu. The READMEs say the same. It needs the core with decision 0147, the Profiles window.
 
@@ -78,7 +81,8 @@ The first release of the work modules on their own.
 - The modules `claude`, `github`, `gitlab` and `jira`, which moved from [`mirante-modules`](https://github.com/rrgmc/mirante-modules) with their history. See [decision 0133](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0133-work-modules-in-their-own-repository.md) in the core.
 - The repository builds alone, as an app of its own folders, with CI on Windows, macOS and Linux that checks the modules' includes and translations.
 
-[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.8.0...v0.9.0
