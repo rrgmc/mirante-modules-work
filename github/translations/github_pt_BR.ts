@@ -802,5 +802,13 @@
         <source>A table of the Actions runs of the repositories you name, newest first: all of them, those you started, or those of a branch, with a filter on the repository.</source>
         <translation>Uma tabela de execuções do Actions dos repositórios que você indicar, as mais novas primeiro: todas, as que você iniciou ou as de uma branch, com um filtro por repositório.</translation>
     </message>
+    <message>
+        <source>Private</source>
+        <translation>Privado</translation>
+    </message>
+    <message>
+        <source>Archived</source>
+        <translation>Arquivado</translation>
+    </message>
 </context>
 </TS>

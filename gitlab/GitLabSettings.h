@@ -6,10 +6,12 @@
 #include <mirante/Fields.h>
 #include <mirante/ModuleSettings.h>
 
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+#include <QUrlQuery>
 
 #include <memory>
 #include <vector>
@@ -32,8 +34,21 @@ inline const QString kDefaultBaseUrl = QStringLiteral("https://gitlab.com");
 inline const QString kProjectSettingKey = QStringLiteral("project");
 
 // The screen: the server's base URL, its token, and a list of project paths,
-// offered where an item asks for one.
+// offered where an item asks for one. The list's "Add from Server…" button
+// lists the projects the token's user is a member of. See decision 0138 in
+// mirante-core.
 std::unique_ptr<SettingsScreen> makeGeneralScreen();
+
+// The request of "Add from Server…": the projects the token's user is a
+// member of, without archived ones, by path, in pages of 100, at most
+// kMaxProjectChoices.
+inline const QString kProjectsPath = QStringLiteral("api/v4/projects");
+inline constexpr int kMaxProjectChoices = 1000;
+QUrlQuery projectsQuery();
+GetOptions projectsOptions();
+// The values of its answer: each project's path, with "Private" or
+// "Internal" as its detail where it applies.
+std::vector<ServerChoice> projectChoices(const QJsonDocument &json);
 
 // The server of the screen's values: its base URL, or kDefaultBaseUrl when
 // none is set. A base URL that is not an http or https address gives an empty

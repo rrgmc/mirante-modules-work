@@ -432,6 +432,8 @@ The module calls itself "GitHub", so each profile's Modules submenu shows Profil
 | | | `token` | secret | A personal access token. Never stored with the values: the core keeps it in the keychain, under `<workspace id>/<profile id>/github/token`. |
 | | | `repositories` | text list | Repositories the user works on, `owner/repo`, one per line. |
 
+The repositories list has an **Add from Server…** button. It asks `user/repos`, sorted by name, in pages of 100 up to 1,000, with the base URL and token in the dialog, saved or not. The list shows each repository's `full_name`, marked "Private" or "Archived" where that applies. See [decision 0138](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0138-add-list-values-from-the-server.md) in the core.
+
 Each profile has its own values, stored in its entry of `workspace.mirante` under `moduleSettings.github.general`, and synced. They hold no token.
 
 The `repository` field of every type offers the repositories of the profile the item uses, in an editable drop-down list, through `fieldsForProfile(profileId)` and `withRepositories()`. Each is trimmed, slashes at its start and end are removed, and empty or repeated ones are left out, by `repositoryNames()`. Any other repository can still be typed. The tests are in `tests/tst_settings.cpp`.

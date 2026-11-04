@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QNetworkRequest>
+#include <QUrlQuery>
 
 #include <utility>
 
@@ -39,9 +40,66 @@ public:
         projects.placeholder = QStringLiteral("group/project\ngroup/other-project");
         return {baseUrl, token, projects};
     }
+
+    QStringList serverChoiceFields() const override { return {kProjectsKey}; }
+
+    void listServerChoices(const QString &key, ApiClient &server, QObject *receiver,
+                           std::function<void(const std::vector<ServerChoice> &, const QString &)> done) const override
+    {
+        if (key != kProjectsKey) {
+            done({}, QString());
+            return;
+        }
+        server.get(kProjectsPath, projectsQuery(), projectsOptions(), receiver,
+                   [done = std::move(done)](const ApiReply &reply) {
+                       if (!reply.ok()) {
+                           done({}, reply.message);
+                           return;
+                       }
+                       done(projectChoices(reply.json), QString());
+                   });
+    }
 };
 
 } // namespace
+
+QUrlQuery projectsQuery()
+{
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("membership"), QStringLiteral("true"));
+    query.addQueryItem(QStringLiteral("archived"), QStringLiteral("false"));
+    query.addQueryItem(QStringLiteral("order_by"), QStringLiteral("path"));
+    query.addQueryItem(QStringLiteral("sort"), QStringLiteral("asc"));
+    query.addQueryItem(QStringLiteral("per_page"), QStringLiteral("100"));
+    return query;
+}
+
+GetOptions projectsOptions()
+{
+    GetOptions options;
+    options.followLinks = true;
+    options.maxRows = kMaxProjectChoices;
+    return options;
+}
+
+std::vector<ServerChoice> projectChoices(const QJsonDocument &json)
+{
+    std::vector<ServerChoice> choices;
+    for (const QJsonValue &value : json.array()) {
+        const QJsonObject project = value.toObject();
+        const QString path = project.value(QStringLiteral("path_with_namespace")).toString();
+        if (path.isEmpty())
+            continue;
+        const QString visibility = project.value(QStringLiteral("visibility")).toString();
+        QString detail;
+        if (visibility == QLatin1String("private"))
+            detail = QCoreApplication::translate("gitlab", "Private");
+        else if (visibility == QLatin1String("internal"))
+            detail = QCoreApplication::translate("gitlab", "Internal");
+        choices.push_back({path, detail});
+    }
+    return choices;
+}
 
 std::unique_ptr<SettingsScreen> makeGeneralScreen()
 {

@@ -6,10 +6,12 @@
 #include <mirante/Fields.h>
 #include <mirante/ModuleSettings.h>
 
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+#include <QUrlQuery>
 
 #include <memory>
 #include <vector>
@@ -34,8 +36,19 @@ inline const QString kGitHubApiUrl = QStringLiteral("https://api.github.com/");
 inline const QString kProjectSettingKey = QStringLiteral("repository");
 
 // The screen: the web address, the token, and a list of repositories,
-// offered where an item asks for one.
+// offered where an item asks for one. The list's "Add from Server…" button
+// lists the repositories the token can reach. See decision 0138 in mirante-core.
 std::unique_ptr<SettingsScreen> makeGeneralScreen();
+
+// The request of "Add from Server…": the repositories of the token's user,
+// by name, in pages of 100, at most kMaxRepositoryChoices.
+inline const QString kRepositoriesPath = QStringLiteral("user/repos");
+inline constexpr int kMaxRepositoryChoices = 1000;
+QUrlQuery repositoriesQuery();
+GetOptions repositoriesOptions();
+// The values of its answer: each repository's "owner/repo", with "Private"
+// and "Archived" as its detail where they apply.
+std::vector<ServerChoice> repositoryChoices(const QJsonDocument &json);
 
 // The web address of the screen's values: its baseUrl, or kDefaultBaseUrl
 // when none is set. Pages, pasted links and Web links use it. A base URL that

@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QNetworkRequest>
+#include <QUrlQuery>
 
 #include <utility>
 
@@ -48,9 +49,62 @@ public:
         repositories.placeholder = QStringLiteral("owner/repo\nowner/other-repo");
         return {baseUrl, token, repositories};
     }
+
+    QStringList serverChoiceFields() const override { return {kRepositoriesKey}; }
+
+    void listServerChoices(const QString &key, ApiClient &server, QObject *receiver,
+                           std::function<void(const std::vector<ServerChoice> &, const QString &)> done) const override
+    {
+        if (key != kRepositoriesKey) {
+            done({}, QString());
+            return;
+        }
+        server.get(kRepositoriesPath, repositoriesQuery(), repositoriesOptions(), receiver,
+                   [done = std::move(done)](const ApiReply &reply) {
+                       if (!reply.ok()) {
+                           done({}, reply.message);
+                           return;
+                       }
+                       done(repositoryChoices(reply.json), QString());
+                   });
+    }
 };
 
 } // namespace
+
+QUrlQuery repositoriesQuery()
+{
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("per_page"), QStringLiteral("100"));
+    query.addQueryItem(QStringLiteral("sort"), QStringLiteral("full_name"));
+    return query;
+}
+
+GetOptions repositoriesOptions()
+{
+    GetOptions options;
+    options.followLinks = true;
+    options.maxRows = kMaxRepositoryChoices;
+    return options;
+}
+
+std::vector<ServerChoice> repositoryChoices(const QJsonDocument &json)
+{
+    std::vector<ServerChoice> choices;
+    for (const QJsonValue &value : json.array()) {
+        const QJsonObject repo = value.toObject();
+        const QString name = repo.value(QStringLiteral("full_name")).toString();
+        if (name.isEmpty())
+            continue;
+        QStringList details;
+        if (repo.value(QStringLiteral("private")).toBool())
+            details << QCoreApplication::translate("github", "Private");
+        if (repo.value(QStringLiteral("archived")).toBool())
+            details << QCoreApplication::translate("github", "Archived");
+        choices.push_back({name, details.join(QStringLiteral(", "))});
+    }
+    return choices;
+}
 
 std::unique_ptr<SettingsScreen> makeGeneralScreen()
 {

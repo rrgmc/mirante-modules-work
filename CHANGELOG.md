@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Added
+
+- The GitHub and GitLab settings screens have an **Add from Server…** button under their lists of repositories and project paths. It lists those the token can reach, to check and add, so they need not be typed. It needs the core with decision 0138. See [GitHub settings screens](github/README.md#settings-screens) and [GitLab settings screens](gitlab/README.md#settings-screens).
+
 ## [0.10.0] - 2026-11-03
 
 Lists can cover several repositories or projects, and a list's filters can start with values from its settings.
