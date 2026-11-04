@@ -221,6 +221,21 @@ private slots:
                 QVERIFY2(field.suggestions.isEmpty(), qPrintable(type->id()));
         }
 
+        // A list over several projects offers them under "Add from List…".
+        int lists = 0;
+        for (const mirante::ItemType *type : registry.types()) {
+            if (!type->id().endsWith(QLatin1String(".multilist")))
+                continue;
+            ++lists;
+            QStringList offered{QStringLiteral("no projects field")};
+            for (const mirante::Field &field : type->fieldsForProfile(QStringLiteral("work"))) {
+                if (field.key == QLatin1String("projects"))
+                    offered = field.suggestions;
+            }
+            QCOMPARE(offered, expected);
+        }
+        QVERIFY(lists > 0);
+
         // Other fields offer nothing.
         for (const mirante::Field &field :
              registry.type(QStringLiteral("gitlab.mr.list")).fieldsForProfile(QStringLiteral("work"))) {

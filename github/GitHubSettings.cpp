@@ -176,7 +176,7 @@ std::vector<Field> withRepositories(std::vector<Field> fields, const ModuleSetti
 {
     const QStringList names = repositoryNames(settings.values(profileId, kGeneralScreen));
     for (Field &field : fields) {
-        if (field.key == kProjectSettingKey)
+        if (field.key == kProjectSettingKey || field.key == kRepositoriesKey)
             field.suggestions = names;
     }
     return fields;
