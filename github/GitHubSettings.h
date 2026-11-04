@@ -88,7 +88,7 @@ QStringList repositoryNames(const QJsonObject &general);
 // The fields, with the repositories configured in the profile's account
 // offered in each "repository" field, and under "Add from List…" in each
 // "repositories" field. An empty accountId is the default account. See
-// decisions 0139 and 0144 in mirante-core.
+// decisions 0139 and 0146 in mirante-core.
 std::vector<Field> withRepositories(std::vector<Field> fields, const ModuleSettings &settings,
                                     const QString &profileId, const QString &accountId = QString());
 

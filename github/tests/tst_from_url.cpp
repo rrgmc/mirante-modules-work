@@ -366,7 +366,7 @@ private slots:
     }
 
     // Another account of the profile has its own web base and repositories.
-    // See decision 0144 in mirante-core.
+    // See decision 0146 in mirante-core.
     void accountHasItsOwnServer()
     {
         mirante::testing::TestRegistrar registry;
