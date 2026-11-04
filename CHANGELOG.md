@@ -6,6 +6,10 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
+### Added
+
+- Claude agents (`claude.agents`), a list of the Claude Code sessions on this device, with their title, status and repository, for one or more accounts. It runs `claude agents --json` and shows no session text. See decision 0143 in mirante-core.
+
 ### Changed
 
 - The Web link of GitHub, GitLab and Jira summaries and lists is the **Open in browser** button of the cell header, and no longer a "Web" button in the view. The models give it with `ItemContext::setWebLink()`, so a replaced layout keeps it too. It needs the core with decision 0143.
