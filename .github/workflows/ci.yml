@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   build:
-    uses: rrgmc/mirante-core/.github/workflows/build-app.yml@41037b1d1bd9fcb6476d01ae9b11c7564e3f3e38
+    uses: rrgmc/mirante-core/.github/workflows/build-app.yml@542aacb251fd53910d56c7f0bb1c0cec394032c0
     with:
       manifest: ci/manifest.json
       check-modules: true
