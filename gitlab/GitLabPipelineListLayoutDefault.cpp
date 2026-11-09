@@ -1,11 +1,13 @@
 // The default of the extension point "pipelinelistlayout": the core's table,
 // with the columns Id, Project, Status, Ref, Author, Started and Links, and a
 // filter on Status, which keeps the user's last choice in the item's
-// statusFilter. Project, and a
+// statusFilter. The Status filter lists every status, not only those of the
+// current pipelines. Project, and a
 // filter on it, show only in a list over several projects. It is compiled only
 // when the app names no extension for "pipelinelistlayout". See README.md#list-layouts.
 #include "GitLabListSupport.h"
 #include "GitLabPipelineListLayout.h"
+#include "GitLabViewSupport.h"
 
 #include <QCoreApplication>
 
@@ -37,6 +39,8 @@ public:
             addKeptFilter(ProjectColumn, QCoreApplication::translate("gitlab", "Project"), QStringLiteral("project"));
         }
         addKeptFilter(StatusColumn, QCoreApplication::translate("gitlab", "Status"), QStringLiteral("status"));
+        // Every status, so that a chosen one stays chosen while no pipeline has it.
+        setFilterValues(StatusColumn, pipelineStatusTexts());
         start();
     }
 

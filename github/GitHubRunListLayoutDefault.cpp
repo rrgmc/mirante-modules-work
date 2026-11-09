@@ -1,11 +1,13 @@
 // The default of the extension point "runlistlayout": the core's table, with
 // the columns Run, Repository, Workflow, Status, Branch, Actor, Started and
 // Links, and filters on Status and Workflow, which keep the user's last choice
-// in the item's statusFilter and workflowFilter. Repository, and a filter on
+// in the item's statusFilter and workflowFilter. The Status filter lists every
+// status, not only those of the current runs. Repository, and a filter on
 // it, show only in a list over several repositories. It is compiled only when the app names no
 // extension for "runlistlayout". See README.md#list-layouts.
 #include "GitHubListSupport.h"
 #include "GitHubRunListLayout.h"
+#include "GitHubViewSupport.h"
 
 #include <QCoreApplication>
 
@@ -48,6 +50,8 @@ public:
             addKeptFilter(RepositoryColumn, QCoreApplication::translate("github", "Repository"), QStringLiteral("repository"));
         }
         addKeptFilter(StatusColumn, QCoreApplication::translate("github", "Status"), QStringLiteral("status"));
+        // Every status, so that a chosen one stays chosen while no run has it.
+        setFilterValues(StatusColumn, statusTexts());
         addKeptFilter(WorkflowColumn, QCoreApplication::translate("github", "Workflow"), QStringLiteral("workflow"));
         start();
     }

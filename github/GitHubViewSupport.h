@@ -14,6 +14,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 #include <functional>
@@ -41,6 +42,9 @@ QString durationBetween(const QString &start, const QString &end);
 // and, once "completed", its conclusion. See README.md#status-pills.
 QString statusText(const QString &status, const QString &conclusion);
 widgets::StatusRole statusRole(const QString &status, const QString &conclusion);
+// Every text that statusText() gives for a known status, runs in progress
+// first, for a Status filter that lists them all.
+QStringList statusTexts();
 // The same as a pill, from the object's "status" and "conclusion".
 widgets::StatusPill *runPill(const QJsonObject &object);
 // A commit status of the combined status, from its "state": "success" Good

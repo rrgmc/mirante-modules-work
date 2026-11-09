@@ -115,6 +115,22 @@ QString statusText(const QString &status, const QString &conclusion)
     return words;
 }
 
+QStringList statusTexts()
+{
+    const QString completed = QStringLiteral("completed");
+    return {statusText(QStringLiteral("in_progress"), {}),
+            statusText(QStringLiteral("queued"), {}),
+            statusText(QStringLiteral("waiting"), {}),
+            statusText(completed, QStringLiteral("success")),
+            statusText(completed, QStringLiteral("failure")),
+            statusText(completed, QStringLiteral("timed_out")),
+            statusText(completed, QStringLiteral("cancelled")),
+            statusText(completed, QStringLiteral("skipped")),
+            statusText(completed, QStringLiteral("neutral")),
+            statusText(completed, QStringLiteral("action_required")),
+            statusText(completed, QStringLiteral("stale"))};
+}
+
 StatusRole statusRole(const QString &status, const QString &conclusion)
 {
     if (status != QLatin1String("completed"))
