@@ -6,10 +6,6 @@ A release is tagged when a merged pull request raises `VERSION`. See [decision 0
 
 ## [Unreleased]
 
-### Fixed
-
-- The Status filter of the GitHub run lists and the GitLab pipeline lists always lists every status. Before, it listed only the statuses of the current rows, so a chosen status, such as Running, fell back to "All" while no row had it. It needs the core's `ItemListView::setFilterValues()`.
-
 ## [0.12.0] - 2026-11-04
 
 Several accounts per module, Claude agents with the mirante-bridge plugin, GitHub Status and GitLab Status, and web links in the cell header. It needs the core's v0.12.0.
