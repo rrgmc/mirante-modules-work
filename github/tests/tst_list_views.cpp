@@ -1128,8 +1128,10 @@ private slots:
 
         auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(RunStatus)));
         QVERIFY(filter);
-        QCOMPARE(filter->count(), 5);
+        // Every status, whether or not a run has it.
+        QCOMPARE(filter->count(), 12);
         QCOMPARE(filter->itemText(0), QStringLiteral("All"));
+        QCOMPARE(filter->itemText(1), QStringLiteral("Running"));
 
         filter->setCurrentIndex(filter->findText(QStringLiteral("Failed")));
         QCOMPARE(rowCount(view), 1);
@@ -1146,6 +1148,28 @@ private slots:
         // "All" keeps nothing.
         filter->setCurrentIndex(0);
         QVERIFY(!context.itemConfig.contains(QStringLiteral("statusFilter")));
+    }
+
+    // A status that no run has stays chosen, and is kept.
+    void runFilterKeepsAStatusWithoutRuns()
+    {
+        FakeContext context;
+        context.itemConfig = runConfig();
+        context.itemConfig.insert(QStringLiteral("statusFilter"), QJsonArray{QStringLiteral("Stale")});
+        context.source.status = runs();
+        View view(createRunListView(context, nullptr));
+        show(view);
+
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(RunStatus)));
+        QCOMPARE(filter->currentText(), QStringLiteral("Stale"));
+        QCOMPARE(rowCount(view), 0);
+
+        filter->setCurrentIndex(filter->findText(QStringLiteral("Action required")));
+        context.source.change(runs());
+        QCOMPARE(filter->currentText(), QStringLiteral("Action required"));
+        QCOMPARE(rowCount(view), 0);
+        QCOMPARE(context.itemConfig.value(QStringLiteral("statusFilter")).toArray(),
+                 QJsonArray{QStringLiteral("Action required")});
     }
 
     void runFilterOnWorkflow()

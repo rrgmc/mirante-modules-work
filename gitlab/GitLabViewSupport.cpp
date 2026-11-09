@@ -68,6 +68,15 @@ QString statusText(const QString &status)
     return words;
 }
 
+QStringList pipelineStatusTexts()
+{
+    QStringList texts;
+    for (const char *status : {"created", "waiting_for_resource", "preparing", "pending", "running", "success",
+                               "failed", "canceled", "skipped", "manual", "scheduled"})
+        texts << statusText(QString::fromLatin1(status));
+    return texts;
+}
+
 StatusRole statusRole(const QString &status)
 {
     if (status == QLatin1String("success"))

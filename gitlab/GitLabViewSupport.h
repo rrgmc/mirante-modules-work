@@ -14,6 +14,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 #include <functional>
@@ -38,6 +39,9 @@ QString durationText(const QJsonValue &seconds);
 // A pipeline or job status as a pill's text and role.
 QString statusText(const QString &status);
 widgets::StatusRole statusRole(const QString &status);
+// Every text that statusText() gives for a pipeline's status, in GitLab's
+// order, for a Status filter that lists them all.
+QStringList pipelineStatusTexts();
 
 // A pipeline that "Retry pipeline" applies to: failed or canceled.
 bool canRetryPipeline(const QString &status);

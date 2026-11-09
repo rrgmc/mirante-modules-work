@@ -982,6 +982,28 @@ private slots:
         QCOMPARE(rowCount(view), 4);
     }
 
+    // A status that no pipeline has stays chosen, and is kept.
+    void pipelineFilterKeepsAStatusWithoutPipelines()
+    {
+        FakeContext context;
+        context.itemConfig = pipelineConfig();
+        context.itemConfig.insert(QStringLiteral("statusFilter"), QJsonArray{QStringLiteral("Scheduled")});
+        context.source.status = pipelines();
+        View view(createPipelineListView(context, nullptr));
+        show(view);
+
+        auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineStatus)));
+        QCOMPARE(filter->currentText(), QStringLiteral("Scheduled"));
+        QCOMPARE(rowCount(view), 0);
+
+        filter->setCurrentIndex(filter->findText(QStringLiteral("Manual")));
+        context.source.change(pipelines());
+        QCOMPARE(filter->currentText(), QStringLiteral("Manual"));
+        QCOMPARE(rowCount(view), 0);
+        QCOMPARE(context.itemConfig.value(QStringLiteral("statusFilter")).toArray(),
+                 QJsonArray{QStringLiteral("Manual")});
+    }
+
     void pipelineFilterOnStatus()
     {
         FakeContext context;
@@ -992,8 +1014,10 @@ private slots:
 
         auto *filter = view->findChild<QComboBox *>(QStringLiteral("filter.%1").arg(int(PipelineStatus)));
         QVERIFY(filter);
-        QCOMPARE(filter->count(), 4);
+        // Every status, whether or not a pipeline has it.
+        QCOMPARE(filter->count(), 12);
         QCOMPARE(filter->itemText(0), QStringLiteral("All"));
+        QCOMPARE(filter->itemText(1), QStringLiteral("Created"));
 
         filter->setCurrentIndex(filter->findText(QStringLiteral("Failed")));
         QCOMPARE(rowCount(view), 2);
