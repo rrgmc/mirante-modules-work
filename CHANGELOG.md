@@ -2,9 +2,17 @@
 
 All notable changes to these modules are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the version is 0.x, a minor version may break apps.
 
-A release is tagged when a merged pull request raises `VERSION`. See [decision 0134](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0134-release-tags-from-a-version-file.md) in the core.
+A release is tagged when a merged pull request raises `VERSION`. See [decision 0134](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0134-release-tags-from-a-version-file.md) in the core. A pull request does not edit this file. It adds a fragment to [changelog.d](changelog.d/README.md), and the release moves the fragments here. See [decision 0154](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0154-changelog-fragments.md) in the core.
 
 ## [Unreleased]
+
+## [0.15.0] - 2026-11-09
+
+Changelog fragments, and CI for the merge queue. It needs the core's v0.15.0.
+
+### Changed
+
+- Pull requests add their changelog entries as fragments in `changelog.d/`, and a release moves them into this file with the core's `tools/release-changelog.py`. See [decision 0154](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0154-changelog-fragments.md) in the core.
 
 ## [0.12.0] - 2026-11-04
 
@@ -81,7 +89,8 @@ The first release of the work modules on their own.
 - The modules `claude`, `github`, `gitlab` and `jira`, which moved from [`mirante-modules`](https://github.com/rrgmc/mirante-modules) with their history. See [decision 0133](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0133-work-modules-in-their-own-repository.md) in the core.
 - The repository builds alone, as an app of its own folders, with CI on Windows, macOS and Linux that checks the modules' includes and translations.
 
-[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/rrgmc/mirante-modules-work/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.12.0...v0.15.0
 [0.12.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/rrgmc/mirante-modules-work/compare/v0.9.0...v0.10.0

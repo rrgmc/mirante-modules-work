@@ -15,3 +15,4 @@ Changes reach `master` only through a pull request. Never merge a pull request o
 
 - A module includes only its own files and `<mirante/...>`, never a core header.
 - Keep platform-specific code out of modules where possible. Changes must build on Windows, macOS and Linux.
+- Never edit `CHANGELOG.md` in a pull request. Add a fragment named after the branch to `changelog.d/`, as its `README.md` says. Only a release moves fragments into the changelog. See decision 0154 in `mirante-core`.
