@@ -12,6 +12,8 @@ on:
     branches: [master]
   pull_request:
     paths: [VERSION, CHANGELOG.md]
+  # The merge queue waits for the checks that a pull request had.
+  merge_group:
 
 permissions:
   contents: read
