@@ -2,7 +2,7 @@
 
 All notable changes to these modules are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the version is 0.x, a minor version may break apps.
 
-A release is tagged when a merged pull request raises `VERSION`. See [decision 0134](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0134-release-tags-from-a-version-file.md) in the core.
+A release is tagged when a merged pull request raises `VERSION`. See [decision 0134](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0134-release-tags-from-a-version-file.md) in the core. A pull request does not edit this file. It adds a fragment to [changelog.d](changelog.d/README.md), and the release moves the fragments here. See [decision 0154](https://github.com/rrgmc/mirante-core/blob/master/docs/decisions/0154-changelog-fragments.md) in the core.
 
 ## [Unreleased]
 
