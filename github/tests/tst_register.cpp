@@ -133,7 +133,7 @@ private slots:
                                           QStringLiteral("showPeople"), QStringLiteral("showLabels")});
         expected.insert(QStringLiteral("github.pr.page"), single);
         expected.insert(QStringLiteral("github.ci.list"),
-                        QStringList{QStringLiteral("owner"), QStringLiteral("includeForks"),
+                        QStringList{QStringLiteral("scope"), QStringLiteral("owner"), QStringLiteral("includeForks"),
                                     QStringLiteral("includeArchived")}
                             + sizes);
         expected.insert(QStringLiteral("github.pr.list"),
@@ -177,13 +177,16 @@ private slots:
         mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
-        const QStringList scopes{QStringLiteral("repository"), QStringLiteral("owner"), QStringLiteral("all")};
+        const QStringList scopes{QStringLiteral("repository"), QStringLiteral("owner"),
+                                 QStringLiteral("myOrganizations"), QStringLiteral("all")};
         const mirante::ItemType &prList = registry.type(QStringLiteral("github.pr.list"));
         const mirante::ItemType &issueList = registry.type(QStringLiteral("github.issue.list"));
         const mirante::ItemType &run = registry.type(QStringLiteral("github.run"));
         const mirante::ItemType &runList = registry.type(QStringLiteral("github.run.list"));
         QCOMPARE(choicesOf(prList, QStringLiteral("scope")), scopes);
         QCOMPARE(choicesOf(issueList, QStringLiteral("scope")), scopes);
+        QCOMPARE(choicesOf(registry.type(QStringLiteral("github.ci.list")), QStringLiteral("scope")),
+                 (QStringList{QStringLiteral("owner"), QStringLiteral("myOrganizations")}));
         QCOMPARE(choicesOf(prList, QStringLiteral("preset")),
                  (QStringList{QStringLiteral("createdByMe"), QStringLiteral("reviewRequested"),
                               QStringLiteral("assignedToMe"), QStringLiteral("allOpen")}));
@@ -359,7 +362,8 @@ private slots:
         mirante::testing::TestRegistrar registry;
         registerGitHub(registry);
 
-        const QStringList scopes{QStringLiteral("One repository"), QStringLiteral("One owner"), QStringLiteral("All")};
+        const QStringList scopes{QStringLiteral("One repository"), QStringLiteral("Owners"),
+                                 QStringLiteral("My organizations"), QStringLiteral("All")};
         const mirante::ItemType &prList = registry.type(QStringLiteral("github.pr.list"));
         const mirante::ItemType &issueList = registry.type(QStringLiteral("github.issue.list"));
         QCOMPARE(fieldOf(prList, QStringLiteral("scope")).choiceLabels, scopes);
@@ -424,11 +428,12 @@ private slots:
                 QVERIFY2(fieldOf(*type, QStringLiteral("repository")).key.isEmpty(), qPrintable(type->id()));
                 continue;
             }
-            // The CI health list is over an owner, which it needs.
+            // The CI health list is over owners, or the user's organizations,
+            // which need none.
             if (type->id() == QLatin1String("github.ci.list")) {
                 const mirante::Field owner = fieldOf(*type, QStringLiteral("owner"));
                 QCOMPARE(owner.type, mirante::Field::Type::Text);
-                QVERIFY(owner.required);
+                QVERIFY(!owner.required);
                 QVERIFY(fieldOf(*type, QStringLiteral("repository")).key.isEmpty());
                 continue;
             }

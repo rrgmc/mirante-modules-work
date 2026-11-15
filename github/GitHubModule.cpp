@@ -277,19 +277,30 @@ std::vector<Field> listSizeFields()
     return {limit, pageSize};
 }
 
+// One or more owners, users or organizations, separated by commas. See
+// README.md#owners.
+Field ownersField(bool required)
+{
+    Field field = makeField(QStringLiteral("owner"), QCoreApplication::translate("github", "Owners"),
+                            Field::Type::Text, required, QStringLiteral("acme, acme-labs"));
+    field.help = QCoreApplication::translate("github", "Users or organizations, separated by commas.");
+    return field;
+}
+
 // A pull request or issue list: its scope, a preset, an optional filter of
 // search qualifiers and its sizes.
 std::vector<Field> listFields(const QStringList &presets, const QStringList &presetLabels)
 {
     std::vector<Field> fields{
         choiceField(QStringLiteral("scope"), QCoreApplication::translate("github", "Scope"),
-                    {QStringLiteral("repository"), QStringLiteral("owner"), QStringLiteral("all")},
+                    {QStringLiteral("repository"), QStringLiteral("owner"), QStringLiteral("myOrganizations"),
+                     QStringLiteral("all")},
                     {QCoreApplication::translate("github", "One repository"),
-                     QCoreApplication::translate("github", "One owner"),
+                     QCoreApplication::translate("github", "Owners"),
+                     QCoreApplication::translate("github", "My organizations"),
                      QCoreApplication::translate("github", "All")}),
         repositoryField(),
-        makeField(QStringLiteral("owner"), QCoreApplication::translate("github", "Owner"), Field::Type::Text, false,
-                  QStringLiteral("owner")),
+        ownersField(false),
         choiceField(QStringLiteral("preset"), QCoreApplication::translate("github", "Show"), presets, presetLabels),
         makeField(QStringLiteral("filter"), QCoreApplication::translate("github", "Custom filter"),
                   Field::Type::Text, false, QStringLiteral("label:bug base:main")),
@@ -371,8 +382,9 @@ std::vector<Field> runMultiListFields()
     return withSections(std::move(fields), listSizeFields());
 }
 
-// The CI health list: its owner, whether forks and archived repositories
-// count, both off by default, and its sizes. It reads at most 100 rows.
+// The CI health list: its owners or the user's organizations, whether forks
+// and archived repositories count, both off by default, and its sizes. It
+// reads at most 100 rows of each owner and shows at most 100.
 std::vector<Field> ciHealthFields()
 {
     Field includeForks = makeField(QStringLiteral("includeForks"),
@@ -383,8 +395,12 @@ std::vector<Field> ciHealthFields()
                                       Field::Type::Bool);
     includeArchived.defaultValue = false;
     std::vector<Field> fields{
-        makeField(QStringLiteral("owner"), QCoreApplication::translate("github", "Owner"), Field::Type::Text, true,
-                  QStringLiteral("owner")),
+        choiceField(QStringLiteral("scope"), QCoreApplication::translate("github", "Scope"),
+                    {QStringLiteral("owner"), QStringLiteral("myOrganizations")},
+                    {QCoreApplication::translate("github", "Owners"),
+                     QCoreApplication::translate("github", "My organizations")}),
+        // Not required: the scope "myOrganizations" needs none.
+        ownersField(false),
         includeForks,
         includeArchived,
     };
