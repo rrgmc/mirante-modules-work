@@ -1,0 +1,82 @@
+{
+  "data": {
+    "repositoryOwner": {
+      "repositories": {
+        "nodes": [
+          {
+            "nameWithOwner": "acme/backend",
+            "url": "https://github.example/acme/backend",
+            "pushedAt": "2026-11-14T18:00:00Z",
+            "isArchived": false,
+            "isFork": false,
+            "defaultBranchRef": {
+              "name": "main",
+              "target": {
+                "oid": "1111111111111111111111111111111111111111",
+                "messageHeadline": "Retry uploads after the token expires",
+                "committedDate": "2026-11-14T17:58:00Z",
+                "url": "https://github.example/acme/backend/commit/1111111111111111111111111111111111111111",
+                "statusCheckRollup": {
+                  "contexts": {
+                    "nodes": [
+                      { "__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS" },
+                      { "__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FAILURE" }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "nameWithOwner": "acme/web",
+            "url": "https://github.example/acme/web",
+            "pushedAt": "2026-11-13T09:30:00Z",
+            "isArchived": false,
+            "isFork": false,
+            "defaultBranchRef": {
+              "name": "trunk",
+              "target": {
+                "oid": "2222222222222222222222222222222222222222",
+                "messageHeadline": "Update the footer",
+                "committedDate": "2026-11-13T09:29:00Z",
+                "url": "https://github.example/acme/web/commit/2222222222222222222222222222222222222222",
+                "statusCheckRollup": {
+                  "contexts": {
+                    "nodes": [
+                      { "__typename": "StatusContext", "state": "SUCCESS" }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "nameWithOwner": "acme/docs",
+            "url": "https://github.example/acme/docs",
+            "pushedAt": "2026-11-10T12:00:00Z",
+            "isArchived": false,
+            "isFork": false,
+            "defaultBranchRef": {
+              "name": "main",
+              "target": {
+                "oid": "3333333333333333333333333333333333333333",
+                "messageHeadline": "Fix a typo",
+                "committedDate": "2026-11-10T11:59:00Z",
+                "url": "https://github.example/acme/docs/commit/3333333333333333333333333333333333333333",
+                "statusCheckRollup": null
+              }
+            }
+          },
+          {
+            "nameWithOwner": "acme/empty",
+            "url": "https://github.example/acme/empty",
+            "pushedAt": null,
+            "isArchived": false,
+            "isFork": false,
+            "defaultBranchRef": null
+          }
+        ]
+      }
+    }
+  }
+}

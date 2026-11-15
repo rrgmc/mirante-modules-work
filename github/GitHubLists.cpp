@@ -587,4 +587,139 @@ void fetchRunMultiListStatus(StatusJob &job)
     }
 }
 
+QString configuredOwner(const QJsonObject &config)
+{
+    QString owner = withoutSlashes(config.value(QStringLiteral("owner")).toString());
+    while (owner.startsWith(QLatin1Char('@')))
+        owner.remove(0, 1);
+    return owner;
+}
+
+QString ciHealthQuery()
+{
+    // The newest commit of the default branch, its checks as in the pull
+    // request list, and enough of the repository for a row.
+    return QStringLiteral(
+        "query($owner: String!, $first: Int!, $isFork: Boolean, $isArchived: Boolean) {"
+        " repositoryOwner(login: $owner) {"
+        " repositories(first: $first, orderBy: {field: PUSHED_AT, direction: DESC},"
+        " isFork: $isFork, isArchived: $isArchived) {"
+        " nodes {"
+        " nameWithOwner url pushedAt isArchived isFork"
+        " defaultBranchRef { name target { ... on Commit {"
+        " oid messageHeadline committedDate url"
+        " statusCheckRollup { contexts(first: 100) { nodes {"
+        " __typename"
+        " ... on CheckRun { status conclusion }"
+        " ... on StatusContext { state }"
+        " } } }"
+        " } } }"
+        " }"
+        " }"
+        " }"
+        "}");
+}
+
+QJsonObject ciHealthVariables(const QJsonObject &config)
+{
+    // Absent means off, as the form's default.
+    const auto onlyWhenOff = [&config](const QString &key) {
+        return config.value(key).toBool(false) ? QJsonValue(QJsonValue::Null) : QJsonValue(false);
+    };
+    return {{QStringLiteral("owner"), configuredOwner(config)},
+            {QStringLiteral("first"), std::min(listLimit(config), kMaxCiHealthRows)},
+            {QStringLiteral("isFork"), onlyWhenOff(QStringLiteral("includeForks"))},
+            {QStringLiteral("isArchived"), onlyWhenOff(QStringLiteral("includeArchived"))}};
+}
+
+ChecksState repositoryChecks(const QJsonObject &repository)
+{
+    const QJsonObject rollup = repository.value(QStringLiteral("defaultBranchRef"))
+                                   .toObject()
+                                   .value(QStringLiteral("target"))
+                                   .toObject()
+                                   .value(QStringLiteral("statusCheckRollup"))
+                                   .toObject();
+    const HeadChecks head = headChecksOfRollup(rollup);
+    return checksState(head.checkRuns, head.combinedStatus);
+}
+
+QString ciHealthSummary(const QJsonArray &rows, int limit)
+{
+    const int total = int(rows.size());
+    QString summary = total >= limit
+        ? QCoreApplication::translate("github", "%n+ repository(s)", nullptr, limit)
+        : QCoreApplication::translate("github", "%n repository(s)", nullptr, total);
+    int failing = 0;
+    for (const QJsonValue &row : rows) {
+        if (repositoryChecks(row.toObject()) == ChecksState::Failed)
+            ++failing;
+    }
+    if (failing > 0)
+        summary += QStringLiteral(" · ") + QCoreApplication::translate("github", "%n failing", nullptr, failing);
+    return summary;
+}
+
+QUrl ciHealthWebUrl(const QUrl &webBase, const QJsonObject &config)
+{
+    const QString owner = configuredOwner(config);
+    if (owner.isEmpty())
+        return {};
+    return webPageUrl(webBase, owner);
+}
+
+QString ciHealthDescription(const QJsonObject &config)
+{
+    QStringList parts;
+    const QString owner = configuredOwner(config);
+    if (!owner.isEmpty())
+        parts << QCoreApplication::translate("github", "owner %1").arg(owner);
+    if (!config.value(QStringLiteral("includeForks")).toBool(false))
+        parts << QCoreApplication::translate("github", "without forks");
+    if (!config.value(QStringLiteral("includeArchived")).toBool(false))
+        parts << QCoreApplication::translate("github", "without archived");
+    return parts.join(QStringLiteral(" · "));
+}
+
+void fetchCiHealthStatus(StatusJob &job)
+{
+    const QJsonObject config = job.config();
+    const QString owner = configuredOwner(config);
+    if (owner.isEmpty()) {
+        job.finish(incompleteList(QCoreApplication::translate("github", "Set the owner in the item's settings.")));
+        return;
+    }
+    const int limit = std::min(listLimit(config), kMaxCiHealthRows);
+    StatusJob *target = &job;
+    const GitHubClient client(job.server(), job.owner());
+    client.graphql(ciHealthQuery(), ciHealthVariables(config), [target, owner, limit](const ApiReply &reply) {
+        if (!reply.ok()) {
+            target->finish(statusFromReply(reply));
+            return;
+        }
+        const QJsonObject answer = reply.json.object();
+        const QJsonValue found = answer.value(QStringLiteral("data")).toObject().value(QStringLiteral("repositoryOwner"));
+        if (!found.isObject()) {
+            // Such as an owner that does not exist, which GitHub answers with
+            // a null owner and an error.
+            const QString message = answer.value(QStringLiteral("errors"))
+                                        .toArray()
+                                        .at(0)
+                                        .toObject()
+                                        .value(QStringLiteral("message"))
+                                        .toString();
+            ItemStatus status;
+            status.state = ItemStatus::State::Error;
+            status.message = message.isEmpty()
+                ? QCoreApplication::translate("github", "GitHub has no owner %1.").arg(owner)
+                : message;
+            target->finish(status);
+            return;
+        }
+        const QJsonArray rows =
+            found.toObject().value(QStringLiteral("repositories")).toObject().value(QStringLiteral("nodes")).toArray();
+        target->finish(listStatus(ciHealthSummary(rows, limit), rows));
+    });
+}
+
 } // namespace mirante::modules::github

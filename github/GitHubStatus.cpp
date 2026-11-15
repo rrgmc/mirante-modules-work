@@ -314,21 +314,23 @@ bool isPullRequestNode(const QJsonObject &node)
 
 HeadChecks headChecksOfNode(const QJsonObject &node)
 {
-    HeadChecks result;
     const QJsonArray commits =
         node.value(QStringLiteral("commits")).toObject().value(QStringLiteral("nodes")).toArray();
     if (commits.isEmpty())
-        return result;
-    const QJsonArray contexts = commits.last()
-                                    .toObject()
-                                    .value(QStringLiteral("commit"))
-                                    .toObject()
-                                    .value(QStringLiteral("statusCheckRollup"))
-                                    .toObject()
-                                    .value(QStringLiteral("contexts"))
-                                    .toObject()
-                                    .value(QStringLiteral("nodes"))
-                                    .toArray();
+        return {};
+    return headChecksOfRollup(commits.last()
+                                  .toObject()
+                                  .value(QStringLiteral("commit"))
+                                  .toObject()
+                                  .value(QStringLiteral("statusCheckRollup"))
+                                  .toObject());
+}
+
+HeadChecks headChecksOfRollup(const QJsonObject &rollup)
+{
+    HeadChecks result;
+    const QJsonArray contexts =
+        rollup.value(QStringLiteral("contexts")).toObject().value(QStringLiteral("nodes")).toArray();
     QJsonArray statuses;
     bool failed = false;
     bool pending = false;

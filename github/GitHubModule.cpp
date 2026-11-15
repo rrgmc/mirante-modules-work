@@ -5,6 +5,7 @@
 #include "GitHubPullRequestListView.h"
 #include "GitHubPullRequestView.h"
 #include "GitHubQuickAdd.h"
+#include "GitHubRepositoryListView.h"
 #include "GitHubRunListView.h"
 #include "GitHubRunView.h"
 #include "GitHubServiceStatus.h"
@@ -370,6 +371,28 @@ std::vector<Field> runMultiListFields()
     return withSections(std::move(fields), listSizeFields());
 }
 
+// The CI health list: its owner, whether forks and archived repositories
+// count, both off by default, and its sizes. It reads at most 100 rows.
+std::vector<Field> ciHealthFields()
+{
+    Field includeForks = makeField(QStringLiteral("includeForks"),
+                                   QCoreApplication::translate("github", "Include forks"), Field::Type::Bool);
+    includeForks.defaultValue = false;
+    Field includeArchived = makeField(QStringLiteral("includeArchived"),
+                                      QCoreApplication::translate("github", "Include archived repositories"),
+                                      Field::Type::Bool);
+    includeArchived.defaultValue = false;
+    std::vector<Field> fields{
+        makeField(QStringLiteral("owner"), QCoreApplication::translate("github", "Owner"), Field::Type::Text, true,
+                  QStringLiteral("owner")),
+        includeForks,
+        includeArchived,
+    };
+    std::vector<Field> sizes = listSizeFields();
+    sizes.front().help = QCoreApplication::translate("github", "At most 100.");
+    return withSections(std::move(fields), sizes);
+}
+
 // A pull request list's fields with repositoriesField() in place of the
 // scope, the repository and the owner.
 std::vector<Field> pullRequestMultiListFields(const std::vector<Field> &listFields)
@@ -470,6 +493,12 @@ void registerModule(ModuleRegistrar &registrar)
                                               "first: all of them, those you started, or those of a branch, with a "
                                               "filter on the repository."),
         runMultiListFields(), settings, &fetchRunMultiListStatus, &createRunMultiListView));
+    registrar.addItemType(std::make_unique<GitHubItemType>(
+        QStringLiteral("github.ci.list"), QCoreApplication::translate("github", "GitHub CI Health"),
+        QCoreApplication::translate("github", "CI"),
+        QCoreApplication::translate("github", "A table of an owner's repositories, the most recently pushed first, "
+                                              "with the checks of each default branch's newest commit."),
+        ciHealthFields(), settings, &fetchCiHealthStatus, &createCiHealthView));
     registrar.addItemType(std::make_unique<GitHubItemType>(
         QStringLiteral("github.issue.summary"), QCoreApplication::translate("github", "GitHub Issue (summary)"),
         QCoreApplication::translate("github", "Issue"),

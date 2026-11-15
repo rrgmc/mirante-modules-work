@@ -2,8 +2,11 @@
 // 0067, 0071 and 0102, and README.md#lists.
 #pragma once
 
+#include "GitHubStatus.h"
+
 #include <mirante/Status.h>
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
@@ -103,5 +106,34 @@ void fetchRunListStatus(StatusJob &job);
 // name before the message. Their sources are "all", "mine" and "branch".
 void fetchPullRequestMultiListStatus(StatusJob &job);
 void fetchRunMultiListStatus(StatusJob &job);
+
+// The CI health list: an owner's repositories, the most recently pushed
+// first, with the checks of each default branch's newest commit, from one
+// GraphQL request. See README.md#ci-health.
+
+// The most rows it reads: one page of GitHub's GraphQL API.
+constexpr int kMaxCiHealthRows = 100;
+// The owner field, trimmed, without "@" at its start or slashes at its ends.
+QString configuredOwner(const QJsonObject &config);
+// The query. Its variables are those of ciHealthVariables().
+QString ciHealthQuery();
+// owner; first, the limit, at most kMaxCiHealthRows; isFork false unless the
+// includeForks field is on, and isArchived false unless includeArchived is
+// on, else null, which GitHub reads as both.
+QJsonObject ciHealthVariables(const QJsonObject &config);
+// The checks of a repository node of the answer: those of its default
+// branch's newest commit, by checksState(). None without a default branch.
+ChecksState repositoryChecks(const QJsonObject &repository);
+// Such as "12 repositories · 2 failing", "100+ repositories" when the rows
+// reach limit, and without the failing count when none fails.
+QString ciHealthSummary(const QJsonArray &rows, int limit);
+// The owner's page, <webBase>/<owner>. Empty without an owner.
+QUrl ciHealthWebUrl(const QUrl &webBase, const QJsonObject &config);
+// Such as "Owner acme · without forks · without archived".
+QString ciHealthDescription(const QJsonObject &config);
+// data holds rows, the repository nodes, and total. Without an owner it
+// reports State::None with a message, without a request. An answer without
+// the owner is an Error, with GitHub's message if it gives one.
+void fetchCiHealthStatus(StatusJob &job);
 
 } // namespace mirante::modules::github

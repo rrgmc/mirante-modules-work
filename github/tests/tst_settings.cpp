@@ -290,11 +290,12 @@ private slots:
             return QStringList{QStringLiteral("no repository field")};
         };
 
-        // A list over several repositories has no repository field, and neither has
-        // the status of the service.
+        // A list over several repositories has no repository field, and neither have
+        // the status of the service and the CI health list, which is over an owner.
         QList<const mirante::ItemType *> types;
         for (const mirante::ItemType *type : registry.types()) {
-            if (!type->id().endsWith(QLatin1String(".multilist")) && !type->id().endsWith(QLatin1String(".status")))
+            if (!type->id().endsWith(QLatin1String(".multilist")) && !type->id().endsWith(QLatin1String(".status"))
+                && type->id() != QLatin1String("github.ci.list"))
                 types << type;
         }
         for (const mirante::ItemType *type : types)

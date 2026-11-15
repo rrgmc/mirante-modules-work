@@ -70,6 +70,9 @@ struct HeadChecks
     QJsonObject combinedStatus;
 };
 HeadChecks headChecksOfNode(const QJsonObject &node);
+// The same, from a commit's statusCheckRollup object, which is null for a
+// commit without checks.
+HeadChecks headChecksOfRollup(const QJsonObject &rollup);
 // The node's reviews, oldest first, in the shape that latestReviews() reads:
 // "state", "submitted_at" and "user" with its "login".
 QJsonArray reviewsOfNode(const QJsonObject &node);
