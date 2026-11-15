@@ -399,7 +399,10 @@ private slots:
         QCOMPARE(table(view)->isColumnHidden(PrReviews), !showsReviews);
         QVERIFY(!table(view)->isColumnHidden(PrTitle));
 
-        const QStringList keys = context.client.requestKeys();
+        // GraphQL first, unless both columns are off. The fake answers it with
+        // a 404, so the REST requests follow.
+        QCOMPARE(context.client.requestKeys().contains(graphqlKey()), showsChecks || showsReviews);
+        const QStringList keys = restKeys(context.client);
         QCOMPARE(keys.contains(pullKey(42)), showsChecks);
         QCOMPARE(keys.contains(checkRunsKey()), showsChecks);
         QCOMPARE(keys.contains(combinedStatusKey()), showsChecks);
@@ -500,18 +503,21 @@ private slots:
         context.source.change(pullRequests());
         QVERIFY(context.client.requests().isEmpty());
 
+        // One GraphQL request for the three rows. The fake answers it with a
+        // 404, so two REST requests for each row follow.
         show(view);
-        QCOMPARE(context.client.requests().size(), 6);
-        QCoreApplication::processEvents();
+        QTRY_COMPARE(context.client.requests().size(), 7);
+        QCOMPARE(context.client.requestKeys().first(), graphqlKey());
+        QCOMPARE(context.client.requestKeys().count(graphqlKey()), 1);
 
         view->hide();
         context.source.change(pullRequests());
         QCoreApplication::processEvents();
-        QCOMPARE(context.client.requests().size(), 6);
+        QCOMPARE(context.client.requests().size(), 7);
 
-        // Filled again when shown.
+        // Filled again when shown, with REST alone after the 404.
         view->show();
-        QCOMPARE(context.client.requests().size(), 12);
+        QCOMPARE(context.client.requests().size(), 13);
     }
 
     void hidingDropsAnswersOnTheWay()

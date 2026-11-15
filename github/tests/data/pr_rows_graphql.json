@@ -1,0 +1,66 @@
+{
+  "data": {
+    "nodes": [
+      {
+        "__typename": "PullRequest",
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "statusCheckRollup": {
+                  "contexts": {
+                    "nodes": [
+                      { "__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS" },
+                      { "__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FAILURE" }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "nodes": [
+            { "state": "COMMENTED", "submittedAt": "2026-10-01T10:00:00Z", "author": { "login": "bruno-ux" } },
+            { "state": "APPROVED", "submittedAt": "2026-10-01T11:00:00Z", "author": { "login": "ana-reviewer" } }
+          ]
+        }
+      },
+      {
+        "__typename": "PullRequest",
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "statusCheckRollup": {
+                  "contexts": {
+                    "nodes": [
+                      { "__typename": "CheckRun", "status": "IN_PROGRESS", "conclusion": null },
+                      { "__typename": "StatusContext", "state": "SUCCESS" }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "nodes": [
+            { "state": "APPROVED", "submittedAt": "2026-10-02T09:00:00Z", "author": { "login": "ana-reviewer" } },
+            { "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-02T10:00:00Z", "author": { "login": "bruno-ux" } },
+            { "state": "APPROVED", "submittedAt": "2026-10-02T11:00:00Z", "author": { "login": "carla-ops" } },
+            { "state": "DISMISSED", "submittedAt": "2026-10-02T12:00:00Z", "author": { "login": "carla-ops" } }
+          ]
+        }
+      },
+      null
+    ]
+  },
+  "errors": [
+    {
+      "type": "NOT_FOUND",
+      "path": ["nodes", 2],
+      "message": "Could not resolve to a node with the global id of 'PR_kwDOAAAAAc6AAAAl'"
+    }
+  ]
+}

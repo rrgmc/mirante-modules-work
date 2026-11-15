@@ -50,6 +50,30 @@ QJsonArray latestReviews(const QJsonArray &reviews);
 // The approvals and changes requested of latestReviews(reviews).
 ReviewState reviewState(const QJsonArray &reviews);
 
+// The checks and reviews of pull requests, from GraphQL. See
+// README.md#list-views. The query's variables are ids, the pull requests'
+// node_id values; checks and reviews, each a boolean that leaves its part out
+// when false. The answer's data.nodes holds one node per id, in their order,
+// null for an id that could not be read.
+QString pullRequestRowsQuery();
+// A node of that answer that is a pull request.
+bool isPullRequestNode(const QJsonObject &node);
+// The node's head commit checks, in the shapes of the REST API that
+// checksState() reads: check runs with "status" and "conclusion", and a
+// combined status with "state" and "statuses". GitHub's upper-case values
+// become lower case. The combined state is "failure" when a status is
+// "error" or "failure", else "pending" when one is "pending" or "expected",
+// else "success". Both are empty without checks.
+struct HeadChecks
+{
+    QJsonArray checkRuns;
+    QJsonObject combinedStatus;
+};
+HeadChecks headChecksOfNode(const QJsonObject &node);
+// The node's reviews, oldest first, in the shape that latestReviews() reads:
+// "state", "submitted_at" and "user" with its "login".
+QJsonArray reviewsOfNode(const QJsonObject &node);
+
 // A pull request with its reviews, its head commit's checks and the current
 // user. Attention counts only while it is open. data holds pullRequest,
 // reviews, user (its id and login), checkRuns and combinedStatus.

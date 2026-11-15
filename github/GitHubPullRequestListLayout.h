@@ -22,9 +22,10 @@ namespace mirante::modules::github {
 
 class GitHubClient;
 
-// The rows come from the status. Their checks and reviews come later, from
-// requests of their own, for the first 25 rows that the layout shows: see
-// setVisibleRows(). Each answer says rowChanged().
+// The rows come from the status. Their checks and reviews come later, for the
+// first 25 rows that the layout shows: see setVisibleRows(). One GraphQL
+// request reads them for all those rows, and the REST API row by row when
+// GraphQL fails. Each answer says rowChanged().
 class PullRequestListModel : public ListModel
 {
 public:
@@ -79,17 +80,25 @@ protected:
 private:
     void askForNewKeys();
     void stopAsking();
-    void ask(ApiClient &server, const QString &key);
+    void askGraphql(ApiClient &server, const QStringList &keys);
+    void askRest(ApiClient &server, const QString &key, QObject *round);
     void askChecks(const GitHubClient &client, const QString &key, const QString &repository, const QString &sha);
     void answer(const QString &key);
     void forgetOthers(const QStringList &asked);
 
     QHash<QString, PullRequest> m_pullRequests;
+    // Each row's node_id, for GraphQL.
+    QHash<QString, QString> m_nodeIds;
     QStringList m_visible;
     // The requests of the rows asked for since the latest status, each row with
     // a receiver of its own, so they can be cancelled row by row. A row stays
     // here after its answers come.
     QHash<QString, QObject *> m_rounds;
+    // The receivers of the GraphQL requests on their way, one for several rows.
+    QList<QObject *> m_batches;
+    // The server has no GraphQL API that answers the query, so the model uses
+    // the REST API alone from then on.
+    bool m_restOnly = false;
     // The latest answers, by row.
     QHash<QString, Pill> m_checks;
     QHash<QString, Reviews> m_reviews;

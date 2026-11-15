@@ -283,6 +283,93 @@ ReviewState reviewState(const QJsonArray &reviews)
     return result;
 }
 
+QString pullRequestRowsQuery()
+{
+    // A pull request's head commit is its last commit. reviews(last: 100)
+    // keeps the newest reviews, which decide the latest of each reviewer.
+    return QStringLiteral(
+        "query($ids: [ID!]!, $checks: Boolean!, $reviews: Boolean!) {"
+        " nodes(ids: $ids) {"
+        " __typename"
+        " ... on PullRequest {"
+        " commits(last: 1) @include(if: $checks) {"
+        " nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {"
+        " __typename"
+        " ... on CheckRun { status conclusion }"
+        " ... on StatusContext { state }"
+        " } } } } }"
+        " }"
+        " reviews(last: 100) @include(if: $reviews) {"
+        " nodes { state submittedAt author { login } }"
+        " }"
+        " }"
+        " }"
+        "}");
+}
+
+bool isPullRequestNode(const QJsonObject &node)
+{
+    return node.value(QStringLiteral("__typename")).toString() == QLatin1String("PullRequest");
+}
+
+HeadChecks headChecksOfNode(const QJsonObject &node)
+{
+    HeadChecks result;
+    const QJsonArray commits =
+        node.value(QStringLiteral("commits")).toObject().value(QStringLiteral("nodes")).toArray();
+    if (commits.isEmpty())
+        return result;
+    const QJsonArray contexts = commits.last()
+                                    .toObject()
+                                    .value(QStringLiteral("commit"))
+                                    .toObject()
+                                    .value(QStringLiteral("statusCheckRollup"))
+                                    .toObject()
+                                    .value(QStringLiteral("contexts"))
+                                    .toObject()
+                                    .value(QStringLiteral("nodes"))
+                                    .toArray();
+    QJsonArray statuses;
+    bool failed = false;
+    bool pending = false;
+    for (const QJsonValue &value : contexts) {
+        const QJsonObject context = value.toObject();
+        const QString type = context.value(QStringLiteral("__typename")).toString();
+        if (type == QLatin1String("CheckRun")) {
+            QJsonObject checkRun{{QStringLiteral("status"), context.value(QStringLiteral("status")).toString().toLower()}};
+            const QString conclusion = context.value(QStringLiteral("conclusion")).toString().toLower();
+            if (!conclusion.isEmpty())
+                checkRun.insert(QStringLiteral("conclusion"), conclusion);
+            result.checkRuns.append(checkRun);
+        } else if (type == QLatin1String("StatusContext")) {
+            const QString state = context.value(QStringLiteral("state")).toString().toLower();
+            failed = failed || state == QLatin1String("error") || state == QLatin1String("failure");
+            pending = pending || state == QLatin1String("pending") || state == QLatin1String("expected");
+            statuses.append(QJsonObject{{QStringLiteral("state"), state}});
+        }
+    }
+    if (!statuses.isEmpty()) {
+        const QString state = failed ? QStringLiteral("failure")
+                                     : (pending ? QStringLiteral("pending") : QStringLiteral("success"));
+        result.combinedStatus = {{QStringLiteral("state"), state}, {QStringLiteral("statuses"), statuses}};
+    }
+    return result;
+}
+
+QJsonArray reviewsOfNode(const QJsonObject &node)
+{
+    QJsonArray reviews;
+    const QJsonArray nodes = node.value(QStringLiteral("reviews")).toObject().value(QStringLiteral("nodes")).toArray();
+    for (const QJsonValue &value : nodes) {
+        const QJsonObject review = value.toObject();
+        const QString login = review.value(QStringLiteral("author")).toObject().value(QStringLiteral("login")).toString();
+        reviews.append(QJsonObject{{QStringLiteral("state"), review.value(QStringLiteral("state"))},
+                                   {QStringLiteral("submitted_at"), review.value(QStringLiteral("submittedAt"))},
+                                   {QStringLiteral("user"), QJsonObject{{QStringLiteral("login"), login}}}});
+    }
+    return reviews;
+}
+
 ItemStatus pullRequestStatus(const QJsonObject &pullRequest, const QJsonArray &reviews, const QJsonObject &user,
                              const QJsonArray &checkRuns, const QJsonObject &combinedStatus)
 {

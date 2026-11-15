@@ -286,6 +286,83 @@ private slots:
                  ChecksState::Failed);
     }
 
+    // ---- GraphQL nodes of the pull request list ----
+
+    void headChecksOfNodes_data()
+    {
+        QTest::addColumn<QJsonArray>("contexts");
+        QTest::addColumn<QJsonArray>("expectedRuns");
+        QTest::addColumn<QString>("expectedState");
+
+        const auto run = [](const char *status, const QJsonValue &conclusion) {
+            return QJsonObject{{QStringLiteral("__typename"), QStringLiteral("CheckRun")},
+                               {QStringLiteral("status"), QString::fromLatin1(status)},
+                               {QStringLiteral("conclusion"), conclusion}};
+        };
+        const auto status = [](const char *state) {
+            return QJsonObject{{QStringLiteral("__typename"), QStringLiteral("StatusContext")},
+                               {QStringLiteral("state"), QString::fromLatin1(state)}};
+        };
+        QTest::newRow("none") << QJsonArray() << QJsonArray() << QString();
+        QTest::newRow("check runs") << QJsonArray{run("COMPLETED", QStringLiteral("TIMED_OUT")),
+                                                  run("QUEUED", QJsonValue::Null)}
+                                    << QJsonArray{check(QStringLiteral("completed"), QStringLiteral("timed_out")),
+                                                  QJsonObject{{QStringLiteral("status"), QStringLiteral("queued")}}}
+                                    << QString();
+        QTest::newRow("statuses passed") << QJsonArray{status("SUCCESS"), status("SUCCESS")} << QJsonArray()
+                                         << QStringLiteral("success");
+        QTest::newRow("expected is pending") << QJsonArray{status("SUCCESS"), status("EXPECTED")} << QJsonArray()
+                                             << QStringLiteral("pending");
+        QTest::newRow("error wins") << QJsonArray{status("PENDING"), status("ERROR")} << QJsonArray()
+                                    << QStringLiteral("failure");
+    }
+
+    void headChecksOfNodes()
+    {
+        QFETCH(QJsonArray, contexts);
+        QFETCH(QJsonArray, expectedRuns);
+        QFETCH(QString, expectedState);
+        const QJsonObject rollup{{QStringLiteral("contexts"), QJsonObject{{QStringLiteral("nodes"), contexts}}}};
+        const QJsonObject commit{{QStringLiteral("commit"), QJsonObject{{QStringLiteral("statusCheckRollup"), rollup}}}};
+        const QJsonObject node{{QStringLiteral("__typename"), QStringLiteral("PullRequest")},
+                               {QStringLiteral("commits"),
+                                QJsonObject{{QStringLiteral("nodes"), QJsonArray{commit}}}}};
+        const mirante::modules::github::HeadChecks head = mirante::modules::github::headChecksOfNode(node);
+        QCOMPARE(head.checkRuns, expectedRuns);
+        QCOMPARE(head.combinedStatus.value(QStringLiteral("state")).toString(), expectedState);
+    }
+
+    // A commit without checks has a null rollup.
+    void headChecksOfANodeWithoutChecks()
+    {
+        const QJsonObject commit{{QStringLiteral("commit"),
+                                  QJsonObject{{QStringLiteral("statusCheckRollup"), QJsonValue::Null}}}};
+        const QJsonObject node{{QStringLiteral("commits"), QJsonObject{{QStringLiteral("nodes"), QJsonArray{commit}}}}};
+        const mirante::modules::github::HeadChecks head = mirante::modules::github::headChecksOfNode(node);
+        QVERIFY(head.checkRuns.isEmpty());
+        QVERIFY(head.combinedStatus.isEmpty());
+        QCOMPARE(mirante::modules::github::checksState(head.checkRuns, head.combinedStatus), ChecksState::None);
+    }
+
+    void reviewsOfNodes()
+    {
+        const QJsonArray nodes =
+            object(QStringLiteral("pr_rows_graphql.json")).value(QStringLiteral("data")).toObject().value(
+                QStringLiteral("nodes")).toArray();
+        const QJsonArray reviews = mirante::modules::github::reviewsOfNode(nodes.at(1).toObject());
+        QCOMPARE(reviews.size(), 4);
+        QCOMPARE(reviews.at(0).toObject(),
+                 (QJsonObject{{QStringLiteral("state"), QStringLiteral("APPROVED")},
+                              {QStringLiteral("submitted_at"), QStringLiteral("2026-10-02T09:00:00Z")},
+                              {QStringLiteral("user"), QJsonObject{{QStringLiteral("login"), QStringLiteral("ana-reviewer")}}}}));
+        // The dismissed approval no longer counts.
+        const mirante::modules::github::ReviewState state = mirante::modules::github::reviewState(reviews);
+        QCOMPARE(state.approvals, 1);
+        QVERIFY(state.changesRequested);
+        QVERIFY(mirante::modules::github::isPullRequestNode(nodes.at(1).toObject()));
+        QVERIFY(!mirante::modules::github::isPullRequestNode(nodes.at(2).toObject()));
+    }
+
     // ---- Reviews ----
 
     // Recorded: a bot and carla comment, dario approves.

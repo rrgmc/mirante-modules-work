@@ -13,6 +13,7 @@
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QPointer>
 #include <QScopedValueRollback>
 #include <QSet>
 
@@ -90,6 +91,7 @@ void PullRequestListModel::setVisibleRows(const QStringList &keys)
 void PullRequestListModel::read(const QJsonArray &rows, const QUrl &webBase)
 {
     m_pullRequests.clear();
+    m_nodeIds.clear();
     for (int index = 0; index < rows.size(); ++index) {
         const QJsonObject row = rows.at(index).toObject();
         const NumberedRow read =
@@ -107,6 +109,9 @@ void PullRequestListModel::read(const QJsonArray &rows, const QUrl &webBase)
         pullRequest.updated =
             QDateTime::fromString(row.value(QStringLiteral("updated_at")).toString(), Qt::ISODateWithMs);
         m_pullRequests.insert(pullRequest.key, pullRequest);
+        const QString nodeId = row.value(QStringLiteral("node_id")).toString();
+        if (!nodeId.isEmpty())
+            m_nodeIds.insert(pullRequest.key, nodeId);
     }
     // A new status asks again for every row, once the layout says which show.
     stopAsking();
@@ -127,10 +132,22 @@ void PullRequestListModel::askForNewKeys()
     ApiClient *server = context().server();
     if (!server || (!isColumnShown(QStringLiteral("checks")) && !isColumnShown(QStringLiteral("reviews"))))
         return;
+    QStringList graphqlKeys;
     for (const QString &key : asked) {
-        if (!m_rounds.contains(key))
-            ask(*server, key);
+        if (m_rounds.contains(key))
+            continue;
+        const PullRequest row = m_pullRequests.value(key);
+        if (row.repository.isEmpty() || row.number <= 0)
+            continue;
+        auto *round = new QObject(this);
+        m_rounds.insert(key, round);
+        if (!m_restOnly && m_nodeIds.contains(key))
+            graphqlKeys << key;
+        else
+            askRest(*server, key, round);
     }
+    if (!graphqlKeys.isEmpty())
+        askGraphql(*server, graphqlKeys);
 }
 
 void PullRequestListModel::stopAsking()
@@ -138,15 +155,80 @@ void PullRequestListModel::stopAsking()
     // The answers to their requests are dropped with them.
     qDeleteAll(m_rounds);
     m_rounds.clear();
+    qDeleteAll(m_batches);
+    m_batches.clear();
 }
 
-void PullRequestListModel::ask(ApiClient &server, const QString &key)
+// The checks and reviews of several rows in one request. A row whose round has
+// gone since drops its part of the answer. A failed request asks the REST API
+// for each row that is still asked for, and a server without the query's
+// GraphQL API is asked with REST alone from then on.
+void PullRequestListModel::askGraphql(ApiClient &server, const QStringList &keys)
+{
+    QList<QPointer<QObject>> rounds;
+    QJsonArray ids;
+    for (const QString &key : keys) {
+        rounds << m_rounds.value(key);
+        ids.append(m_nodeIds.value(key));
+    }
+    const bool checks = isColumnShown(QStringLiteral("checks"));
+    const bool reviews = isColumnShown(QStringLiteral("reviews"));
+    const QJsonObject variables{{QStringLiteral("ids"), ids},
+                                {QStringLiteral("checks"), checks},
+                                {QStringLiteral("reviews"), reviews}};
+
+    auto *batch = new QObject(this);
+    m_batches << batch;
+    const GitHubClient client(server, batch);
+    client.graphql(pullRequestRowsQuery(), variables, [this, batch, keys, rounds, checks, reviews](const ApiReply &reply) {
+        m_batches.removeOne(batch);
+        batch->deleteLater();
+
+        const QJsonValue data = reply.json.object().value(QStringLiteral("data"));
+        const QJsonArray nodes = data.toObject().value(QStringLiteral("nodes")).toArray();
+        const bool answered = reply.ok() && nodes.size() == keys.size();
+        // A server without GraphQL answers 404, and one whose schema lacks a
+        // field answers errors without data. Others, such as a rate limit,
+        // fail this request only.
+        if ((!reply.ok() && reply.httpStatus == 404) || (reply.ok() && !data.isObject()))
+            m_restOnly = true;
+
+        for (int index = 0; index < keys.size(); ++index) {
+            const QString &key = keys.at(index);
+            QObject *round = rounds.at(index);
+            if (!round || m_rounds.value(key) != round)
+                continue;
+            if (!answered) {
+                if (ApiClient *server = context().server())
+                    askRest(*server, key, round);
+                continue;
+            }
+            const QJsonObject node = nodes.at(index).toObject();
+            const bool read = isPullRequestNode(node);
+            if (checks) {
+                Pill pill;
+                if (read) {
+                    const HeadChecks head = headChecksOfNode(node);
+                    pill = shortChecksPill(checksState(head.checkRuns, head.combinedStatus));
+                }
+                m_checks.insert(key, pill);
+            }
+            if (reviews) {
+                Reviews result;
+                if (read) {
+                    const ReviewState state = reviewState(reviewsOfNode(node));
+                    result = {true, state.approvals, state.changesRequested};
+                }
+                m_reviews.insert(key, result);
+            }
+            answer(key);
+        }
+    });
+}
+
+void PullRequestListModel::askRest(ApiClient &server, const QString &key, QObject *round)
 {
     const PullRequest row = m_pullRequests.value(key);
-    if (row.repository.isEmpty() || row.number <= 0)
-        return;
-    auto *round = new QObject(this);
-    m_rounds.insert(key, round);
     const GitHubClient client(server, round);
     if (isColumnShown(QStringLiteral("checks"))) {
         client.pullRequest(row.repository, row.number,

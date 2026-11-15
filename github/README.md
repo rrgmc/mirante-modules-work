@@ -50,7 +50,7 @@ The module never reads the token itself. It makes every request through the `Api
 
 **The token.** A fine-grained token needs read access to Metadata, Pull requests, Issues, Checks, Commit statuses and Actions, and write access to Actions for re-run and cancel. A classic token needs `repo`, or `public_repo` alone for public repositories. A `403` on an action says "The token cannot do this. It needs write access to Actions."
 
-**Rate limits.** GitHub answers `403` or `429` with `x-ratelimit-remaining: 0` when the hourly limit is used up, and `403` with `Retry-After` for its secondary limits. `ServerClient` waits and sends again, as for a `429`, and does not pause the server. The search API has a lower limit of 30 requests a minute, which the [lists](#lists) count against.
+**Rate limits.** GitHub answers `403` or `429` with `x-ratelimit-remaining: 0` when the hourly limit is used up, and `403` with `Retry-After` for its secondary limits. `ServerClient` waits and sends again, as for a `429`, and does not pause the server. The search API has a lower limit of 30 requests a minute, which the [lists](#lists) count against. The GraphQL API has a limit of its own, in points an hour. Its requests are POSTs, so they never come back as a cheap `304`.
 
 ## The client
 
@@ -77,6 +77,7 @@ The module never reads the token itself. It makes every request through the `Api
 | `searchIssues` | `GET search/issues?q=<query>&sort=updated&order=desc`, up to the limit | `items` |
 | `workflowRuns` | `GET repos/<r>/actions/runs`, or `repos/<r>/actions/workflows/<file>/runs` with a workflow, with a query such as `branch=<b>`, `actor=<login>` or `event=pull_request` | `workflow_runs` |
 | `runJobs` | `GET repos/<r>/actions/runs/<id>/jobs?filter=latest`, up to 100 | `jobs` |
+| `graphql` | `POST ../graphql`, with `{"query", "variables"}`. The path resolves to `https://api.github.com/graphql`, or to `<web>/api/graphql` on GitHub Enterprise Server | |
 | `rerunRun`, `rerunFailedJobs`, `cancelRun` | `POST repos/<r>/actions/runs/<id>/rerun`, `/rerun-failed-jobs`, `/cancel` | |
 | `rerunJob` | `POST repos/<r>/actions/jobs/<id>/rerun` | |
 
@@ -130,6 +131,7 @@ The tests are in `tests/tst_status.cpp`, on answers in `tests/data/`. They are r
 | `user.json` | written by hand, in the shape of `GET user` |
 | `pull_request_reviews_changes.json` | written by hand: an approval replaced by changes requested, an approval kept after a comment, a dismissed review and a pending one, out of order |
 | `workflow_runs_failed.json`, `run_jobs_failed.json` | written by hand: a failed run on its second attempt, a timed-out sibling, a passed sibling and an older failed run, and the jobs of the first |
+| `pr_rows_graphql.json` | written by hand: the GraphQL answer for the three rows of `pr_search.json`, with failed checks and an approval, a running check with changes requested and a dismissed approval, and a node that could not be read |
 
 ## Summary views
 
@@ -270,9 +272,11 @@ Each list has two parts: a **model**, which the module keeps, and a **layout**, 
 
 The pull request model, `PullRequestListModel`, also reads each row's checks and reviews, which fill the default layout's Checks and Reviews columns, with the rules of GitLab's merge request list for its Pipeline and Approvals columns:
 
-- **Requests.** The layout tells the model which rows it shows with `setVisibleRows()`, after each `changed()` and whenever they change; the default layout passes `visibleKeys()`. While the view is visible, the model asks for the first 25 of them (`AskedRows`), after each new status and each time the view shows. For Checks, it asks `pullRequest()`, then, at once, `checkRuns()` and `combinedStatus()` of its `head.sha`. For Reviews, it asks `pullRequestReviews()`. A column with its field off, `showChecks` or `showReviews`, asks for nothing. A column hidden only because the cell is narrow still asks.
+- **Requests.** The layout tells the model which rows it shows with `setVisibleRows()`, after each `changed()` and whenever they change; the default layout passes `visibleKeys()`. While the view is visible, the model asks for the first 25 of them (`AskedRows`), after each new status and each time the view shows. A column with its field off, `showChecks` or `showReviews`, asks for nothing. A column hidden only because the cell is narrow still asks.
+- **GraphQL first.** The rows to ask for that have a `node_id` share one GraphQL request, `graphql()` with `pullRequestRowsQuery()`. It reads each row's last commit's `statusCheckRollup`, up to 100 contexts, and its last 100 reviews; the variables `checks` and `reviews` leave out a column whose field is off. `headChecksOfNode()` and `reviewsOfNode()` turn a node into the shapes of the REST API, so `checksState()` and `reviewState()` apply the same rules. A node that is null, such as one GitHub could not read, is a dash in both columns. So a page of 25 rows costs one request instead of up to 100.
+- **REST when GraphQL fails.** A row without a `node_id`, and each row of a GraphQL request that failed, is asked with the REST API. For Checks, the model asks `pullRequest()`, then, at once, `checkRuns()` and `combinedStatus()` of its `head.sha`. For Reviews, it asks `pullRequestReviews()`. A `404`, or an answer without `data`, means the server has no GraphQL API for the query, so the model uses REST alone from then on. Any other failure, such as a rate limit, fails that request only.
 - **A new page, sort or filter.** The model asks only for rows that have not been asked for since the latest status, and a row that stays keeps what is on the way. An answer that moves its row does not ask again.
-- **Receivers.** Each row's requests, the head commit's included, use a child `QObject` of the model as their receiver. A row leaving the first 25 deletes its own. A new status, or hiding the view, deletes them all, and the answers on the way are dropped.
+- **Receivers.** Each row's requests, the head commit's included, use a child `QObject` of the model as their receiver. A GraphQL request has a receiver of its own, and a row whose receiver has gone drops its part of the answer. A row leaving the first 25 deletes its own. A new status, or hiding the view, deletes them all, and the answers on the way are dropped.
 - **Answers.** The latest answers are kept by row, and new rows draw with them, so the cells do not flicker at each poll. Each answer says `rowChanged(key)`, and the default layout then sets only the cells that changed, since each can sort the table again. A failed request puts the dash back, and so does a row leaving the first 25.
 - **Checks** is a `Pill` from `checksState()`: Good "Passed", Bad "Failed" or Waiting "Running". `None` has empty text, which the default layout draws as a dash. A failed `checkRuns()` or `combinedStatus()` leaves its part out. When both fail, or the pull request fails or has no `head.sha`, the cell is a dash.
 - **Reviews** reads `reviewState()` into `Reviews`: whether it was answered, the approvals and whether changes were requested. The default layout draws "changes requested" when a latest review requests changes, else "2 approved" with the approvals, else a dash. It sorts by the approvals, with changes requested below none, and a row without an answer last.

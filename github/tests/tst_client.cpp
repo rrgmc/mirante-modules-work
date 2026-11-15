@@ -1,14 +1,18 @@
 // GitHubClient: the paths, the encoding of repositories, branches and search
 // queries, the paging options of lists and the bodies of the actions.
 #include "../GitHubClient.h"
+#include "../GitHubSettings.h"
 
 #include <mirante/testing/FakeApiClient.h>
 
+#include <QJsonArray>
 #include <QJsonObject>
+#include <QUrl>
 #include <QObject>
 #include <QTest>
 
 using mirante::ApiReply;
+using mirante::modules::github::apiBaseOf;
 using mirante::modules::github::GitHubClient;
 using mirante::testing::FakeApiClient;
 
@@ -223,6 +227,39 @@ private slots:
         for (const FakeApiClient::Request &request : f.fake.requests())
             QCOMPARE(request.body, QJsonDocument(QJsonObject()));
         QCOMPARE(f.answers, 4);
+    }
+
+    void graphqlPostsTheQueryAndItsVariables()
+    {
+        Fixture f;
+        const QJsonObject variables{{QStringLiteral("ids"), QJsonArray{QStringLiteral("PR_1")}}};
+        f.client().graphql(QStringLiteral("query { viewer { login } }"), variables, f.done());
+        QCOMPARE(f.fake.requestKeys(), QStringList{QStringLiteral("POST ../graphql")});
+        QCOMPARE(f.last().body.object(),
+                 (QJsonObject{{QStringLiteral("query"), QStringLiteral("query { viewer { login } }")},
+                              {QStringLiteral("variables"), variables}}));
+        QCOMPARE(f.answers, 1);
+    }
+
+    // The core resolves a path against the API's base, as QUrl does.
+    void graphqlPathReachesTheGraphqlApi_data()
+    {
+        QTest::addColumn<QString>("web");
+        QTest::addColumn<QString>("graphql");
+        QTest::newRow("github.com") << QStringLiteral("https://github.com")
+                                    << QStringLiteral("https://api.github.com/graphql");
+        QTest::newRow("enterprise server") << QStringLiteral("https://github.example.com")
+                                           << QStringLiteral("https://github.example.com/api/graphql");
+        QTest::newRow("under a path") << QStringLiteral("http://example.org:8080/github")
+                                      << QStringLiteral("http://example.org:8080/github/api/graphql");
+    }
+
+    void graphqlPathReachesTheGraphqlApi()
+    {
+        QFETCH(QString, web);
+        QFETCH(QString, graphql);
+        const QUrl base = apiBaseOf(QJsonObject{{QStringLiteral("baseUrl"), web}});
+        QCOMPARE(base.resolved(QUrl(GitHubClient::graphqlPath())), QUrl(graphql));
     }
 
     // A reply reaches the callback unchanged, errors included.

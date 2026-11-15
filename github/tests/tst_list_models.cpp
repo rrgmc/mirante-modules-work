@@ -8,6 +8,7 @@
 #include "../GitHubPullRequestListView.h"
 #include "../GitHubRunListLayout.h"
 #include "../GitHubRunListView.h"
+#include "../GitHubStatus.h"
 #include "ListTestSupport.h"
 
 #include <QClipboard>
@@ -139,8 +140,10 @@ private slots:
         model->setVisibleRows({QStringLiteral("acme/backend#42")});
         QVERIFY(context.client.requests().isEmpty());
 
+        // GraphQL first. The fake answers it with a 404, so the REST API follows.
         view.show();
-        QCOMPARE(context.client.requestKeys(), (QStringList{pullKey(42), reviewsKey(42)}));
+        QCOMPARE(context.client.requestKeys(), QStringList{graphqlKey()});
+        QTRY_COMPARE(restKeys(context.client), (QStringList{pullKey(42), reviewsKey(42)}));
         QTRY_VERIFY(model->pullRequest(QStringLiteral("acme/backend#42")).checks.role == StatusRole::Bad);
         QTRY_VERIFY(model->pullRequest(QStringLiteral("acme/backend#42")).reviews.answered);
         QCOMPARE(model->pullRequest(QStringLiteral("acme/backend#42")).checks.text, QStringLiteral("Failed"));
@@ -183,7 +186,100 @@ private slots:
         view.show();
         QVERIFY(!model->isColumnShown(QStringLiteral("checks")));
         model->setVisibleRows({QStringLiteral("acme/backend#42")});
-        QCOMPARE(context.client.requestKeys(), QStringList{reviewsKey(42)});
+        QCOMPARE(context.client.requestKeys(), QStringList{graphqlKey()});
+        const QJsonObject variables =
+            context.client.requests().first().body.object().value(QStringLiteral("variables")).toObject();
+        QCOMPARE(variables.value(QStringLiteral("checks")).toBool(true), false);
+        QCOMPARE(variables.value(QStringLiteral("reviews")).toBool(false), true);
+        QTRY_COMPARE(restKeys(context.client), QStringList{reviewsKey(42)});
+    }
+
+    void graphqlReadsTheShownRowsAtOnce()
+    {
+        FakeContext context;
+        context.source.status = pullRequests();
+        QVERIFY(context.client.setJsonFile(graphqlKey(), dataFile(QStringLiteral("pr_rows_graphql.json"))));
+        auto *model = new PullRequestListModel(context);
+        model->follow(&context.source);
+        QWidget view;
+        model->attach(&view);
+        view.show();
+        QSignalSpy changed(model, &ListModel::rowChanged);
+        model->setVisibleRows(allKeys(*model));
+
+        QCOMPARE(context.client.requestKeys(), QStringList{graphqlKey()});
+        const QJsonObject body = context.client.requests().first().body.object();
+        QCOMPARE(body.value(QStringLiteral("query")).toString(), pullRequestRowsQuery());
+        const QJsonObject variables = body.value(QStringLiteral("variables")).toObject();
+        QCOMPARE(variables.value(QStringLiteral("ids")).toArray(),
+                 (QJsonArray{QStringLiteral("PR_kwDOAAAAAc6AAAAq"), QStringLiteral("PR_kwDOAAAAAc6AAAE-"),
+                             QStringLiteral("PR_kwDOAAAAAc6AAAAl")}));
+        QVERIFY(variables.value(QStringLiteral("checks")).toBool());
+        QVERIFY(variables.value(QStringLiteral("reviews")).toBool());
+
+        QTRY_COMPARE(changed.size(), 3);
+        const QStringList keys = allKeys(*model);
+        const PullRequestListModel::PullRequest first = model->pullRequest(keys.at(0));
+        QCOMPARE(first.checks.text, QStringLiteral("Failed"));
+        QCOMPARE(first.reviews.approvals, 1);
+        QVERIFY(!first.reviews.changesRequested);
+        const PullRequestListModel::PullRequest second = model->pullRequest(keys.at(1));
+        QCOMPARE(second.checks.text, QStringLiteral("Running"));
+        QVERIFY(second.reviews.answered);
+        QCOMPARE(second.reviews.approvals, 1);
+        QVERIFY(second.reviews.changesRequested);
+        // A node GitHub could not read is a dash in both columns.
+        const PullRequestListModel::PullRequest third = model->pullRequest(keys.at(2));
+        QVERIFY(third.checks.text.isEmpty());
+        QVERIFY(!third.reviews.answered);
+        // And nothing more is asked for.
+        QCOMPARE(context.client.requestKeys(), QStringList{graphqlKey()});
+    }
+
+    void aServerWithoutGraphqlIsAskedWithRestFromThenOn()
+    {
+        FakeContext context;
+        context.source.status = pullRequests();
+        setUpBackend42(context);
+        auto *model = new PullRequestListModel(context);
+        model->follow(&context.source);
+        QWidget view;
+        model->attach(&view);
+        view.show();
+        model->setVisibleRows({QStringLiteral("acme/backend#42")});
+        QTRY_VERIFY(model->pullRequest(QStringLiteral("acme/backend#42")).reviews.answered);
+        QCOMPARE(context.client.requestKeys().count(graphqlKey()), 1);
+
+        // A new status asks again, with REST alone.
+        context.source.change(pullRequests());
+        model->setVisibleRows({QStringLiteral("acme/backend#42")});
+        QTRY_COMPARE(restKeys(context.client).count(reviewsKey(42)), 2);
+        QCOMPARE(context.client.requestKeys().count(graphqlKey()), 1);
+    }
+
+    void anotherGraphqlFailureFallsBackOnce()
+    {
+        FakeContext context;
+        context.source.status = pullRequests();
+        setUpBackend42(context);
+        ApiReply limited;
+        limited.error = ApiReply::Error::Http;
+        limited.httpStatus = 403;
+        limited.message = QStringLiteral("Forbidden (403)");
+        context.client.setReply(graphqlKey(), limited);
+        auto *model = new PullRequestListModel(context);
+        model->follow(&context.source);
+        QWidget view;
+        model->attach(&view);
+        view.show();
+        model->setVisibleRows({QStringLiteral("acme/backend#42")});
+        QTRY_VERIFY(model->pullRequest(QStringLiteral("acme/backend#42")).reviews.answered);
+        QCOMPARE(model->pullRequest(QStringLiteral("acme/backend#42")).checks.text, QStringLiteral("Failed"));
+
+        // A rate limit or another error fails that request only.
+        context.source.change(pullRequests());
+        model->setVisibleRows({QStringLiteral("acme/backend#42")});
+        QTRY_COMPARE(context.client.requestKeys().count(graphqlKey()), 2);
     }
 
     void runRowsReadTheData()
