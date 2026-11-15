@@ -59,21 +59,24 @@ QString scopeProblem(const QJsonObject &config, const QJsonValue &defaultReposit
                      ListSpan span = ListSpan::Scope);
 
 // The search query of a pull request or issue list, from its configuration:
-// "is:pr" or "is:issue" and "is:open"; then "repo:<repository>",
-// "user:<owner>" or nothing for the scope "all"; then the preset's
-// "author:@me", "review-requested:@me" or "assignee:@me", nothing for
-// "allOpen", except "involves:@me" for "allOpen" with the scope "all"; then
-// the trimmed filter, as typed. Joined by spaces. A preset the type does not
-// have counts as its first one. With ListSpan::Repositories, one
-// "repo:<repository>" for each repository, which GitHub joins with OR. Empty
-// when scopeProblem() is not.
+// "is:pr" or "is:issue" and "is:open"; then "repo:<repository>", one
+// "user:<owner>" for each owner, which GitHub joins with OR, or nothing for
+// the scope "all"; then the preset's "author:@me", "review-requested:@me" or
+// "assignee:@me", nothing for "allOpen", except "involves:@me" for "allOpen"
+// with the scope "all"; then the trimmed filter, as typed. Joined by spaces. A
+// preset the type does not have counts as its first one. With
+// ListSpan::Repositories, one "repo:<repository>" for each repository. The
+// scope "myOrganizations" takes one "user:<login>" for each of organizations,
+// which the fetch reads first. Empty when scopeProblem() is not, and for that
+// scope without organizations.
 QString searchQuery(ListKind kind, const QJsonObject &config, const QJsonValue &defaultRepository,
-                    ListSpan span = ListSpan::Scope);
+                    ListSpan span = ListSpan::Scope, const QStringList &organizations = {});
 
 // The list's page on the site: <webBase>/<repository>/pulls?q=<query> for the
 // repository scope, <webBase>/pulls?q=<query> otherwise, and "issues" for
 // issues. The query is searchQuery()'s, percent-encoded. Empty when the scope
-// is not complete.
+// is not complete, and for the scope "myOrganizations", whose organizations
+// the view does not know.
 QUrl listWebUrl(ListKind kind, const QUrl &webBase, const QJsonObject &config, const QJsonValue &defaultRepository,
                 ListSpan span = ListSpan::Scope);
 
@@ -107,33 +110,61 @@ void fetchRunListStatus(StatusJob &job);
 void fetchPullRequestMultiListStatus(StatusJob &job);
 void fetchRunMultiListStatus(StatusJob &job);
 
-// The CI health list: an owner's repositories, the most recently pushed
-// first, with the checks of each default branch's newest commit, from one
-// GraphQL request. See README.md#ci-health.
+// Owners. The owner field of a list may name several, and the scope
+// "myOrganizations" covers the organizations of the token's user, which a
+// list reads at each fetch. See README.md#owners.
 
-// The most rows it reads: one page of GitHub's GraphQL API.
+// The owner field's owners, in their order: the text split at commas and
+// spaces, each without "@" at its start or slashes at its ends. Empty and
+// repeated ones are left out, the case ignored, as GitHub ignores it.
+QStringList configuredOwners(const QJsonObject &config);
+// Whether a list's scope is "myOrganizations".
+bool coversMyOrganizations(const QJsonObject &config);
+// The GraphQL query of the organizations of the token's user, up to 100.
+QString viewerOrganizationsQuery();
+// The logins of that query's answer, in its order. Empty when it has none.
+QStringList organizationLogins(const QJsonObject &answer);
+
+// The CI health list: the repositories of one or more owners, the most
+// recently pushed first, with the checks of each default branch's newest
+// commit, from GraphQL. See README.md#ci-health.
+
+// The most rows it shows, and that it reads for each owner: one page of
+// GitHub's GraphQL API.
 constexpr int kMaxCiHealthRows = 100;
-// The owner field, trimmed, without "@" at its start or slashes at its ends.
-QString configuredOwner(const QJsonObject &config);
-// The query. Its variables are those of ciHealthVariables().
-QString ciHealthQuery();
-// owner; first, the limit, at most kMaxCiHealthRows; isFork false unless the
-// includeForks field is on, and isArchived false unless includeArchived is
-// on, else null, which GitHub reads as both.
-QJsonObject ciHealthVariables(const QJsonObject &config);
+// How many owners one request reads at most, so that owners times rows stay
+// within this budget, and the request within GitHub's limit on nodes.
+constexpr int kCiHealthRowBudget = 4000;
+// The query for owners owners, each under the alias o<index> with the
+// variable $o<index>. Its other variables are those of ciHealthVariables().
+QString ciHealthQuery(int owners);
+// o0, o1, …, the owners; first, the limit, at most kMaxCiHealthRows; isFork
+// false unless the includeForks field is on, and isArchived false unless
+// includeArchived is on, else null, which GitHub reads as both.
+QJsonObject ciHealthVariables(const QJsonObject &config, const QStringList &owners);
+// owners in groups of at most kCiHealthRowBudget / first, at least one each,
+// in their order: one request each.
+QList<QStringList> ciHealthBatches(const QStringList &owners, int first);
+// The rows of all owners, the most recently pushed first, cut to limit. A
+// repository without pushedAt goes last.
+QJsonArray newestRepositories(const QJsonArray &rows, int limit);
 // The checks of a repository node of the answer: those of its default
 // branch's newest commit, by checksState(). None without a default branch.
 ChecksState repositoryChecks(const QJsonObject &repository);
 // Such as "12 repositories · 2 failing", "100+ repositories" when the rows
 // reach limit, and without the failing count when none fails.
 QString ciHealthSummary(const QJsonArray &rows, int limit);
-// The owner's page, <webBase>/<owner>. Empty without an owner.
+// The page of a single owner, <webBase>/<owner>. Empty for several owners,
+// for the scope "myOrganizations" and without an owner.
 QUrl ciHealthWebUrl(const QUrl &webBase, const QJsonObject &config);
-// Such as "Owner acme · without forks · without archived".
+// Such as "owner acme · without forks · without archived", "owners acme,
+// labs" or "my organizations".
 QString ciHealthDescription(const QJsonObject &config);
 // data holds rows, the repository nodes, and total. Without an owner it
-// reports State::None with a message, without a request. An answer without
-// the owner is an Error, with GitHub's message if it gives one.
+// reports State::None with a message, without a request. With the scope
+// "myOrganizations" it first reads the organizations; without any, it reports
+// State::None. An owner GitHub does not have is an Error, with GitHub's
+// message if it gives one. The first request that fails fails the list.
 void fetchCiHealthStatus(StatusJob &job);
 
 } // namespace mirante::modules::github

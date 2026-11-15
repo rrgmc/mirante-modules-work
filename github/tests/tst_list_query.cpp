@@ -727,6 +727,82 @@ private slots:
 
     // Several repositories.
 
+    // Owners. See README.md#owners.
+
+    void severalOwnersSearchTogether()
+    {
+        const QJsonObject config{{QStringLiteral("scope"), QStringLiteral("owner")},
+                                 {QStringLiteral("owner"), QStringLiteral("acme, @acme-labs ACME")},
+                                 {QStringLiteral("preset"), QStringLiteral("allOpen")}};
+        QCOMPARE(searchQuery(ListKind::PullRequests, config, {}),
+                 QStringLiteral("is:pr is:open user:acme user:acme-labs"));
+        QCOMPARE(listDescription(ListKind::PullRequests, config, {}),
+                 QStringLiteral("All open · owners acme, acme-labs"));
+        QCOMPARE(listWebUrl(ListKind::PullRequests, QUrl(QStringLiteral("https://github.com")), config, {}),
+                 QUrl(QStringLiteral("https://github.com/pulls?q=is%3Apr%20is%3Aopen%20user%3Aacme%20"
+                                     "user%3Aacme-labs")));
+    }
+
+    void myOrganizationsWaitForTheLogins()
+    {
+        const QJsonObject config{{QStringLiteral("scope"), QStringLiteral("myOrganizations")},
+                                 {QStringLiteral("preset"), QStringLiteral("assignedToMe")}};
+        QVERIFY(scopeProblem(config, {}).isEmpty());
+        QVERIFY(coversMyOrganizations(config));
+        // Without the logins, no query: it would search all of GitHub.
+        QVERIFY(searchQuery(ListKind::Issues, config, {}).isEmpty());
+        QCOMPARE(searchQuery(ListKind::Issues, config, {}, ListSpan::Scope,
+                             {QStringLiteral("acme"), QStringLiteral("acme-labs")}),
+                 QStringLiteral("is:issue is:open user:acme user:acme-labs assignee:@me"));
+        QCOMPARE(listDescription(ListKind::Issues, config, {}), QStringLiteral("Assigned to me · my organizations"));
+        QVERIFY(listWebUrl(ListKind::Issues, QUrl(QStringLiteral("https://github.com")), config, {}).isEmpty());
+    }
+
+    void myOrganizationsAreReadFirst()
+    {
+        const QString key =
+            searchKey(QStringLiteral("is%3Apr%20is%3Aopen%20user%3Aacme%20user%3Aacme-labs%20author%3A%40me"));
+        FakeStatusJob job;
+        job.configValues = {{QStringLiteral("scope"), QStringLiteral("myOrganizations")},
+                            {QStringLiteral("preset"), QStringLiteral("createdByMe")}};
+        QVERIFY(job.client.setJsonFile(QStringLiteral("POST ../graphql"),
+                                       dataFile(QStringLiteral("ci_health_organizations.json"))));
+        QVERIFY(job.client.setJsonFile(key, dataFile(QStringLiteral("pr_search.json"))));
+        fetchPullRequestListStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.client.requestKeys(), (QStringList{QStringLiteral("POST ../graphql"), key}));
+        QCOMPARE(job.client.requests().first().body.object().value(QStringLiteral("query")).toString(),
+                 viewerOrganizationsQuery());
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->data.value(QStringLiteral("total")).toInt(), 3);
+    }
+
+    void myOrganizationsFailures()
+    {
+        // The organizations could not be read: their request's state.
+        FakeStatusJob failed;
+        failed.configValues = {{QStringLiteral("scope"), QStringLiteral("myOrganizations")}};
+        fetchIssueListStatus(failed);
+        WAIT_FOR_FINISH(failed);
+        QCOMPARE(failed.finished->state, ItemStatus::State::NotFound);
+        QCOMPARE(failed.client.requests().size(), 1);
+
+        // An answer without the user is an error with GitHub's message.
+        FakeStatusJob refused;
+        refused.configValues = failed.configValues;
+        refused.client.setJson(QStringLiteral("POST ../graphql"),
+                               QJsonDocument(QJsonObject{
+                                   {QStringLiteral("errors"),
+                                    QJsonArray{QJsonObject{{QStringLiteral("message"),
+                                                            QStringLiteral("Resource not accessible")}}}}}));
+        fetchIssueListStatus(refused);
+        WAIT_FOR_FINISH(refused);
+        QCOMPARE(refused.finished->state, ItemStatus::State::Error);
+        QCOMPARE(refused.finished->message, QStringLiteral("Resource not accessible"));
+        QCOMPARE(refused.client.requests().size(), 1);
+    }
+
     void severalRepositoriesAreTidied()
     {
         QCOMPARE(configuredRepositories(multiList()),

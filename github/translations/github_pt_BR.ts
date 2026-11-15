@@ -146,16 +146,8 @@
         <translation>Um repositório</translation>
     </message>
     <message>
-        <source>One owner</source>
-        <translation>Um dono</translation>
-    </message>
-    <message>
         <source>All</source>
         <translation>Todos</translation>
-    </message>
-    <message>
-        <source>Owner</source>
-        <translation>Dono</translation>
     </message>
     <message>
         <source>Show</source>
@@ -994,6 +986,34 @@
     <message>
         <source>Pushed</source>
         <translation>Push</translation>
+    </message>
+    <message>
+        <source>owners %1</source>
+        <translation>donos %1</translation>
+    </message>
+    <message>
+        <source>GitHub did not give your organizations.</source>
+        <translation>O GitHub não informou as suas organizações.</translation>
+    </message>
+    <message>
+        <source>You belong to no organization on this server.</source>
+        <translation>Você não pertence a nenhuma organização neste servidor.</translation>
+    </message>
+    <message>
+        <source>my organizations</source>
+        <translation>minhas organizações</translation>
+    </message>
+    <message>
+        <source>Owners</source>
+        <translation>Donos</translation>
+    </message>
+    <message>
+        <source>Users or organizations, separated by commas.</source>
+        <translation>Usuários ou organizações, separados por vírgulas.</translation>
+    </message>
+    <message>
+        <source>My organizations</source>
+        <translation>Minhas organizações</translation>
     </message>
 </context>
 </TS>

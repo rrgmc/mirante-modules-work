@@ -35,12 +35,20 @@ QJsonArray ciRows()
         .object()
         .value(QStringLiteral("data"))
         .toObject()
-        .value(QStringLiteral("repositoryOwner"))
+        .value(QStringLiteral("o0"))
         .toObject()
         .value(QStringLiteral("repositories"))
         .toObject()
         .value(QStringLiteral("nodes"))
         .toArray();
+}
+
+QStringList names(const QJsonArray &rows)
+{
+    QStringList result;
+    for (const QJsonValue &row : rows)
+        result << row.toObject().value(QStringLiteral("nameWithOwner")).toString();
+    return result;
 }
 
 QJsonObject ciConfig()
@@ -75,16 +83,67 @@ class TestCiHealth : public QObject
     Q_OBJECT
 
 private slots:
-    void ownerIsTrimmed()
+    void ownersAreSplitAndTrimmed()
     {
-        QCOMPARE(configuredOwner({{QStringLiteral("owner"), QStringLiteral("  @acme/ ")}}), QStringLiteral("acme"));
-        QCOMPARE(configuredOwner({}), QString());
+        QCOMPARE(configuredOwners({{QStringLiteral("owner"), QStringLiteral("  @acme/ ")}}),
+                 QStringList{QStringLiteral("acme")});
+        QCOMPARE(configuredOwners({{QStringLiteral("owner"), QStringLiteral("acme, acme-labs  /tools/,ACME,,")}}),
+                 (QStringList{QStringLiteral("acme"), QStringLiteral("acme-labs"), QStringLiteral("tools")}));
+        QVERIFY(configuredOwners({}).isEmpty());
+        QVERIFY(configuredOwners({{QStringLiteral("owner"), QStringLiteral(" , @ ")}}).isEmpty());
+    }
+
+    void queryHasOneAliasPerOwner()
+    {
+        const QString query = ciHealthQuery(2);
+        QVERIFY(query.contains(QStringLiteral("$o0: String!, $o1: String!")));
+        QVERIFY(query.contains(QStringLiteral("o0: repositoryOwner(login: $o0) { ...Repositories }")));
+        QVERIFY(query.contains(QStringLiteral("o1: repositoryOwner(login: $o1) { ...Repositories }")));
+        QVERIFY(!query.contains(QStringLiteral("$o2")));
+        QVERIFY(query.contains(QStringLiteral("fragment Repositories on RepositoryOwner")));
+    }
+
+    void batchesStayWithinTheBudget()
+    {
+        QStringList owners;
+        for (int index = 0; index < 90; ++index)
+            owners << QStringLiteral("owner%1").arg(index);
+        // 4000 rows a request: 40 owners of 100 rows.
+        const QList<QStringList> batches = ciHealthBatches(owners, 100);
+        QCOMPARE(batches.size(), 3);
+        QCOMPARE(batches.at(0).size(), 40);
+        QCOMPARE(batches.at(2), owners.mid(80));
+        QCOMPARE(ciHealthBatches(owners, 20).size(), 1);
+        QVERIFY(ciHealthBatches({}, 100).isEmpty());
+    }
+
+    void newestRepositoriesComeFirst()
+    {
+        const QJsonObject old{{QStringLiteral("nameWithOwner"), QStringLiteral("a/old")},
+                              {QStringLiteral("pushedAt"), QStringLiteral("2026-01-01T00:00:00Z")}};
+        const QJsonObject recent{{QStringLiteral("nameWithOwner"), QStringLiteral("b/recent")},
+                                 {QStringLiteral("pushedAt"), QStringLiteral("2026-11-01T00:00:00Z")}};
+        const QJsonObject never{{QStringLiteral("nameWithOwner"), QStringLiteral("c/never")},
+                                {QStringLiteral("pushedAt"), QJsonValue()}};
+        QCOMPARE(newestRepositories({never, old, recent}, 10), (QJsonArray{recent, old, never}));
+        QCOMPARE(newestRepositories({never, old, recent}, 1), QJsonArray{recent});
+    }
+
+    void organizationLoginsOfTheAnswer()
+    {
+        QCOMPARE(viewerOrganizationsQuery(),
+                 QStringLiteral("query { viewer { organizations(first: 100) { nodes { login } } } }"));
+        const QJsonObject answer = readJson(QStringLiteral("ci_health_organizations.json")).object();
+        QCOMPARE(organizationLogins(answer), (QStringList{QStringLiteral("acme"), QStringLiteral("acme-labs")}));
+        QVERIFY(organizationLogins({}).isEmpty());
     }
 
     void variablesLeaveOutForksAndArchivedByDefault()
     {
-        const QJsonObject variables = ciHealthVariables(ciConfig());
-        QCOMPARE(variables.value(QStringLiteral("owner")).toString(), QStringLiteral("acme"));
+        const QJsonObject variables =
+            ciHealthVariables(ciConfig(), {QStringLiteral("acme"), QStringLiteral("acme-labs")});
+        QCOMPARE(variables.value(QStringLiteral("o0")).toString(), QStringLiteral("acme"));
+        QCOMPARE(variables.value(QStringLiteral("o1")).toString(), QStringLiteral("acme-labs"));
         QCOMPARE(variables.value(QStringLiteral("first")).toInt(), 100);
         QCOMPARE(variables.value(QStringLiteral("isFork")), QJsonValue(false));
         QCOMPARE(variables.value(QStringLiteral("isArchived")), QJsonValue(false));
@@ -93,14 +152,14 @@ private slots:
         config.insert(QStringLiteral("includeForks"), true);
         config.insert(QStringLiteral("includeArchived"), true);
         config.insert(QStringLiteral("limit"), 250);
-        const QJsonObject all = ciHealthVariables(config);
+        const QJsonObject all = ciHealthVariables(config, {QStringLiteral("acme")});
         QVERIFY(all.value(QStringLiteral("isFork")).isNull());
         QVERIFY(all.value(QStringLiteral("isArchived")).isNull());
         // One page of GitHub's GraphQL API at most.
         QCOMPARE(all.value(QStringLiteral("first")).toInt(), 100);
 
         config.insert(QStringLiteral("limit"), 20);
-        QCOMPARE(ciHealthVariables(config).value(QStringLiteral("first")).toInt(), 20);
+        QCOMPARE(ciHealthVariables(config, {QStringLiteral("acme")}).value(QStringLiteral("first")).toInt(), 20);
     }
 
     void checksOfEachRepository()
@@ -129,6 +188,15 @@ private slots:
 
         QCOMPARE(ciHealthWebUrl(QUrl(kBase), ciConfig()), QUrl(kBase + QStringLiteral("/acme")));
         QVERIFY(ciHealthWebUrl(QUrl(kBase), {}).isEmpty());
+
+        // Several owners, or the user's organizations, have no page of their own.
+        const QJsonObject several{{QStringLiteral("owner"), QStringLiteral("acme, acme-labs")}};
+        QCOMPARE(ciHealthDescription(several), QStringLiteral("owners acme, acme-labs · without forks · without archived"));
+        QVERIFY(ciHealthWebUrl(QUrl(kBase), several).isEmpty());
+        const QJsonObject organizations{{QStringLiteral("scope"), QStringLiteral("myOrganizations")},
+                                        {QStringLiteral("owner"), QStringLiteral("acme")}};
+        QCOMPARE(ciHealthDescription(organizations), QStringLiteral("my organizations · without forks · without archived"));
+        QVERIFY(ciHealthWebUrl(QUrl(kBase), organizations).isEmpty());
     }
 
     void fetchReadsTheRepositories()
@@ -141,14 +209,75 @@ private slots:
 
         QCOMPARE(job.client.requestKeys(), QStringList{graphqlKey()});
         const QJsonObject body = job.client.requests().first().body.object();
-        QCOMPARE(body.value(QStringLiteral("query")).toString(), ciHealthQuery());
-        QCOMPARE(body.value(QStringLiteral("variables")).toObject(), ciHealthVariables(ciConfig()));
+        QCOMPARE(body.value(QStringLiteral("query")).toString(), ciHealthQuery(1));
+        QCOMPARE(body.value(QStringLiteral("variables")).toObject(),
+                 ciHealthVariables(ciConfig(), {QStringLiteral("acme")}));
 
         QCOMPARE(job.finished->state, ItemStatus::State::Ok);
         QCOMPARE(job.finished->summary, QStringLiteral("4 repository(s) · 1 failing"));
         QCOMPARE(job.finished->data.value(QStringLiteral("total")).toInt(), 4);
         QCOMPARE(job.finished->data.value(QStringLiteral("rows")).toArray(), ciRows());
         QVERIFY(job.finished->attention.isEmpty());
+    }
+
+    // Two owners in one request; their rows are joined, newest push first.
+    void fetchJoinsSeveralOwners()
+    {
+        FakeStatusJob job;
+        job.configValues = {{QStringLiteral("owner"), QStringLiteral("acme, acme-labs")}};
+        QVERIFY(job.client.setJsonFile(graphqlKey(), dataFile(QStringLiteral("ci_health_organizations.json"))));
+        fetchCiHealthStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.client.requestKeys(), QStringList{graphqlKey()});
+        const QJsonObject body = job.client.requests().first().body.object();
+        QCOMPARE(body.value(QStringLiteral("query")).toString(), ciHealthQuery(2));
+        QCOMPARE(body.value(QStringLiteral("variables")).toObject().value(QStringLiteral("o1")).toString(),
+                 QStringLiteral("acme-labs"));
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(names(job.finished->data.value(QStringLiteral("rows")).toArray()),
+                 (QStringList{QStringLiteral("acme/backend"), QStringLiteral("acme-labs/robot"),
+                              QStringLiteral("acme/web"), QStringLiteral("acme/docs"), QStringLiteral("acme/empty")}));
+        QCOMPARE(job.finished->summary, QStringLiteral("5 repository(s) · 2 failing"));
+    }
+
+    // The organizations first, then their repositories. The fake answers
+    // every GraphQL request with the same answer, which holds both parts.
+    void fetchReadsMyOrganizations()
+    {
+        FakeStatusJob job;
+        job.configValues = {{QStringLiteral("scope"), QStringLiteral("myOrganizations")},
+                            {QStringLiteral("owner"), QStringLiteral("ignored")}};
+        QVERIFY(job.client.setJsonFile(graphqlKey(), dataFile(QStringLiteral("ci_health_organizations.json"))));
+        fetchCiHealthStatus(job);
+        WAIT_FOR_FINISH(job);
+
+        QCOMPARE(job.client.requestKeys(), (QStringList{graphqlKey(), graphqlKey()}));
+        QCOMPARE(job.client.requests().at(0).body.object().value(QStringLiteral("query")).toString(),
+                 viewerOrganizationsQuery());
+        const QJsonObject variables =
+            job.client.requests().at(1).body.object().value(QStringLiteral("variables")).toObject();
+        QCOMPARE(variables.value(QStringLiteral("o0")).toString(), QStringLiteral("acme"));
+        QCOMPARE(variables.value(QStringLiteral("o1")).toString(), QStringLiteral("acme-labs"));
+        QCOMPARE(job.finished->state, ItemStatus::State::Ok);
+        QCOMPARE(job.finished->data.value(QStringLiteral("total")).toInt(), 5);
+    }
+
+    void withoutOrganizationsTheListSaysSo()
+    {
+        FakeStatusJob job;
+        job.configValues = {{QStringLiteral("scope"), QStringLiteral("myOrganizations")}};
+        job.client.setJson(graphqlKey(),
+                           QJsonDocument(QJsonObject{
+                               {QStringLiteral("data"),
+                                QJsonObject{{QStringLiteral("viewer"),
+                                             QJsonObject{{QStringLiteral("organizations"),
+                                                          QJsonObject{{QStringLiteral("nodes"), QJsonArray()}}}}}}}}));
+        fetchCiHealthStatus(job);
+        WAIT_FOR_FINISH(job);
+        QCOMPARE(job.finished->state, ItemStatus::State::None);
+        QCOMPARE(job.finished->message, QStringLiteral("You belong to no organization on this server."));
+        QCOMPARE(job.client.requests().size(), 1);
     }
 
     void fetchWithoutAnOwnerAsksNothing()
@@ -167,9 +296,10 @@ private slots:
         job.configValues = ciConfig();
         job.client.setJson(graphqlKey(),
                            QJsonDocument(QJsonObject{
-                               {QStringLiteral("data"), QJsonObject{{QStringLiteral("repositoryOwner"), QJsonValue()}}},
+                               {QStringLiteral("data"), QJsonObject{{QStringLiteral("o0"), QJsonValue()}}},
                                {QStringLiteral("errors"),
-                                QJsonArray{QJsonObject{{QStringLiteral("message"),
+                                QJsonArray{QJsonObject{{QStringLiteral("path"), QJsonArray{QStringLiteral("o0")}},
+                                                       {QStringLiteral("message"),
                                                         QStringLiteral("Could not resolve to a RepositoryOwner with "
                                                                        "the login of 'acme'.")}}}}}));
         fetchCiHealthStatus(job);
