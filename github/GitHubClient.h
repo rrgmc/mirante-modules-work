@@ -4,6 +4,7 @@
 
 #include <mirante/ApiClient.h>
 
+#include <QJsonObject>
 #include <QString>
 #include <QUrlQuery>
 
@@ -73,6 +74,14 @@ public:
     // The jobs of a run's latest attempt, up to 100. The answer is the
     // object, with all rows under "jobs".
     void runJobs(const QString &repository, qint64 runId, Done done) const;
+
+    // The GraphQL API's path, relative to the REST API's base: "../graphql".
+    // It reaches https://api.github.com/graphql from https://api.github.com/,
+    // and <web>/api/graphql from GitHub Enterprise Server's <web>/api/v3/.
+    static QString graphqlPath();
+    // A GraphQL query with its variables, sent with POST. A reply can be ok
+    // and still hold "errors", with "data" for what could be read.
+    void graphql(const QString &query, const QJsonObject &variables, Done done) const;
 
     // The Actions actions, which the run view calls. See decision 0070.
     void rerunRun(const QString &repository, qint64 runId, Done done) const;

@@ -143,6 +143,17 @@ void GitHubClient::runJobs(const QString &repository, qint64 runId, Done done) c
          std::move(done));
 }
 
+QString GitHubClient::graphqlPath()
+{
+    return QStringLiteral("../graphql");
+}
+
+void GitHubClient::graphql(const QString &query, const QJsonObject &variables, Done done) const
+{
+    const QJsonObject body{{QStringLiteral("query"), query}, {QStringLiteral("variables"), variables}};
+    m_server->post(graphqlPath(), QJsonDocument(body), m_receiver, std::move(done));
+}
+
 void GitHubClient::rerunRun(const QString &repository, qint64 runId, Done done) const
 {
     post(runPath(repository, runId) + QStringLiteral("/rerun"), std::move(done));

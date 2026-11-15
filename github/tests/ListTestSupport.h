@@ -61,6 +61,21 @@ inline QString combinedStatusKey(const QString &sha = kHeadSha)
     return backendKey(QStringLiteral("commits/%1/status").arg(sha));
 }
 
+// The GraphQL request of the pull request list, which reads the checks and
+// reviews of several rows at once.
+inline QString graphqlKey()
+{
+    return QStringLiteral("POST ../graphql");
+}
+
+// The requests other than the GraphQL one.
+inline QStringList restKeys(const FakeApiClient &client)
+{
+    QStringList keys = client.requestKeys();
+    keys.removeAll(graphqlKey());
+    return keys;
+}
+
 inline QString dataFile(const QString &name)
 {
     return QFINDTESTDATA(QStringLiteral("tests/data/") + name);
