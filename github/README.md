@@ -15,12 +15,13 @@ The module is built like the [gitlab module](../gitlab/README.md), and this READ
 | `github.run` | GitHub Actions Run | native | The Actions runs of a branch's newest commit, one per workflow, with their jobs. The branch is a fixed one, the main folder's current branch or a pull request's branch. |
 | `github.run.list` | GitHub Actions Run List | native | A table of a repository's Actions runs: all of them, those you started, or those of a branch or a pull request. |
 | `github.run.multilist` | GitHub Actions Run List (several repositories) | native | A table of the Actions runs of the repositories you name, newest first: all of them, those you started, or those of a branch, with a filter on the repository. |
+| `github.ci.list` | GitHub CI Health | native | A table of an owner's repositories, the most recently pushed first, with the checks of each default branch's newest commit. See [CI health](#ci-health). |
 | `github.issue.summary` | GitHub Issue (summary) | native | A summary of one issue: its state, assignees, labels, milestone and latest comments. |
 | `github.issue.page` | GitHub Issue (page) | web | The web page of one issue, on the GitHub server of the item's profile. |
 | `github.issue.list` | GitHub Issue List | native | A table of issues in a repository, an owner or everywhere, such as those assigned to you. |
 | `github.status` | GitHub Status | native | The health of github.com, from githubstatus.com: open incidents, planned maintenance and components that do not work as they should. |
 
-The short names are "PR", "PRs", "Run", "Runs", "Issue", "Issues" and "Status". A page type has the short name of its summary, as in the gitlab module.
+The short names are "PR", "PRs", "Run", "Runs", "CI", "Issue", "Issues" and "Status". A page type has the short name of its summary, as in the gitlab module.
 
 The module calls itself "GitHub" and describes itself as: "Pull requests, Actions runs and issues from GitHub or GitHub Enterprise Server. Each profile sets its server and token in the module's General Configuration." Help > Modules shows the names and descriptions. See [decision 0056](../../../docs/decisions/0056-modules-window.md).
 
@@ -252,6 +253,21 @@ Each filter above a table keeps the user's last choice. When the user changes a 
 
 The tests are in `tests/tst_list_query.cpp`, on `pr_search.json`, `issue_search.json` and `run_list.json`, written by hand in the shape of GitHub's API.
 
+### CI health
+
+`github.ci.list` shows which repositories of an owner have failing CI. The REST API has no request for the runs or checks of a whole owner, so `fetchCiHealthStatus()` asks one GraphQL request, `ciHealthQuery()`, through `GitHubClient::graphql()`.
+
+- **The query.** `repositoryOwner(login)` works for an organization and for a user. Its `repositories` come the most recently pushed first, each with its `defaultBranchRef`, that branch's newest commit (`oid`, `messageHeadline`, `committedDate`, `url`), and the commit's `statusCheckRollup` contexts, up to 100, as in the [pull request list](#list-views).
+- **Variables.** `ciHealthVariables()` gives `owner`, from `configuredOwner()`, which trims the field and drops `@` at its start and slashes at its ends; `first`, the `limit` field, at most 100 (`kMaxCiHealthRows`), since GitHub gives one page of 100 at most and the list does not page; and `isFork` and `isArchived`, `false` unless the fields `includeForks` and `includeArchived` are on, else `null`, which counts both.
+- **Checks.** `repositoryChecks()` turns a repository's rollup into `checksState()` with `headChecksOfRollup()`. A repository without a default branch, or a commit without checks, is `None`.
+- **Status.** The state is `Ok`. The summary reads like "12 repositories · 2 failing", "100+ repositories" when the rows reach the limit, and leaves out the failing count when none fails. `data` holds `rows`, the repository nodes unchanged, and `total`. The list reports no attention, as the other lists. See decision 0067.
+- **Errors.** Without an owner, the list reports `State::None` with "Set the owner in the item's settings.", without a request. A failed reply becomes its state with `statusFromReply()`. An answer without the owner, such as for an owner that does not exist, is an `Error` with GitHub's first error message, or "GitHub has no owner acme." without one.
+- **Description and Web link.** `ciHealthDescription()` reads like "owner acme · without forks · without archived". `ciHealthWebUrl()` is the owner's page, `<web>/<owner>`.
+
+Its model, `RepositoryListModel`, reads each node into a row whose key is `nameWithOwner`. A row's address is its newest commit's page, which shows the commit's checks, else the repository's `url`, else `<web>/<repository>`. "Add" adds a GitHub Actions Run named `owner/repo <branch> CI`, with `repository` and `branchSource` `fixed` and no branch, so that it follows the default branch. The default layout shows Repository, Checks, Branch, Commit (the first line of the commit's message), Pushed and Links, sorted by Pushed, the newest first. Checks is a pill: Bad "Failed", Waiting "Running", Good "Passed" or Neutral "No checks", and a dash without a default branch. Its filter always lists every one of these, from `RepositoryListModel::checksTexts()`, and keeps the choice in `statusFilter`.
+
+The tests are in `tests/tst_ci_health.cpp`, on `ci_health.json`, written by hand in the shape of GitHub's GraphQL answer: a repository whose check failed, one whose commit status passed, one without checks and one without commits.
+
 ## List views
 
 Each list has two parts: a **model**, which the module keeps, and a **layout**, which draws the model and which an app can replace. See [list layouts](#list-layouts). `GitHubPullRequestListView.cpp`, `GitHubIssueListView.cpp` and `GitHubRunListView.cpp` hold the models; `GitHub*ListLayoutDefault.cpp` hold the default layouts, which draw an `ItemListView` of the [view kit](../../../docs/plans/m6-native-item-types.md#part-2-the-view-kit), as GitLab's lists do, through `DefaultListLayout` in `GitHubListSupport.h`. The columns and rules are in [item types](../../../docs/item-types.md#github). `ListModel`, the models' base in `GitHubListModel.h`, and the default layouts hold what they share:
@@ -296,6 +312,7 @@ An app can replace the whole layout of each list when it builds Mirante, as for 
 | `issuelistlayout` | `makeIssueListLayout()` in `GitHubIssueListLayout.h` | `IssueListModel` | `GitHubIssueListLayoutDefault.cpp` |
 | `pullrequestlistlayout` | `makePullRequestListLayout()` in `GitHubPullRequestListLayout.h` | `PullRequestListModel` | `GitHubPullRequestListLayoutDefault.cpp` |
 | `runlistlayout` | `makeRunListLayout()` in `GitHubRunListLayout.h` | `RunListModel` | `GitHubRunListLayoutDefault.cpp` |
+| `repositorylistlayout` | `makeRepositoryListLayout()` in `GitHubRepositoryListLayout.h` | `RepositoryListModel` | `GitHubRepositoryListLayoutDefault.cpp` |
 
 **What every list model gives** (`ListModel`, in `GitHubListModel.h`):
 
@@ -314,6 +331,7 @@ An app can replace the whole layout of each list when it builds Mirante, as for 
 - `IssueListModel`: `issues()` and `issue(key)`, each with its repository, number, ref, title, assignees, labels and update time.
 - `PullRequestListModel`: `pullRequests()` and `pullRequest(key)`, each with its repository, number, ref, title, author, update time, `checks` (a `Pill`, empty until the answer comes) and `reviews`. Only the first 25 shown rows, `AskedRows`, get checks and reviews.
 - `RunListModel`: `runs()` and `run(key)`, each with its id, repository, number, workflow, state (a `Pill`), branch, actor and start time.
+- `RepositoryListModel`: `repositories()` and `repository(key)`, each with its repository, default branch, checks (a `Pill`), the first line of the newest commit's message and its last push; and `checksTexts()`, the texts of every checks state, for a filter.
 
 A layout that does not use `ItemListView` sorts, filters and pages the rows itself. The headers and `GitHubListModel.h` are an interface that apps build against; a change to them is listed in [`CHANGELOG.md`](../CHANGELOG.md).
 

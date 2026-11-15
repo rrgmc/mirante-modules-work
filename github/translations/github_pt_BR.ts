@@ -926,5 +926,74 @@
         <source>Refresh</source>
         <translation>Atualizar</translation>
     </message>
+    <message numerus="yes">
+        <source>%n+ repository(s)</source>
+        <translation>
+            <numerusform>%n+ repositório</numerusform>
+            <numerusform>%n+ repositórios</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n repository(s)</source>
+        <translation>
+            <numerusform>%n repositório</numerusform>
+            <numerusform>%n repositórios</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n failing</source>
+        <translation>
+            <numerusform>%n falhando</numerusform>
+            <numerusform>%n falhando</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>without forks</source>
+        <translation>sem forks</translation>
+    </message>
+    <message>
+        <source>without archived</source>
+        <translation>sem arquivados</translation>
+    </message>
+    <message>
+        <source>GitHub has no owner %1.</source>
+        <translation>O GitHub não tem o dono %1.</translation>
+    </message>
+    <message>
+        <source>Include forks</source>
+        <translation>Incluir forks</translation>
+    </message>
+    <message>
+        <source>Include archived repositories</source>
+        <translation>Incluir repositórios arquivados</translation>
+    </message>
+    <message>
+        <source>At most 100.</source>
+        <translation>No máximo 100.</translation>
+    </message>
+    <message>
+        <source>GitHub CI Health</source>
+        <translation>Saúde do CI do GitHub</translation>
+    </message>
+    <message>
+        <source>CI</source>
+        <translation>CI</translation>
+    </message>
+    <message>
+        <source>A table of an owner&apos;s repositories, the most recently pushed first, with the checks of each default branch&apos;s newest commit.</source>
+        <translation>Uma tabela dos repositórios de um dono, os de push mais recente primeiro, com as verificações do commit mais novo da branch padrão de cada um.</translation>
+    </message>
+    <message>
+        <source>No repositories</source>
+        <translation>Nenhum repositório</translation>
+    </message>
+    <message>
+        <source>Commit</source>
+        <translation>Commit</translation>
+    </message>
+    <message>
+        <source>Pushed</source>
+        <translation>Push</translation>
+    </message>
 </context>
 </TS>

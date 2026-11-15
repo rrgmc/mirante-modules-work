@@ -73,5 +73,26 @@
             <numerusform>%n checks passed</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <source>%n+ repository(s)</source>
+        <translation>
+            <numerusform>%n+ repository</numerusform>
+            <numerusform>%n+ repositories</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n repository(s)</source>
+        <translation>
+            <numerusform>%n repository</numerusform>
+            <numerusform>%n repositories</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n failing</source>
+        <translation>
+            <numerusform>%n failing</numerusform>
+            <numerusform>%n failing</numerusform>
+        </translation>
+    </message>
 </context>
 </TS>

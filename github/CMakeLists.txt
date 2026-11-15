@@ -5,7 +5,8 @@ mirante_add_module(github
               GitHubLists.cpp GitHubLists.h GitHubListSupport.cpp GitHubListSupport.h GitHubModule.cpp
               GitHubPullRequestLayout.h GitHubPullRequestListLayout.h GitHubPullRequestListView.cpp
               GitHubPullRequestListView.h GitHubPullRequestView.cpp GitHubPullRequestView.h GitHubQuickAdd.cpp
-              GitHubQuickAdd.h GitHubRunLayout.h GitHubRunListLayout.h GitHubRunListView.cpp GitHubRunListView.h
+              GitHubQuickAdd.h GitHubRepositoryListLayout.h GitHubRepositoryListView.cpp
+              GitHubRepositoryListView.h GitHubRunLayout.h GitHubRunListLayout.h GitHubRunListView.cpp GitHubRunListView.h
               GitHubRunView.cpp GitHubRunView.h GitHubServiceStatus.cpp GitHubServiceStatus.h
               GitHubSettings.cpp GitHubSettings.h GitHubStatus.cpp GitHubStatus.h
               GitHubSummaryModel.cpp GitHubSummaryModel.h GitHubUrls.cpp GitHubUrls.h GitHubViewSupport.cpp
@@ -18,9 +19,10 @@ mirante_add_module(github
               issuelistlayout=GitHubIssueListLayoutDefault.cpp
               pullrequestlistlayout=GitHubPullRequestListLayoutDefault.cpp
               runlistlayout=GitHubRunListLayoutDefault.cpp
+              repositorylistlayout=GitHubRepositoryListLayoutDefault.cpp
     RESOURCES icons/github.svg
-    TESTS     tests/tst_client.cpp tests/tst_from_url.cpp tests/tst_list_models.cpp tests/tst_list_query.cpp
-              tests/tst_list_views.cpp
+    TESTS     tests/tst_ci_health.cpp tests/tst_client.cpp tests/tst_from_url.cpp tests/tst_list_models.cpp
+              tests/tst_list_query.cpp tests/tst_list_views.cpp
               tests/tst_quick_add.cpp tests/tst_register.cpp tests/tst_service_status.cpp tests/tst_settings.cpp tests/tst_status.cpp
               tests/tst_summary_models.cpp tests/tst_summary_views.cpp tests/tst_urls.cpp
     DEFAULT   ON)

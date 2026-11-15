@@ -56,6 +56,7 @@ private slots:
         expected.insert(QStringLiteral("github.pr.list"), {QStringLiteral("GitHub PR List"), QStringLiteral("PRs")});
         expected.insert(QStringLiteral("github.pr.multilist"),
                         {QStringLiteral("GitHub PR List (several repositories)"), QStringLiteral("PRs")});
+        expected.insert(QStringLiteral("github.ci.list"), {QStringLiteral("GitHub CI Health"), QStringLiteral("CI")});
         expected.insert(QStringLiteral("github.run"), {QStringLiteral("GitHub Actions Run"), QStringLiteral("Run")});
         expected.insert(QStringLiteral("github.run.list"),
                         {QStringLiteral("GitHub Actions Run List"), QStringLiteral("Runs")});
@@ -131,6 +132,10 @@ private slots:
                             + QStringList{QStringLiteral("showChecks"), QStringLiteral("showReviews"),
                                           QStringLiteral("showPeople"), QStringLiteral("showLabels")});
         expected.insert(QStringLiteral("github.pr.page"), single);
+        expected.insert(QStringLiteral("github.ci.list"),
+                        QStringList{QStringLiteral("owner"), QStringLiteral("includeForks"),
+                                    QStringLiteral("includeArchived")}
+                            + sizes);
         expected.insert(QStringLiteral("github.pr.list"),
                         list + QStringList{QStringLiteral("showChecks"), QStringLiteral("showReviews")});
         expected.insert(QStringLiteral("github.run"),
@@ -417,6 +422,14 @@ private slots:
                 QCOMPARE(repositories.type, mirante::Field::Type::TextList);
                 QVERIFY2(repositories.required, qPrintable(type->id()));
                 QVERIFY2(fieldOf(*type, QStringLiteral("repository")).key.isEmpty(), qPrintable(type->id()));
+                continue;
+            }
+            // The CI health list is over an owner, which it needs.
+            if (type->id() == QLatin1String("github.ci.list")) {
+                const mirante::Field owner = fieldOf(*type, QStringLiteral("owner"));
+                QCOMPARE(owner.type, mirante::Field::Type::Text);
+                QVERIFY(owner.required);
+                QVERIFY(fieldOf(*type, QStringLiteral("repository")).key.isEmpty());
                 continue;
             }
             const mirante::Field repository = fieldOf(*type, QStringLiteral("repository"));
